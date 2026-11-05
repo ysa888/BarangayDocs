@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=390, initial-scale=1.0">
+  <title>BarangayDocs - Account</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap"
+    rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #1B3A6B;
+      --primary-light: #2A5298;
+      --accent: #4FC3F7;
+      --bg: #F0F4FA;
+      --card-bg: #FFFFFF;
+      --border: #D0DCF0;
+      --text-main: #1B3A6B;
+      --text-sub: #6B7A99;
+      --text-light: #9AA5BC;
+      --green: #28A745;
+      --red: #DC3545;
+    }
+
+    body {
+      font-family: 'Nunito', sans-serif;
+      background: var(--bg);
+      width: 390px;
+      min-height: 844px;
+      margin: 0 auto;
+    }
+
+    .navbar {
+      background: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .hamburger {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      cursor: pointer;
+    }
+
+    .hamburger span {
+      display: block;
+      width: 22px;
+      height: 2px;
+      background: #fff;
+      border-radius: 2px;
+    }
+
+    .logo-text {
+      font-family: 'Poppins', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .logo-text span {
+      color: var(--accent);
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .logo-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .logo-ph {
+      width: 20px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.4);
+      border-radius: 4px;
+    }
+
+    .profile-header {
+      background: var(--primary);
+      padding: 20px 20px 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .avatar-wrap {
+      position: relative;
+    }
+
+    .avatar {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      overflow: hidden;
+      background: #C5D0E6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .avatar-ph {
+      width: 46px;
+      height: 46px;
+      background: #A0B0CC;
+      border-radius: 50%;
+      position: relative;
+    }
+
+    .avatar-ph::after {
+      content: '';
+      position: absolute;
+      bottom: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 58px;
+      height: 30px;
+      background: #A0B0CC;
+      border-radius: 50% 50% 0 0;
+    }
+
+    .edit-avatar {
+      position: absolute;
+      bottom: 2px;
+      right: 2px;
+      width: 26px;
+      height: 26px;
+      background: var(--accent);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      cursor: pointer;
+      border: 2px solid var(--primary);
+    }
+
+    .profile-name {
+      font-family: 'Poppins', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      text-align: center;
+    }
+
+    .profile-meta {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.6);
+      text-align: center;
+    }
+
+    .stat-row {
+      display: flex;
+      gap: 10px;
+      margin: -20px 14px 0;
+      position: relative;
+      z-index: 10;
+      margin-bottom: 14px;
+    }
+
+    .stat-card {
+      flex: 1;
+      background: var(--card-bg);
+      border-radius: 14px;
+      border: 2px solid var(--border);
+      padding: 12px 8px;
+      text-align: center;
+    }
+
+    .stat-num {
+      font-family: 'Poppins', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .stat-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-sub);
+      margin-top: 2px;
+    }
+
+    .content {
+      padding: 0 14px 80px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 2px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .card-title {
+      font-family: 'Poppins', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-main);
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .info-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+
+    .info-row:last-child {
+      border-bottom: none;
+    }
+
+    .info-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .info-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: #EBF0FB;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+
+    .info-text h4 {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .info-text p {
+      font-size: 11px;
+      color: var(--text-sub);
+      margin-top: 1px;
+    }
+
+    .arrow {
+      color: var(--text-light);
+      font-size: 14px;
+    }
+
+    .menu-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .menu-item:last-child {
+      border-bottom: none;
+    }
+
+    .menu-item:active {
+      background: var(--bg);
+    }
+
+    .menu-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .menu-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      flex-shrink: 0;
+    }
+
+    .menu-icon.blue {
+      background: #EBF0FB;
+    }
+
+    .menu-icon.green {
+      background: #D4EDDA;
+    }
+
+    .menu-icon.yellow {
+      background: #FFF3CD;
+    }
+
+    .menu-icon.gray {
+      background: #F0F4FA;
+    }
+
+    .menu-text h4 {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .menu-text p {
+      font-size: 11px;
+      color: var(--text-sub);
+      margin-top: 1px;
+    }
+
+    .toggle-wrap {
+      display: flex;
+      align-items: center;
+    }
+
+    .toggle {
+      width: 40px;
+      height: 22px;
+      background: var(--border);
+      border-radius: 11px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .toggle.on {
+      background: var(--green);
+    }
+
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      background: #fff;
+      border-radius: 50%;
+      top: 2px;
+      left: 2px;
+      transition: left 0.2s;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+
+    .toggle.on::after {
+      left: 20px;
+    }
+
+    .logout-btn {
+      width: 100%;
+      height: 50px;
+      background: #F8D7DA;
+      border: 2px solid #F5C6CB;
+      border-radius: 14px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--red);
+      cursor: pointer;
+      margin-top: 4px;
+    }
+
+    .logout-btn:active {
+      background: #F5C6CB;
+    }
+
+    .version-note {
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-light);
+      padding: 8px 0;
+    }
+
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 200;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    .modal-overlay.show {
+      display: flex;
+    }
+
+    .modal {
+      background: #fff;
+      border-radius: 20px 20px 0 0;
+      padding: 24px 20px 32px;
+      width: 390px;
+    }
+
+    .modal h3 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 8px;
+    }
+
+    .modal p {
+      font-size: 13px;
+      color: var(--text-sub);
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    .modal-btns {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-cancel {
+      flex: 1;
+      height: 46px;
+      background: var(--bg);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text-sub);
+      cursor: pointer;
+    }
+
+    .btn-logout {
+      flex: 1;
+      height: 46px;
+      background: var(--red);
+      border: none;
+      border-radius: 12px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 14px;
+      font-weight: 800;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 390px;
+      height: 64px;
+      background: var(--card-bg);
+      border-top: 1.5px solid var(--border);
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      z-index: 100;
+    }
+
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      flex: 1;
+      padding: 6px 0;
+      text-decoration: none;
+    }
+
+    .nav-icon {
+      width: 26px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .nav-icon img {
+      width: 22px;
+      height: 22px;
+      object-fit: contain;
+    }
+
+    .nav-ph {
+      width: 22px;
+      height: 22px;
+      background: #C5D0E6;
+      border-radius: 5px;
+    }
+
+    .nav-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-light);
+    }
+
+    .nav-item.active .nav-label {
+      color: var(--primary);
+    }
+
+    .nav-item.active .nav-ph {
+      background: var(--primary);
+    }
+  </style>
+</head>
+
+<body>
+  <nav class="navbar">
+    <div class="hamburger"><span></span><span></span><span></span></div>
+    <span class="logo-text">BARANGAY<span>DOCS</span></span>
+    <div class="logo-icon">
+      <img src="/barangaydocsicon.png" alt="logo"
+        onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+      <div class="logo-ph" style="display:none;"></div>
+    </div>
+  </nav>
+  <div class="profile-header">
+    <div class="avatar-wrap">
+      <div class="avatar">
+        <img src="/user.png" alt="profile"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+        <div class="avatar-ph" style="display:none;"></div>
+      </div>
+      <div class="edit-avatar">✏️</div>
+    </div>
+    <div class="profile-name">Gen Lhetter S. Villanueva</div>
+    <div class="profile-meta">Barangay Banicain, Olongapo City</div>
+  </div>
+  <div class="stat-row">
+    <div class="stat-card">
+      <div class="stat-num">4</div>
+      <div class="stat-label">Total</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:#FFC107;">1</div>
+      <div class="stat-label">Pending</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:#28A745;">1</div>
+      <div class="stat-label">Ready</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:#DC3545;">1</div>
+      <div class="stat-label">Rejected</div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="card">
+      <div class="card-title">Personal Information</div>
+      <div class="info-row">
+        <div class="info-left">
+          <div class="info-icon">👤</div>
+          <div class="info-text">
+            <h4>Full Name</h4>
+            <p>Gen Lhetter S. Villanueva</p>
+          </div>
+        </div><span class="arrow">›</span>
+      </div>
+      <div class="info-row">
+        <div class="info-left">
+          <div class="info-icon">📧</div>
+          <div class="info-text">
+            <h4>Email</h4>
+            <p>genlhetter@email.com</p>
+          </div>
+        </div><span class="arrow">›</span>
+      </div>
+      <div class="info-row">
+        <div class="info-left">
+          <div class="info-icon">📞</div>
+          <div class="info-text">
+            <h4>Contact Number</h4>
+            <p>09XX XXX XXXX</p>
+          </div>
+        </div><span class="arrow">›</span>
+      </div>
+      <div class="info-row">
+        <div class="info-left">
+          <div class="info-icon">📍</div>
+          <div class="info-text">
+            <h4>Address</h4>
+            <p>Barangay Banicain, Olongapo City</p>
+          </div>
+        </div><span class="arrow">›</span>
+      </div>
+      <div class="info-row">
+        <div class="info-left">
+          <div class="info-icon">🪪</div>
+          <div class="info-text">
+            <h4>Valid ID</h4>
+            <p>PhilSys ID</p>
+          </div>
+        </div><span class="arrow">›</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Settings</div>
+      <div class="menu-item">
+        <div class="menu-left">
+          <div class="menu-icon blue">🔔</div>
+          <div class="menu-text">
+            <h4>Notifications</h4>
+            <p>Request updates and alerts</p>
+          </div>
+        </div>
+        <div class="toggle-wrap">
+          <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+        </div>
+      </div>
+      <div class="menu-item">
+        <div class="menu-left">
+          <div class="menu-icon yellow">🌐</div>
+          <div class="menu-text">
+            <h4>Language</h4>
+            <p>English</p>
+          </div>
+        </div><span class="arrow">›</span>
+      </div>
+      <div class="menu-item">
+        <div class="menu-left">
+          <div class="menu-icon blue">🔒</div>
+          <div class="menu-text">
+            <h4>Change Password</h4>
+            <p>Update your account password</p>
+          </div>
+        </div><span class="arrow">›</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">More</div>
+      <div class="menu-item">
+        <div class="menu-left">
+          <div class="menu-icon green">📖</div>
+          <div class="menu-text">
+            <h4>About BarangayDocs</h4>
+            <p>Version 1.0 &bull; Brgy. Banicain</p>
+          </div>
+        </div><span class="arrow">›</span>
+      </div>
+      <div class="menu-item">
+        <div class="menu-left">
+          <div class="menu-icon gray">📋</div>
+          <div class="menu-text">
+            <h4>Terms and Conditions</h4>
+            <p>Read our terms of service</p>
+          </div>
+        </div><span class="arrow">›</span>
+      </div>
+      <div class="menu-item">
+        <div class="menu-left">
+          <div class="menu-icon gray">🔐</div>
+          <div class="menu-text">
+            <h4>Privacy Policy</h4>
+            <p>How we handle your data</p>
+          </div>
+        </div><span class="arrow">›</span>
+      </div>
+      <div class="menu-item">
+        <div class="menu-left">
+          <div class="menu-icon blue">💬</div>
+          <div class="menu-text">
+            <h4>Contact Support</h4>
+            <p>(047) XXX-XXXX</p>
+          </div>
+        </div><span class="arrow">›</span>
+      </div>
+    </div>
+    <button class="logout-btn" onclick="document.getElementById('logoutModal').classList.add('show')">Sign Out</button>
+    <div class="version-note">BarangayDocs v1.0 &bull; Barangay Banicain, Olongapo City</div>
+  </div>
+  <div class="modal-overlay" id="logoutModal">
+    <div class="modal">
+      <h3>Sign Out</h3>
+      <p>Are you sure you want to sign out of your BarangayDocs account?</p>
+      <div class="modal-btns">
+        <button class="btn-cancel"
+          onclick="document.getElementById('logoutModal').classList.remove('show')">Cancel</button>
+        <button class="btn-logout" onclick="window.location.href='barangaydocs_login.html'">Sign Out</button>
+      </div>
+    </div>
+  </div>
+  <nav class="bottom-nav">
+    <a href="barangaydocs_mobile.html" class="nav-item active">
+      <div class="nav-icon">
+        <img src="/home.png" alt="Home"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+        <div class="nav-ph" style="display:none;"></div>
+      </div>
+      <span class="nav-label">Home</span>
+    </a>
+    <a href="barangaydocs_request.html" class="nav-item">
+      <div class="nav-icon">
+        <img src="/request.png" alt="Request"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+        <div class="nav-ph" style="display:none;"></div>
+      </div>
+      <span class="nav-label">Request</span>
+    </a>
+    <a href="barangaydocs_scanqr.html" class="nav-item">  
+      <div class="nav-icon">
+        <img src="/scan.png" alt="Scan QR"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+        <div class="nav-ph" style="display:none;"></div>
+      </div>
+      <span class="nav-label">Scan QR</span>
+    </a>
+    <a href="barangaydocs_account.html" class="nav-item">
+      <div class="nav-icon">
+        <img src="/accounticon.png" alt="Account"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+        <div class="nav-ph" style="display:none;"></div>
+      </div>
+      <span class="nav-label">Account</span>
+    </a>
+  </nav>
+</body>
+
+</html>

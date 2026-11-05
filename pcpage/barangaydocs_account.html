@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, initial-scale=1.0">
+  <title>BarangayDocs - My Account</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --primary: #1B3A6B; --primary-light: #2A5298; --accent: #4FC3F7;
+      --bg: #F0F4FA; --card-bg: #FFFFFF; --border: #D0DCF0;
+      --text-main: #1B3A6B; --text-sub: #6B7A99; --text-light: #9AA5BC;
+      --green: #28A745; --red: #DC3545; --yellow: #FFC107;
+      --sidebar-w: 260px;
+    }
+    body { font-family: 'Nunito', sans-serif; background: var(--bg); min-height: 100vh; display: flex; }
+
+    /* SIDEBAR */
+    .sidebar { width: var(--sidebar-w); min-height: 100vh; background: var(--primary); display: flex; flex-direction: column; position: fixed; left: 0; top: 0; bottom: 0; z-index: 200; }
+    .sidebar-brand { padding: 28px 24px 24px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .brand-logo { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+    .logo-icon { width: 40px; height: 40px; background: rgba(255,255,255,0.15); border-radius: 10px; border: 1.5px solid rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .logo-icon img { width: 100%; height: 100%; object-fit: cover; }
+    .logo-ph { width: 24px; height: 24px; background: rgba(255,255,255,0.35); border-radius: 6px; }
+    .logo-text { font-family: 'Poppins', sans-serif; font-size: 18px; font-weight: 800; color: #fff; }
+    .logo-text span { color: var(--accent); }
+    .brand-sub { font-size: 11px; color: rgba(255,255,255,0.5); padding-left: 52px; }
+    .sidebar-user { padding: 20px 20px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .user-avatar { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.25); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; color: #fff; margin-bottom: 10px; }
+    .user-name { font-size: 14px; font-weight: 800; color: #fff; line-height: 1.2; }
+    .user-role { font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+    .sidebar-nav { flex: 1; padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; }
+    .nav-item { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 12px; text-decoration: none; color: rgba(255,255,255,0.6); font-size: 14px; font-weight: 700; transition: all 0.2s; cursor: pointer; }
+    .nav-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+    .nav-item.active { background: rgba(255,255,255,0.15); color: #fff; }
+    .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+    .sidebar-bottom { padding: 16px 12px; border-top: 1px solid rgba(255,255,255,0.08); }
+    .logout-btn { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 12px; color: rgba(255,255,255,0.5); font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; text-decoration: none; }
+    .logout-btn:hover { background: rgba(220,53,69,0.15); color: #ff6b7a; }
+    .logout-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+    /* MAIN */
+    .main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+    .topbar { background: var(--card-bg); border-bottom: 1.5px solid var(--border); padding: 0 32px; height: 64px; display: flex; align-items: center; position: sticky; top: 0; z-index: 100; }
+    .topbar-title { font-family: 'Poppins', sans-serif; font-size: 20px; font-weight: 700; color: var(--text-main); }
+
+    /* PROFILE HEADER BAND */
+    .profile-band { background: var(--primary); padding: 32px; display: flex; align-items: center; gap: 24px; }
+    .profile-avatar { width: 80px; height: 80px; border-radius: 50%; background: rgba(255,255,255,0.2); border: 3px solid rgba(255,255,255,0.3); display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 800; color: #fff; flex-shrink: 0; position: relative; }
+    .edit-badge { position: absolute; bottom: 2px; right: 2px; width: 24px; height: 24px; background: var(--accent); border-radius: 50%; border: 2px solid var(--primary); display: flex; align-items: center; justify-content: center; font-size: 11px; cursor: pointer; }
+    .profile-info { flex: 1; }
+    .profile-info h2 { font-family: 'Poppins', sans-serif; font-size: 22px; font-weight: 800; color: #fff; }
+    .profile-info p { font-size: 13px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+    .profile-stats { display: flex; gap: 32px; }
+    .pstat { text-align: center; }
+    .pstat-num { font-family: 'Poppins', sans-serif; font-size: 24px; font-weight: 800; color: #fff; line-height: 1; }
+    .pstat-label { font-size: 11px; color: rgba(255,255,255,0.55); margin-top: 4px; }
+    .pstat.pending .pstat-num { color: #FFC107; }
+    .pstat.ready .pstat-num { color: #4ADE80; }
+    .pstat.rejected .pstat-num { color: #F87171; }
+
+    /* CONTENT GRID */
+    .content { padding: 28px 32px; flex: 1; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; align-items: start; }
+    .section-card { background: var(--card-bg); border: 2px solid var(--border); border-radius: 18px; overflow: hidden; }
+    .card-title-bar { padding: 16px 20px; border-bottom: 1.5px solid var(--border); font-family: 'Poppins', sans-serif; font-size: 15px; font-weight: 700; color: var(--text-main); }
+
+    /* INFO ROWS */
+    .info-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1.5px solid var(--border); cursor: pointer; transition: background 0.2s; }
+    .info-row:first-of-type { border-top: none; }
+    .info-row:hover { background: var(--bg); }
+    .info-left { display: flex; align-items: center; gap: 12px; }
+    .info-icon { width: 36px; height: 36px; border-radius: 10px; background: #EEF3FB; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+    .info-text h4 { font-size: 13px; font-weight: 800; color: var(--text-main); }
+    .info-text p { font-size: 12px; color: var(--text-sub); margin-top: 1px; }
+    .arrow { font-size: 18px; color: var(--text-light); }
+
+    /* MENU ITEMS */
+    .menu-item { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1.5px solid var(--border); cursor: pointer; transition: background 0.2s; }
+    .menu-item:hover { background: var(--bg); }
+    .menu-left { display: flex; align-items: center; gap: 12px; }
+    .menu-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+    .menu-icon.blue { background: #E3F2FD; }
+    .menu-icon.yellow { background: #FFF9C4; }
+    .menu-icon.green { background: #E8F5E9; }
+    .menu-icon.gray { background: #F5F5F5; }
+    .menu-text h4 { font-size: 13px; font-weight: 800; color: var(--text-main); }
+    .menu-text p { font-size: 12px; color: var(--text-sub); margin-top: 1px; }
+
+    /* TOGGLE */
+    .toggle-wrap { display: flex; align-items: center; }
+    .toggle { width: 44px; height: 24px; border-radius: 12px; background: var(--border); cursor: pointer; transition: background 0.2s; position: relative; }
+    .toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform 0.2s; }
+    .toggle.on { background: var(--green); }
+    .toggle.on::after { transform: translateX(20px); }
+
+    /* SIGN OUT CARD */
+    .signout-card { background: var(--card-bg); border: 2px solid var(--border); border-radius: 18px; padding: 20px; }
+    .signout-btn { width: 100%; height: 48px; background: transparent; border: 2px solid var(--red); border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800; color: var(--red); cursor: pointer; transition: all 0.2s; }
+    .signout-btn:hover { background: var(--red); color: #fff; }
+    .version-note { text-align: center; font-size: 12px; color: var(--text-light); margin-top: 12px; }
+
+    /* INFO MODALS (About / Terms / Privacy) */
+    .info-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 600; align-items: center; justify-content: center; padding: 24px; }
+    .info-modal-overlay.show { display: flex; }
+    .info-modal-box { background: var(--card-bg); border-radius: 20px; width: 100%; max-width: 520px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(27,58,107,0.18); }
+    .info-modal-header { padding: 20px 24px 16px; border-bottom: 1.5px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    .info-modal-header h3 { font-family: 'Poppins', sans-serif; font-size: 17px; font-weight: 700; color: var(--text-main); }
+    .modal-close-btn { width: 32px; height: 32px; border-radius: 8px; border: none; background: var(--bg); cursor: pointer; font-size: 16px; color: var(--text-sub); display: flex; align-items: center; justify-content: center; }
+    .modal-close-btn:hover { background: var(--border); }
+    .info-modal-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
+    .info-modal-body h4 { font-size: 13px; font-weight: 800; color: var(--text-main); margin-top: 16px; margin-bottom: 6px; }
+    .info-modal-body h4:first-child { margin-top: 0; }
+    .info-modal-body p { font-size: 13px; color: var(--text-sub); line-height: 1.7; }
+    .info-modal-body .about-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--bg); border-radius: 10px; margin-top: 8px; }
+    .info-modal-body .about-row span { font-size: 13px; color: var(--text-sub); font-weight: 700; }
+    .info-modal-footer { padding: 14px 24px; border-top: 1.5px solid var(--border); flex-shrink: 0; }
+    .modal-understand-btn { width: 100%; height: 44px; background: var(--primary); border: none; border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800; color: #fff; cursor: pointer; }
+    .modal-understand-btn:hover { background: var(--primary-light); }
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 500; align-items: center; justify-content: center; }
+    .modal-overlay.show { display: flex; }
+    .modal { background: var(--card-bg); border-radius: 20px; padding: 32px; width: 380px; text-align: center; }
+    .modal h3 { font-family: 'Poppins', sans-serif; font-size: 20px; font-weight: 700; color: var(--text-main); margin-bottom: 10px; }
+    .modal p { font-size: 14px; color: var(--text-sub); line-height: 1.6; margin-bottom: 24px; }
+    .modal-btns { display: flex; gap: 12px; }
+    .btn-cancel { flex: 1; height: 46px; background: transparent; border: 2px solid var(--border); border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800; color: var(--text-sub); cursor: pointer; }
+    .btn-logout { flex: 1; height: 46px; background: var(--red); border: none; border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800; color: #fff; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-logo">
+        <div class="logo-icon">
+          <img src="Icons/barangaydocsicon.png" alt="logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+          <div class="logo-ph" style="display:none;"></div>
+        </div>
+        <div class="logo-text">BARANGAY<span>DOCS</span></div>
+      </div>
+      <div class="brand-sub">Barangay Banicain, Olongapo City</div>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-avatar" id="sidebarAvatar"></div>
+      <div class="user-name" id="sidebarName">Loading…</div>
+      <div class="user-role" id="sidebarRole">Resident &bull; Barangay Banicain</div>
+    </div>
+    <nav class="sidebar-nav">
+      <a class="nav-item" href="barangaydocs_home.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Home
+      </a>
+      <a class="nav-item" href="barangaydocs_request.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        My Requests
+      </a>
+      <a class="nav-item" href="barangaydocs_scanqr.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Scan / Verify QR
+      </a>
+      <a class="nav-item active" href="barangaydocs_account.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        My Account
+      </a>
+    </nav>
+    <div class="sidebar-bottom">
+      <a class="logout-btn" href="#" id="logoutBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Sign Out
+      </a>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">My Account</div>
+    </div>
+
+    <!-- PROFILE BAND — populated by bdapp.js -->
+    <div class="profile-band">
+      <div class="profile-avatar" id="profileAvatar">
+        <div class="edit-badge">✏️</div>
+      </div>
+      <div class="profile-info">
+        <h2 id="profileName">Loading…</h2>
+        <p id="profileSub">Barangay Banicain, Olongapo City</p>
+      </div>
+      <div class="profile-stats">
+        <div class="pstat">
+          <div class="pstat-num" id="pstatTotal">—</div>
+          <div class="pstat-label">Total</div>
+        </div>
+        <div class="pstat pending">
+          <div class="pstat-num" id="pstatPending">—</div>
+          <div class="pstat-label">Pending</div>
+        </div>
+        <div class="pstat ready">
+          <div class="pstat-num" id="pstatReady">—</div>
+          <div class="pstat-label">Ready</div>
+        </div>
+        <div class="pstat rejected">
+          <div class="pstat-num" id="pstatRejected">—</div>
+          <div class="pstat-label">Rejected</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTENT GRID -->
+    <div class="content">
+
+      <!-- PERSONAL INFO — populated by bdapp.js -->
+      <div class="section-card">
+        <div class="card-title-bar">Personal Information</div>
+        <div class="info-row">
+          <div class="info-left">
+            <div class="info-icon">👤</div>
+            <div class="info-text"><h4>Full Name</h4><p id="infoFullName">—</p></div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+        <div class="info-row">
+          <div class="info-left">
+            <div class="info-icon">📧</div>
+            <div class="info-text"><h4>Email</h4><p id="infoEmail">—</p></div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+        <div class="info-row">
+          <div class="info-left">
+            <div class="info-icon">📞</div>
+            <div class="info-text"><h4>Contact Number</h4><p id="infoContact">—</p></div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+        <div class="info-row">
+          <div class="info-left">
+            <div class="info-icon">🎂</div>
+            <div class="info-text"><h4>Date of Birth</h4><p id="infoBirthday">—</p></div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+        <div class="info-row">
+          <div class="info-left">
+            <div class="info-icon">📍</div>
+            <div class="info-text"><h4>Home Address</h4><p id="infoAddress">—</p></div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+        <div class="info-row">
+          <div class="info-left">
+            <div class="info-icon">💍</div>
+            <div class="info-text"><h4>Civil Status</h4><p id="infoCivilStatus">—</p></div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+        <div class="info-row">
+          <div class="info-left">
+            <div class="info-icon">⚧</div>
+            <div class="info-text"><h4>Sex</h4><p id="infoSex">—</p></div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+        <div class="info-row">
+          <div class="info-left">
+            <div class="info-icon">🏡</div>
+            <div class="info-text"><h4>Years of Residency</h4><p id="infoResidency">—</p></div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+      </div>
+
+      <!-- SETTINGS -->
+      <div class="section-card">
+        <div class="card-title-bar">Settings</div>
+        <div class="menu-item">
+          <div class="menu-left">
+            <div class="menu-icon blue">🔔</div>
+            <div class="menu-text"><h4>Notifications</h4><p>Request updates and alerts</p></div>
+          </div>
+          <div class="toggle-wrap">
+            <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+          </div>
+        </div>
+        <div class="menu-item">
+          <div class="menu-left">
+            <div class="menu-icon yellow">🌐</div>
+            <div class="menu-text"><h4>Language</h4><p>English</p></div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+        <!-- bdapp.js wires the Change Password click -->
+        <div class="menu-item" id="changePwItem">
+          <div class="menu-left">
+            <div class="menu-icon blue">🔒</div>
+            <div class="menu-text"><h4>Change Password</h4><p>Update your account password</p></div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+        <div class="menu-item" id="menuAbout">
+          <div class="menu-left">
+            <div class="menu-icon green">📖</div>
+            <div class="menu-text"><h4>About BarangayDocs</h4><p>Version 1.0 &bull; Brgy. Banicain</p></div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+        <div class="menu-item" id="menuTerms">
+          <div class="menu-left">
+            <div class="menu-icon gray">📋</div>
+            <div class="menu-text"><h4>Terms and Conditions</h4><p>Read our terms of service</p></div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+        <div class="menu-item" id="menuPrivacy">
+          <div class="menu-left">
+            <div class="menu-icon gray">🔐</div>
+            <div class="menu-text"><h4>Privacy Policy</h4><p>How we handle your data</p></div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+        <div class="menu-item">
+          <div class="menu-left">
+            <div class="menu-icon blue">💬</div>
+            <div class="menu-text"><h4>Contact Support</h4><p>(047) XXX-XXXX</p></div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+      </div>
+
+      <!-- SIGN OUT -->
+      <div>
+        <div class="signout-card">
+          <button class="signout-btn" id="signoutPageBtn">Sign Out of BarangayDocs</button>
+          <div class="version-note">BarangayDocs v1.0 &bull; Barangay Banicain, Olongapo City</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOGOUT MODAL -->
+  <div class="modal-overlay" id="logoutModal">
+    <div class="modal">
+      <h3>Sign Out</h3>
+      <p>Are you sure you want to sign out of your BarangayDocs account?</p>
+      <div class="modal-btns">
+        <button class="btn-cancel" onclick="document.getElementById('logoutModal').classList.remove('show')">Cancel</button>
+        <button class="btn-logout" id="confirmLogout">Sign Out</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ABOUT BARANGAYDOCS MODAL -->
+  <div class="info-modal-overlay" id="modalAbout">
+    <div class="info-modal-box">
+      <div class="info-modal-header">
+        <h3>About BarangayDocs</h3>
+        <button class="modal-close-btn">✕</button>
+      </div>
+      <div class="info-modal-body">
+        <h4>What is BarangayDocs?</h4>
+        <p>BarangayDocs is an official digital document request system developed for Barangay Banicain, Olongapo City. It modernizes the process of requesting barangay documents, allowing residents to submit requests online without visiting the office.</p>
+        <h4>Features</h4>
+        <p>Submit requests for Barangay Clearance, Certificate of Residency, Certificate of Indigency, and more. Track your request status in real time — from submission to ready for pickup. Every document carries a unique QR code for instant authenticity verification.</p>
+        <h4>Version</h4>
+        <p>BarangayDocs v1.0 &bull; Currently serving Barangay Banicain, Olongapo City, Zambales.</p>
+        <h4>Contact</h4>
+        <div class="about-row"><span>📍 Barangay Banicain, Olongapo City, Zambales</span></div>
+        <div class="about-row"><span>📞 (047) XXX-XXXX</span></div>
+        <div class="about-row"><span>🕐 Mon – Fri &bull; 9:00 AM – 5:00 PM</span></div>
+      </div>
+      <div class="info-modal-footer">
+        <button class="modal-understand-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TERMS & CONDITIONS MODAL -->
+  <div class="info-modal-overlay" id="modalTerms">
+    <div class="info-modal-box">
+      <div class="info-modal-header">
+        <h3>Terms and Conditions</h3>
+        <button class="modal-close-btn">✕</button>
+      </div>
+      <div class="info-modal-body">
+        <h4>1. Acceptance of Terms</h4>
+        <p>By registering an account on BarangayDocs, you confirm that all information you provide is accurate, truthful, and complete. False information may result in the rejection or revocation of your account.</p>
+        <h4>2. Purpose of the System</h4>
+        <p>BarangayDocs is an official digital document request system of Barangay Banicain, Olongapo City. It is intended solely for registered residents of the barangay to request official barangay documents such as Barangay Clearance, Certificate of Residency, and others.</p>
+        <h4>3. Account Approval</h4>
+        <p>All new accounts are subject to review and approval by the Barangay Admin. You will be notified once your account has been verified and activated. Accounts that cannot be verified may be rejected.</p>
+        <h4>4. Proper Use</h4>
+        <p>You agree to use this system only for lawful purposes. Submitting fraudulent document requests, impersonating another resident, or attempting to tamper with the system is strictly prohibited and may be subject to legal action.</p>
+        <h4>5. Changes to Terms</h4>
+        <p>Barangay Banicain reserves the right to update these Terms and Conditions at any time. Continued use of the system constitutes acceptance of any revised terms.</p>
+      </div>
+      <div class="info-modal-footer">
+        <button class="modal-understand-btn">I Understand</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRIVACY POLICY MODAL -->
+  <div class="info-modal-overlay" id="modalPrivacy">
+    <div class="info-modal-box">
+      <div class="info-modal-header">
+        <h3>Privacy Policy</h3>
+        <button class="modal-close-btn">✕</button>
+      </div>
+      <div class="info-modal-body">
+        <h4>1. Data We Collect</h4>
+        <p>We collect personal information including your full name, date of birth, sex, civil status, home address, years of residency, contact number, and email address. This information is required to verify your identity as a resident of Barangay Banicain.</p>
+        <h4>2. How We Use Your Data</h4>
+        <p>Your data is used exclusively for processing barangay document requests, verifying your residency, and communicating updates regarding your requests. We do not sell or share your personal information with third parties.</p>
+        <h4>3. Data Storage</h4>
+        <p>Your information is securely stored using Firebase, a cloud platform by Google, with access restricted to authorized Barangay personnel only. All data is handled in accordance with the Philippine Data Privacy Act of 2012 (R.A. 10173).</p>
+        <h4>4. Your Rights</h4>
+        <p>You have the right to access, correct, or request deletion of your personal data. To exercise these rights, please contact the Barangay Banicain office directly.</p>
+        <h4>5. Cookies</h4>
+        <p>This system may use session data to keep you logged in during your visit. No tracking cookies or third-party advertisements are used.</p>
+      </div>
+      <div class="info-modal-footer">
+        <button class="modal-understand-btn">I Understand</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="bdapp.js"></script>
+</body>
+</html>

@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, initial-scale=1.0">
+  <title>BarangayDocs - Register</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap"
+    rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #1B3A6B;
+      --primary-light: #2A5298;
+      --accent: #4FC3F7;
+      --bg: #F0F4FA;
+      --card-bg: #FFFFFF;
+      --border: #D0DCF0;
+      --text-main: #1B3A6B;
+      --text-sub: #6B7A99;
+      --text-light: #9AA5BC;
+      --accent-green: #28A745;
+      --error: #DC3545;
+    }
+
+    body {
+      font-family: 'Nunito', sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      width: 100%;
+      display: flex;
+    }
+
+    /* LEFT PANEL */
+    .left-panel {
+      width: 44%;
+      background: var(--primary);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 60px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .left-panel::before {
+      content: '';
+      position: absolute;
+      width: 500px;
+      height: 500px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.04);
+      top: -150px;
+      left: -150px;
+    }
+
+    .left-panel::after {
+      content: '';
+      position: absolute;
+      width: 350px;
+      height: 350px;
+      border-radius: 50%;
+      background: rgba(79, 195, 247, 0.07);
+      bottom: -80px;
+      right: -80px;
+    }
+
+    .brand-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      z-index: 1;
+    }
+
+    .logo-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .logo-icon {
+      width: 60px;
+      height: 60px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .logo-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .logo-ph {
+      width: 36px;
+      height: 36px;
+      background: rgba(255, 255, 255, 0.35);
+      border-radius: 8px;
+    }
+
+    .logo-text {
+      font-family: 'Poppins', sans-serif;
+      font-size: 36px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .logo-text span {
+      color: var(--accent);
+    }
+
+    .brand-tagline {
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.6);
+      text-align: center;
+    }
+
+    .steps-visual {
+      margin-top: 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      width: 100%;
+      max-width: 340px;
+    }
+
+    .vstep {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      padding-bottom: 28px;
+      position: relative;
+    }
+
+    .vstep:last-child {
+      padding-bottom: 0;
+    }
+
+    .vstep::before {
+      content: '';
+      position: absolute;
+      left: 15px;
+      top: 32px;
+      bottom: 0;
+      width: 2px;
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .vstep:last-child::before {
+      display: none;
+    }
+
+    .vstep-dot {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 800;
+      color: rgba(255, 255, 255, 0.5);
+      flex-shrink: 0;
+      z-index: 1;
+      transition: all 0.3s;
+    }
+
+    .vstep-dot.active {
+      background: #fff;
+      border-color: #fff;
+      color: var(--primary);
+    }
+
+    .vstep-dot.done {
+      background: var(--accent-green);
+      border-color: var(--accent-green);
+      color: #fff;
+    }
+
+    .vstep-text h4 {
+      font-size: 14px;
+      font-weight: 800;
+      color: rgba(255, 255, 255, 0.5);
+      transition: color 0.3s;
+    }
+
+    .vstep-text p {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.35);
+      margin-top: 2px;
+      line-height: 1.4;
+    }
+
+    .vstep-dot.active~.vstep-text h4,
+    .vstep.active-step .vstep-text h4 {
+      color: #fff;
+    }
+
+    .vstep.done-step .vstep-text h4 {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    /* RIGHT PANEL */
+    .right-panel {
+      width: 56%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 60px;
+      overflow-y: auto;
+    }
+
+    .form-box {
+      width: 100%;
+      max-width: 560px;
+    }
+
+    .form-header {
+      margin-bottom: 32px;
+    }
+
+    .form-header h1 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+
+    .form-header p {
+      font-size: 14px;
+      color: var(--text-sub);
+    }
+
+    /* STEP PANELS */
+    .step-panel {
+      display: none;
+    }
+
+    .step-panel.active {
+      display: block;
+    }
+
+    /* FIELDS */
+    .field {
+      margin-bottom: 18px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-sub);
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      margin-bottom: 7px;
+    }
+
+    .input-wrap {
+      position: relative;
+    }
+
+    .input-wrap input,
+    .input-wrap select {
+      width: 100%;
+      height: 50px;
+      border: 2px solid var(--border);
+      border-radius: 13px;
+      padding: 0 16px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 14px;
+      color: var(--text-main);
+      background: var(--bg);
+      outline: none;
+      transition: border-color 0.2s;
+      appearance: none;
+    }
+
+    .input-wrap input:focus,
+    .input-wrap select:focus {
+      border-color: var(--primary-light);
+      background: #fff;
+    }
+
+    .input-wrap input::placeholder {
+      color: var(--text-light);
+    }
+
+    .toggle-pw {
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      cursor: pointer;
+      opacity: 0.4;
+      font-size: 16px;
+      user-select: none;
+    }
+
+    .select-wrap {
+      position: relative;
+    }
+
+    .select-wrap::after {
+      content: '▾';
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-light);
+      font-size: 13px;
+      pointer-events: none;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    /* PW STRENGTH */
+    .pw-strength {
+      margin-top: 6px;
+      display: flex;
+      gap: 4px;
+    }
+
+    .pw-bar {
+      flex: 1;
+      height: 4px;
+      border-radius: 4px;
+      background: var(--border);
+      transition: background 0.3s;
+    }
+
+    .pw-bar.weak   { background: var(--error); }
+    .pw-bar.medium { background: #FFC107; }
+    .pw-bar.strong { background: var(--accent-green); }
+
+    .pw-label {
+      font-size: 11px;
+      color: var(--text-light);
+      margin-top: 4px;
+      text-align: right;
+    }
+
+    /* TERMS */
+    .terms-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin: 16px 0;
+    }
+
+    .terms-row input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      margin-top: 1px;
+      accent-color: var(--primary);
+    }
+
+    .terms-row label {
+      font-size: 13px;
+      color: var(--text-sub);
+      line-height: 1.5;
+      font-weight: 600;
+    }
+
+    .terms-row label a {
+      color: var(--primary);
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    /* BUTTONS */
+    .btn-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .btn-primary {
+      flex: 2;
+      height: 52px;
+      background: var(--primary);
+      border: none;
+      border-radius: 14px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 15px;
+      font-weight: 800;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-primary:hover { background: var(--primary-light); }
+
+    .btn-primary:disabled {
+      background: var(--text-light);
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      flex: 1;
+      height: 52px;
+      background: transparent;
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--text-sub);
+      cursor: pointer;
+    }
+
+    .login-row {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 14px;
+      color: var(--text-sub);
+    }
+
+    .login-row a {
+      color: var(--primary);
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    /* SUCCESS */
+    .success-wrap {
+      text-align: center;
+      padding: 20px 0;
+    }
+
+    .success-icon {
+      width: 80px;
+      height: 80px;
+      background: #D4EDDA;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+    }
+
+    .success-icon svg {
+      width: 40px;
+      height: 40px;
+      stroke: #155724;
+    }
+
+    .success-wrap h2 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 10px;
+    }
+
+    .success-wrap p {
+      font-size: 14px;
+      color: var(--text-sub);
+      line-height: 1.7;
+      margin-bottom: 28px;
+    }
+
+    /* =============================================
+       VALID ID UPLOAD STYLES
+       ============================================= */
+    .id-upload-box {
+      border: 2px dashed var(--border);
+      border-radius: 13px;
+      padding: 24px 20px;
+      text-align: center;
+      background: var(--bg);
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+
+    .id-upload-box:hover {
+      border-color: var(--primary-light);
+      background: #EAF0FB;
+    }
+
+    .id-upload-box.has-file {
+      border-color: var(--accent-green);
+      border-style: solid;
+      background: #F0FBF3;
+    }
+
+    .id-upload-box input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .id-upload-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    .id-upload-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+
+    .id-upload-hint {
+      font-size: 12px;
+      color: var(--text-light);
+    }
+
+    .id-accepted {
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--text-light);
+      line-height: 1.6;
+    }
+
+    /* Preview area */
+    .id-preview-area {
+      display: none;
+      margin-top: 12px;
+      position: relative;
+    }
+
+    .id-preview-area img {
+      width: 100%;
+      max-height: 180px;
+      object-fit: contain;
+      border-radius: 10px;
+      border: 2px solid var(--border);
+      background: #fff;
+    }
+
+    .id-preview-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .id-preview-info span {
+      font-size: 12px;
+      color: var(--accent-green);
+      font-weight: 700;
+    }
+
+    .id-remove-btn {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--error);
+      font-weight: 700;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: background 0.2s;
+    }
+
+    .id-remove-btn:hover {
+      background: #FEE2E2;
+    }
+
+    /* Upload status pill */
+    .id-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 5px 12px;
+      border-radius: 20px;
+      margin-top: 10px;
+    }
+
+    .id-status-pill.uploading {
+      background: #EAF0FB;
+      color: var(--primary);
+    }
+
+    .id-status-pill.success {
+      background: #D4EDDA;
+      color: #155724;
+    }
+
+    .id-status-pill.error {
+      background: #F8D7DA;
+      color: #721c24;
+    }
+
+    /* MODAL OVERLAY */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 20, 50, 0.55);
+      backdrop-filter: blur(3px);
+      z-index: 999;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.open { display: flex; }
+
+    .modal-box {
+      background: #fff;
+      border-radius: 20px;
+      width: 100%;
+      max-width: 560px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 24px 60px rgba(27, 58, 107, 0.18);
+      overflow: hidden;
+      animation: modalIn 0.25s ease;
+    }
+
+    @keyframes modalIn {
+      from { opacity: 0; transform: translateY(16px) scale(0.98); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 22px 28px 18px;
+      border-bottom: 2px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .modal-header h3 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .modal-close {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      border: 2px solid var(--border);
+      background: var(--bg);
+      font-size: 18px;
+      color: var(--text-sub);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s, color 0.2s;
+      line-height: 1;
+    }
+
+    .modal-close:hover {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    .modal-body {
+      padding: 24px 28px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .modal-body h4 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 20px 0 8px;
+    }
+
+    .modal-body h4:first-child { margin-top: 0; }
+
+    .modal-body p {
+      font-size: 13px;
+      color: var(--text-sub);
+      line-height: 1.8;
+    }
+
+    .modal-footer {
+      padding: 16px 28px;
+      border-top: 2px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .modal-footer button {
+      width: 100%;
+      height: 46px;
+      background: var(--primary);
+      border: none;
+      border-radius: 12px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 14px;
+      font-weight: 800;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .modal-footer button:hover { background: var(--primary-light); }
+  </style>
+</head>
+
+<body>
+
+  <!-- LEFT PANEL -->
+  <div class="left-panel">
+    <div class="brand-wrap">
+      <div class="logo-row">
+        <div class="logo-icon">
+          <img src="Icons/barangaydocsicon.png" alt="logo"
+            onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+          <div class="logo-ph" style="display:none;"></div>
+        </div>
+        <div class="logo-text">BARANGAY<span>DOCS</span></div>
+      </div>
+      <div class="brand-tagline">Barangay Banicain, Olongapo City &bull; Official Document System</div>
+
+      <div class="steps-visual">
+        <div class="vstep active-step" id="vstep1">
+          <div class="vstep-dot active" id="vdot1">1</div>
+          <div class="vstep-text">
+            <h4>Personal Information</h4>
+            <p>Enter your full name, date of birth, sex, civil status, and contact number.</p>
+          </div>
+        </div>
+        <div class="vstep" id="vstep2">
+          <div class="vstep-dot" id="vdot2">2</div>
+          <div class="vstep-text">
+            <h4>Home Address & Valid ID</h4>
+            <p>Provide your complete address in Barangay Banicain and upload a valid ID for verification.</p>
+          </div>
+        </div>
+        <div class="vstep" id="vstep3">
+          <div class="vstep-dot" id="vdot3">3</div>
+          <div class="vstep-text">
+            <h4>Account Setup</h4>
+            <p>Create your login credentials and select your valid ID type for verification.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div class="form-box">
+
+      <!-- STEP 1 -->
+      <div class="step-panel active" id="panel1">
+        <div class="form-header">
+          <h1>Personal Information</h1>
+          <p>Step 1 of 3 &bull; Enter your basic personal details</p>
+        </div>
+
+        <div class="two-col">
+          <div class="field">
+            <label>First Name</label>
+            <div class="input-wrap">
+              <input id="first-name" type="text" placeholder="Juan">
+            </div>
+          </div>
+          <div class="field">
+            <label>Last Name</label>
+            <div class="input-wrap">
+              <input id="last-name" type="text" placeholder="dela Cruz">
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Middle Name</label>
+          <div class="input-wrap">
+            <input id="middle-name" type="text" placeholder="Santos (optional)">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Date of Birth</label>
+          <div class="input-wrap">
+            <input id="birthday" type="date">
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="field">
+            <label>Sex</label>
+            <div class="input-wrap select-wrap">
+              <select id="sex">
+                <option value="">Select</option>
+                <option>Male</option>
+                <option>Female</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Civil Status</label>
+            <div class="input-wrap select-wrap">
+              <select id="civil-status">
+                <option value="">Select</option>
+                <option>Single</option>
+                <option>Married</option>
+                <option>Widowed</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn-primary" id="step1-next">Next: Home Address →</button>
+        </div>
+
+        <div class="login-row">
+          Already have an account? <a href="barangaydocs_login.html">Sign in here</a>
+        </div>
+      </div>
+
+      <!-- STEP 2 -->
+      <div class="step-panel" id="panel2">
+        <div class="form-header">
+          <h1>Home Address & Valid ID</h1>
+          <p>Step 2 of 3 &bull; Enter your address and upload a valid ID</p>
+        </div>
+
+        <div class="field">
+          <label>House No. / Street</label>
+          <div class="input-wrap">
+            <input id="house-number" type="text" placeholder="123 Rizal Street">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Barangay</label>
+          <div class="input-wrap">
+            <input type="text" value="Barangay Banicain" readonly style="opacity:0.6; cursor:not-allowed;">
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="field">
+            <label>City</label>
+            <div class="input-wrap">
+              <input type="text" value="Olongapo City" readonly style="opacity:0.6; cursor:not-allowed;">
+            </div>
+          </div>
+          <div class="field">
+            <label>Province</label>
+            <div class="input-wrap">
+              <input type="text" value="Zambales" readonly style="opacity:0.6; cursor:not-allowed;">
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Years of Residency</label>
+          <div class="input-wrap">
+            <input id="years-residency" type="number" placeholder="e.g. 5" min="0">
+          </div>
+        </div>
+
+        <!-- =============================================
+             VALID ID UPLOAD
+             Accepted: School ID, National ID, PhilHealth ID,
+             Barangay ID, Passport, Driver's License
+             ============================================= -->
+        <div class="field">
+          <label>Upload Valid ID</label>
+
+          <div class="id-upload-box" id="id-upload-box">
+            <input type="file" id="valid-id" accept="image/*">
+            <span class="id-upload-icon">🪪</span>
+            <div class="id-upload-title">Click or drag to upload your ID</div>
+            <div class="id-upload-hint">JPG, PNG, WEBP &bull; Max 5MB</div>
+            <div class="id-accepted">
+              Accepted: School ID &bull; National ID &bull; PhilHealth ID<br>
+              Barangay ID &bull; Passport &bull; Driver's License
+            </div>
+          </div>
+
+          <!-- Preview after picking a file -->
+          <div class="id-preview-area" id="id-preview-area">
+            <img id="id-preview-img" src="" alt="ID Preview">
+            <div class="id-preview-info">
+              <span>✅ <span id="id-file-name"></span></span>
+              <button class="id-remove-btn" id="id-remove-btn" type="button">✕ Remove</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn-secondary" id="step2-back">← Back</button>
+          <button class="btn-primary" id="step2-next">Next: Account Setup →</button>
+        </div>
+      </div>
+
+      <!-- STEP 3 -->
+      <div class="step-panel" id="panel3">
+        <div class="form-header">
+          <h1>Account Setup</h1>
+          <p>Step 3 of 3 &bull; Create your login credentials</p>
+        </div>
+
+        <div class="field">
+          <label>Email Address</label>
+          <div class="input-wrap">
+            <input id="signup-email" type="email" placeholder="juan@email.com">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Contact Number</label>
+          <div class="input-wrap">
+            <input id="contact-number" type="tel" placeholder="09XX XXX XXXX">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Password</label>
+          <div class="input-wrap">
+            <input type="password" id="reg-pw" placeholder="Create a password">
+            <span class="toggle-pw" id="toggle-pw1">👁</span>
+          </div>
+          <div class="pw-strength">
+            <div class="pw-bar" id="bar1"></div>
+            <div class="pw-bar" id="bar2"></div>
+            <div class="pw-bar" id="bar3"></div>
+          </div>
+          <div class="pw-label" id="pw-label">Enter a password</div>
+        </div>
+
+        <div class="field">
+          <label>Confirm Password</label>
+          <div class="input-wrap">
+            <input type="password" id="reg-pw2" placeholder="Re-enter your password">
+            <span class="toggle-pw" id="toggle-pw2">👁</span>
+          </div>
+        </div>
+
+        <div class="terms-row">
+          <input type="checkbox" id="terms">
+          <label for="terms">I agree to the <a href="#" id="open-terms">Terms and Conditions</a> and <a href="#"
+              id="open-privacy">Privacy Policy</a> of BarangayDocs.</label>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn-secondary" id="step3-back">← Back</button>
+          <button class="btn-primary" id="step3-submit">Create Account</button>
+        </div>
+      </div>
+
+      <!-- SUCCESS -->
+      <div class="step-panel" id="panel4">
+        <div class="success-wrap">
+          <div class="success-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+          </div>
+          <h2>Account Created!</h2>
+          <p>Your account has been successfully registered and is pending for admin approval. You will receive a
+            notification once your account is activated and you can begin requesting barangay documents.</p>
+          <button class="btn-primary" id="go-to-login" style="width:100%; flex:unset;">
+            Go to Sign In →
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- TERMS & CONDITIONS MODAL -->
+  <div class="modal-overlay" id="modal-terms">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Terms and Conditions</h3>
+        <button class="modal-close" id="close-terms">✕</button>
+      </div>
+      <div class="modal-body">
+        <h4>1. Acceptance of Terms</h4>
+        <p>By registering an account on BarangayDocs, you confirm that all information you provide is accurate,
+          truthful, and complete. False information may result in the rejection or revocation of your account.</p>
+
+        <h4>2. Purpose of the System</h4>
+        <p>BarangayDocs is an official digital document request system of Barangay Banicain, Olongapo City. It is
+          intended solely for registered residents of the barangay to request official barangay documents such as
+          Barangay Clearance, Certificate of Residency, and others.</p>
+
+        <h4>3. Account Approval</h4>
+        <p>All new accounts are subject to review and approval by the Barangay Admin. You will be notified once your
+          account has been verified and activated. Accounts that cannot be verified may be rejected.</p>
+
+        <h4>4. Proper Use</h4>
+        <p>You agree to use this system only for lawful purposes. Submitting fraudulent document requests, impersonating
+          another resident, or attempting to tamper with the system is strictly prohibited and may be subject to legal
+          action.</p>
+
+        <h4>5. Changes to Terms</h4>
+        <p>Barangay Banicain reserves the right to update these Terms and Conditions at any time. Continued use of the
+          system constitutes acceptance of any revised terms.</p>
+      </div>
+      <div class="modal-footer">
+        <button id="close-terms-btn">I Understand</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRIVACY POLICY MODAL -->
+  <div class="modal-overlay" id="modal-privacy">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Privacy Policy</h3>
+        <button class="modal-close" id="close-privacy">✕</button>
+      </div>
+      <div class="modal-body">
+        <h4>1. Data We Collect</h4>
+        <p>We collect personal information including your full name, date of birth, sex, civil status, home address,
+          years of residency, contact number, and email address. This information is required to verify your identity as
+          a resident of Barangay Banicain.</p>
+
+        <h4>2. How We Use Your Data</h4>
+        <p>Your data is used exclusively for processing barangay document requests, verifying your residency, and
+          communicating updates regarding your requests. We do not sell or share your personal information with third
+          parties.</p>
+
+        <h4>3. Data Storage</h4>
+        <p>Your information is securely stored using Firebase, a cloud platform by Google, with access restricted to
+          authorized Barangay personnel only. All data is handled in accordance with the Philippine Data Privacy Act of
+          2012 (R.A. 10173).</p>
+
+        <h4>4. Your Rights</h4>
+        <p>You have the right to access, correct, or request deletion of your personal data. To exercise these rights,
+          please contact the Barangay Banicain office directly.</p>
+
+        <h4>5. Cookies</h4>
+        <p>This system may use session data to keep you logged in during your visit. No tracking cookies or third-party
+          advertisements are used.</p>
+      </div>
+      <div class="modal-footer">
+        <button id="close-privacy-btn">I Understand</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="bdlogsign.js"></script>
+</body>
+
+</html>

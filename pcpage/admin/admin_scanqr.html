@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=390, initial-scale=1.0">
+  <title>BarangayDocs Admin — Scan / Verify QR</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --primary: #1B3A6B; --primary-light: #2A5298; --accent: #4FC3F7;
+      --bg: #F0F4FA; --card-bg: #FFFFFF; --border: #D0DCF0;
+      --text-main: #1B3A6B; --text-sub: #6B7A99; --text-light: #9AA5BC;
+      --green: #28A745; --green-bg: #D4EDDA; --green-text: #155724;
+      --yellow: #FFC107; --yellow-bg: #FFF3CD; --yellow-text: #856404;
+      --red: #DC3545; --red-bg: #F8D7DA; --red-text: #721C24;
+      --blue-bg: #CCE5FF; --blue-text: #004085;
+      --sidebar-w: 220px;
+    }
+    body { font-family: 'Nunito', sans-serif; background: var(--bg); min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* ── TOP NAVBAR (matches admin_dashboard) ── */
+    .top-navbar { background: var(--primary); height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; position: fixed; top: 0; left: 0; right: 0; z-index: 200; box-shadow: 0 2px 12px rgba(27,58,107,0.3); }
+    .navbar-left { display: flex; align-items: center; gap: 14px; }
+    .hamburger-btn { width: 36px; height: 36px; background: rgba(255,255,255,0.12); border: none; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-direction: column; gap: 4px; }
+    .hamburger-btn span { display: block; width: 18px; height: 2px; background: #fff; border-radius: 2px; }
+    .navbar-logo { display: flex; align-items: center; gap: 8px; }
+    .logo-text { font-family: 'Poppins', sans-serif; font-size: 18px; font-weight: 800; color: #fff; }
+    .logo-text span { color: var(--accent); }
+    .admin-badge { background: var(--accent); color: var(--primary); font-size: 9px; font-weight: 800; padding: 2px 7px; border-radius: 10px; letter-spacing: 0.5px; }
+    .navbar-right { display: flex; align-items: center; gap: 12px; }
+    .notif-btn { width: 36px; height: 36px; background: rgba(255,255,255,0.12); border: none; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; }
+    .notif-btn svg { width: 18px; height: 18px; stroke: #fff; }
+    .notif-dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--red); border: 2px solid var(--primary); }
+    .admin-avatar { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.3); display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer; }
+    .admin-avatar .av-ph { font-size: 14px; color: #fff; font-weight: 800; }
+
+    /* ── LAYOUT ── */
+    .layout { display: flex; margin-top: 60px; min-height: calc(100vh - 60px); }
+
+    /* ── SIDEBAR (matches admin_dashboard) ── */
+    .sidebar { width: var(--sidebar-w); background: var(--card-bg); border-right: 1.5px solid var(--border); position: fixed; top: 60px; left: 0; bottom: 0; overflow-y: auto; transition: transform 0.25s; z-index: 100; }
+    .sidebar.collapsed { transform: translateX(calc(-1 * var(--sidebar-w))); }
+    .sidebar-section { padding: 16px 12px 8px; }
+    .sidebar-section-label { font-size: 10px; font-weight: 800; color: var(--text-light); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 6px; padding: 0 8px; }
+    .sidebar-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; cursor: pointer; text-decoration: none; transition: background 0.15s, color 0.15s; margin-bottom: 2px; }
+    .sidebar-item svg { width: 18px; height: 18px; stroke: var(--text-sub); flex-shrink: 0; }
+    .sidebar-item span { font-size: 13px; font-weight: 700; color: var(--text-sub); }
+    .sidebar-item:hover { background: var(--bg); }
+    .sidebar-item:hover svg { stroke: var(--primary); }
+    .sidebar-item:hover span { color: var(--primary); }
+    .sidebar-item.active { background: #EBF0FB; }
+    .sidebar-item.active svg { stroke: var(--primary); }
+    .sidebar-item.active span { color: var(--primary); }
+    .sidebar-badge { margin-left: auto; background: var(--red); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 10px; min-width: 20px; text-align: center; }
+    .sidebar-badge.yellow { background: var(--yellow); color: #000000; }
+    .sidebar-badge.red { background: var(--red); color: #000000; }
+    .sidebar-divider { height: 1px; background: var(--border); margin: 4px 12px; }
+
+    /* ── MAIN ── */
+    .main { margin-left: var(--sidebar-w); flex: 1; padding: 24px; transition: margin-left 0.25s; }
+    .main.expanded { margin-left: 0; }
+    .page-header { margin-bottom: 20px; }
+    .page-header h1 { font-family: 'Poppins', sans-serif; font-size: 22px; font-weight: 700; color: var(--text-main); }
+    .page-header p { font-size: 13px; color: var(--text-sub); margin-top: 3px; }
+
+    /* ── CONTENT GRID ── */
+    .content-grid { display: grid; grid-template-columns: 400px 1fr; gap: 20px; align-items: start; }
+
+    /* ── SCAN PANEL (left column) ── */
+    .scan-panel { display: flex; flex-direction: column; gap: 16px; }
+
+    /* Camera card */
+    .scan-card { background: var(--primary); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+    .scan-card-title { font-family: 'Poppins', sans-serif; font-size: 16px; font-weight: 700; color: #fff; }
+    .scan-card-sub { font-size: 12px; color: rgba(255,255,255,0.6); text-align: center; line-height: 1.5; }
+    .scanner-frame { width: 230px; height: 230px; position: relative; display: flex; align-items: center; justify-content: center; }
+    .scanner-frame::before, .scanner-frame::after { content: ''; position: absolute; width: 40px; height: 40px; border-color: var(--accent); border-style: solid; }
+    .scanner-frame::before { top: 0; left: 0; border-width: 4px 0 0 4px; border-radius: 4px 0 0 0; }
+    .scanner-frame::after  { bottom: 0; right: 0; border-width: 0 4px 4px 0; border-radius: 0 0 4px 0; }
+    .corner-tr, .corner-bl { position: absolute; width: 40px; height: 40px; border-color: var(--accent); border-style: solid; }
+    .corner-tr { top: 0; right: 0; border-width: 4px 4px 0 0; border-radius: 0 4px 0 0; }
+    .corner-bl { bottom: 0; left: 0; border-width: 0 0 4px 4px; border-radius: 0 0 0 4px; }
+    .cam-area { width: 190px; height: 190px; border-radius: 10px; background: rgba(255,255,255,0.07); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; border: 1px dashed rgba(255,255,255,0.2); }
+    .cam-area.active { background: rgba(255,255,255,0.04); border-color: rgba(79,195,247,0.5); }
+    .cam-area video { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; display: none; }
+    .cam-area.active video { display: block; }
+    .cam-icon { width: 44px; height: 44px; stroke: rgba(255,255,255,0.4); }
+    .cam-placeholder-text { font-size: 12px; color: rgba(255,255,255,0.5); text-align: center; line-height: 1.5; }
+    .cam-btn { height: 42px; padding: 0 24px; background: var(--accent); border: none; border-radius: 10px; font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800; color: var(--primary); cursor: pointer; transition: opacity 0.2s; }
+    .cam-btn:hover { opacity: 0.85; }
+    .cam-btn.stop { background: var(--red-bg); color: var(--red-text); }
+
+    /* Manual card */
+    .manual-card { background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 14px; padding: 20px; }
+    .manual-title { font-family: 'Poppins', sans-serif; font-size: 14px; font-weight: 700; color: var(--text-main); margin-bottom: 3px; }
+    .manual-sub { font-size: 12px; color: var(--text-sub); margin-bottom: 14px; }
+    .ref-input-wrap { display: flex; gap: 8px; }
+    .ref-input-wrap input { flex: 1; height: 44px; border: 1.5px solid var(--border); border-radius: 10px; padding: 0 14px; font-family: 'Nunito', sans-serif; font-size: 13px; color: var(--text-main); background: var(--bg); outline: none; transition: border-color 0.2s; }
+    .ref-input-wrap input:focus { border-color: var(--primary-light); background: #fff; }
+    .ref-input-wrap input::placeholder { color: var(--text-light); }
+    .verify-btn { height: 44px; padding: 0 18px; background: var(--primary); border: none; border-radius: 10px; font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800; color: #fff; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 8px; transition: background 0.2s; }
+    .verify-btn:hover:not(:disabled) { background: var(--primary-light); }
+    .verify-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .spinner { width: 14px; height: 14px; border: 2.5px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.65s linear infinite; flex-shrink: 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── RESULT PANEL (right column) ── */
+    .result-panel { display: flex; flex-direction: column; gap: 16px; }
+    .result-placeholder { background: var(--card-bg); border: 1.5px dashed var(--border); border-radius: 16px; padding: 56px 32px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+    .result-placeholder svg { width: 56px; height: 56px; stroke: var(--border); }
+    .result-placeholder h3 { font-family: 'Poppins', sans-serif; font-size: 16px; color: var(--text-light); }
+    .result-placeholder p { font-size: 13px; color: var(--text-light); text-align: center; line-height: 1.6; max-width: 360px; }
+
+    /* Result card */
+    .result-card { display: none; background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 16px; overflow: hidden; }
+    .result-card.show { display: block; }
+    .result-header { background: var(--primary); padding: 18px 22px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .result-header-text h3 { font-family: 'Poppins', sans-serif; font-size: 17px; font-weight: 700; color: #fff; margin-bottom: 3px; }
+    .result-header-text p  { font-size: 12px; color: rgba(255,255,255,0.6); }
+    .result-clear-btn { background: rgba(255,255,255,0.12); border: none; border-radius: 8px; width: 30px; height: 30px; color: rgba(255,255,255,0.7); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.15s; }
+    .result-clear-btn:hover { background: rgba(255,255,255,0.2); }
+    .result-body { padding: 20px 22px; }
+
+    /* Status badge */
+    .result-badge { display: inline-flex; align-items: center; gap: 7px; padding: 7px 16px; border-radius: 20px; font-size: 12px; font-weight: 800; margin-bottom: 18px; letter-spacing: 0.2px; }
+
+    /* Info grid */
+    .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+    .result-field .r-label { font-size: 10px; font-weight: 800; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 4px; }
+    .result-field .r-val  { font-size: 13px; font-weight: 700; color: var(--text-main); }
+
+    /* ── ADMIN ACTION PANEL ── */
+    .admin-actions { background: var(--bg); border: 1.5px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 20px; }
+    .admin-actions-title { font-size: 10px; font-weight: 800; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+    .admin-actions-title::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+    .action-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+    .action-btn { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 800; cursor: pointer; border: 1.5px solid; transition: opacity 0.15s, transform 0.1s; }
+    .action-btn:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+    .action-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .action-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .btn-process { background: var(--blue-bg); color: var(--blue-text); border-color: #B8DAFF; }
+    .btn-ready   { background: var(--green-bg); color: var(--green-text); border-color: #C3E6CB; }
+    .btn-release { background: #DBEAFE; color: #1565C0; border-color: #BFDBFE; }
+    .btn-reject  { background: var(--red-bg); color: var(--red-text); border-color: #F5C6CB; }
+    .action-note { margin-top: 10px; font-size: 11px; color: var(--text-light); font-style: italic; }
+
+    /* ── TIMELINE ── */
+    .timeline-wrap { border-top: 1.5px solid var(--border); padding-top: 18px; }
+    .timeline-heading { font-size: 10px; font-weight: 800; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 16px; }
+    .timeline { display: flex; flex-direction: column; }
+    .tl-row { display: flex; gap: 12px; }
+    .tl-spine { display: flex; flex-direction: column; align-items: center; width: 20px; flex-shrink: 0; }
+    .tl-dot { width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid var(--border); background: var(--card-bg); flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .tl-dot.done { background: var(--green); border-color: var(--green); }
+    .tl-dot.done::after { content: ''; width: 5px; height: 8px; border: 2px solid #fff; border-top: none; border-left: none; transform: rotate(45deg) translateY(-1px); display: block; }
+    .tl-dot.rejected-dot { background: var(--red-bg); border-color: var(--red); }
+    .tl-dot.rejected-dot::after { content: '✕'; font-size: 8px; font-weight: 900; color: var(--red); line-height: 1; }
+    .tl-line { flex: 1; width: 2px; background: var(--border); margin: 2px 0; min-height: 14px; }
+    .tl-line.done { background: var(--green); }
+    .tl-info { flex: 1; padding-bottom: 16px; }
+    .tl-row:last-child .tl-info { padding-bottom: 0; }
+    .tl-label { font-size: 13px; font-weight: 800; color: var(--text-main); }
+    .tl-label.muted { color: var(--text-light); }
+    .tl-time { font-size: 11px; font-weight: 600; margin-top: 2px; color: var(--text-sub); }
+    .tl-time.done-txt { color: var(--green-text); }
+    .tl-time.pending-txt { color: var(--yellow-text); font-style: italic; }
+
+    /* ── QR MODAL HEADER ── */
+    .modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+    .modal-header h3 { font-family:'Poppins',sans-serif; font-size:16px; font-weight:700; color:var(--text-main); }
+
+    /* ── CONFIRM MODAL ── */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 500; align-items: center; justify-content: center; }
+    .modal-overlay.show { display: flex; }
+    .modal-box { background: var(--card-bg); border-radius: 18px; padding: 28px; width: 420px; max-width: 95vw; }
+    .modal-box h3 { font-family: 'Poppins', sans-serif; font-size: 16px; font-weight: 700; color: var(--text-main); margin-bottom: 10px; }
+    .modal-box p { font-size: 13px; color: var(--text-sub); line-height: 1.6; margin-bottom: 20px; }
+    .modal-box .highlight { font-weight: 800; color: var(--text-main); }
+    .modal-btn-row { display: flex; gap: 10px; }
+    .modal-btn-cancel { flex: 1; height: 42px; background: transparent; border: 1.5px solid var(--border); border-radius: 10px; font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800; color: var(--text-sub); cursor: pointer; }
+    .modal-btn-confirm { flex: 2; height: 42px; border: none; border-radius: 10px; font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800; color: #fff; cursor: pointer; }
+    .modal-btn-confirm.green  { background: var(--green); }
+    .modal-btn-confirm.blue   { background: #1565C0; }
+    .modal-btn-confirm.red    { background: var(--red); }
+    .modal-btn-confirm.navy   { background: var(--primary); }
+
+    /* Reject note textarea */
+    .reject-note { width: 100%; height: 72px; border: 1.5px solid var(--border); border-radius: 10px; padding: 10px 14px; font-family: 'Nunito', sans-serif; font-size: 13px; color: var(--text-main); background: var(--bg); outline: none; resize: none; margin-bottom: 20px; }
+    .reject-note:focus { border-color: var(--red); }
+
+    /* ── LOGOUT MODAL ── */
+    #logoutModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 500; align-items: center; justify-content: center; }
+    #logoutModal.show { display: flex; }
+    .logout-box { background: var(--card-bg); border-radius: 18px; padding: 28px; width: 360px; text-align: center; }
+    .logout-box h3 { font-family: 'Poppins', sans-serif; font-size: 18px; font-weight: 700; color: var(--text-main); margin-bottom: 8px; }
+    .logout-box p { font-size: 13px; color: var(--text-sub); line-height: 1.6; margin-bottom: 20px; }
+    .logout-btns { display: flex; gap: 10px; }
+    .btn-cancel { flex: 1; height: 42px; background: transparent; border: 1.5px solid var(--border); border-radius: 10px; font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800; color: var(--text-sub); cursor: pointer; }
+    .btn-logout { flex: 1; height: 42px; background: var(--red); border: none; border-radius: 10px; font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800; color: #fff; cursor: pointer; }
+
+    /* ── TOAST ── */
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1e1e2e; color: #fff; border-radius: 12px; padding: 12px 20px; font-size: 13px; font-weight: 700; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 999; white-space: nowrap; }
+    .toast.show { opacity: 1; }
+    .toast.success { background: #1B5E20; }
+    .toast.error   { background: #7f1d1d; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 1100px) { .content-grid { grid-template-columns: 340px 1fr; } }
+    @media (max-width: 860px)  { .content-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 640px) {
+      .sidebar { transform: translateX(calc(-1 * var(--sidebar-w))); }
+      .sidebar.open { transform: translateX(0); }
+      .main { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── TOP NAVBAR ── -->
+<nav class="top-navbar">
+  <div class="navbar-left">
+    <button class="hamburger-btn" onclick="toggleSidebar()">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="navbar-logo">
+      <span class="logo-text">BARANGAY<span>DOCS</span></span>
+      <span class="admin-badge">ADMIN</span>
+    </div>
+  </div>
+  <div class="navbar-right">
+    <button class="notif-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <div class="notif-dot"></div>
+    </button>
+    <div class="admin-avatar">
+      <img src="admin_avatar.png" alt="" onerror="this.outerHTML='<span class=\'av-ph\' id=\'navAvatar\'>A</span>'">
+    </div>
+  </div>
+</nav>
+
+<!-- ── LAYOUT ── -->
+<div class="layout">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Overview</div>
+      <div class="sidebar-item" onclick="window.location.href='admin_dashboard.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Dashboard</span>
+      </div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Requests</div>
+      <div class="sidebar-item" onclick="window.location.href='admin_pending_requests.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>Pending Requests</span>
+        <span class="sidebar-badge yellow" id="pending-requests-badge">—</span>
+      </div>
+      <div class="sidebar-item" onclick="window.location.href='admin_all_requests.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"/></svg>
+        <span>All Requests</span>
+      </div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Users</div>
+      <div class="sidebar-item" onclick="window.location.href='admin_pending_users.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+        <span>Pending Users</span>
+        <span class="sidebar-badge red" id="pending-users-badge">—</span>
+      </div>
+      <div class="sidebar-item" onclick="window.location.href='admin_all_users.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>All Users</span>
+      </div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Tools</div>
+      <div class="sidebar-item active" onclick="window.location.href='admin_scanqr.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3"/><path d="M20 14v.01"/><path d="M14 20h.01"/><path d="M17 20h3"/><path d="M20 17v3"/></svg>
+        <span>Scan QR</span>
+      </div>
+      <div class="sidebar-item" onclick="window.location.href='admin_documents.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span>Documents</span>
+      </div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Audit Logs</div>
+      <div class="sidebar-item" onclick="window.location.href='admin_history.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+        <span>History</span>
+      </div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-item" id="sign-out-btn" style="cursor:pointer;">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke="#DC3545"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span style="color:#DC3545;">Sign Out</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── MAIN CONTENT ── -->
+  <main class="main" id="mainContent">
+    <div class="page-header">
+      <h1>Scan / Verify QR</h1>
+      <p>Scan a resident's QR code or enter a reference number to look up and manage a document request.</p>
+    </div>
+
+    <div class="content-grid">
+
+      <!-- LEFT: SCAN + MANUAL -->
+      <div class="scan-panel">
+
+        <!-- Camera scanner card -->
+        <div class="scan-card">
+          <div class="scan-card-title">QR Code Scanner</div>
+          <div class="scan-card-sub">Point the camera at a BarangayDocs QR code<br>to instantly look up the document request</div>
+          <div class="scanner-frame">
+            <div class="corner-tr"></div>
+            <div class="corner-bl"></div>
+            <div class="cam-area" id="camArea">
+              <video id="camVideo" playsinline autoplay muted></video>
+              <svg class="cam-icon" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" id="camIcon">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+              <p class="cam-placeholder-text" id="camText">Camera feed will<br>appear here</p>
+            </div>
+          </div>
+          <button class="cam-btn" id="launchCamBtn">
+            <span id="camBtnLabel">Launch Camera</span>
+          </button>
+        </div>
+
+        <!-- Manual verification card -->
+        <div class="manual-card">
+          <div class="manual-title">Manual Verification</div>
+          <div class="manual-sub">Enter a document reference number to look up a request</div>
+          <div class="ref-input-wrap">
+            <input type="text" id="refInput" placeholder="e.g. BRY-2026-73347" autocomplete="off" spellcheck="false">
+            <button class="verify-btn" id="verifyBtn">
+              <span id="verifyBtnLabel">Verify</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: RESULT -->
+      <div class="result-panel">
+
+        <!-- Placeholder (shown before any search) -->
+        <div class="result-placeholder" id="resultPlaceholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3"/><path d="M20 14v.01"/>
+            <path d="M14 20h.01"/><path d="M17 20h3"/><path d="M20 17v3"/>
+          </svg>
+          <h3 id="placeholderTitle">No Document Scanned</h3>
+          <p id="placeholderSub">Scan a QR code or enter a reference number to look up a resident's document request and update its status.</p>
+        </div>
+
+        <!-- Result card (shown after a successful lookup) -->
+        <div class="result-card" id="resultCard">
+          <div class="result-header">
+            <div class="result-header-text">
+              <h3 id="resultDocType">—</h3>
+              <p  id="resultRef">—</p>
+            </div>
+            <button class="result-clear-btn" id="clearBtn" title="Clear result">✕</button>
+          </div>
+          <div class="result-body">
+
+            <!-- Status badge -->
+            <div class="result-badge" id="resultBadge">—</div>
+
+            <!-- Info grid -->
+            <div class="result-grid">
+              <div class="result-field"><div class="r-label">Issued To</div>         <div class="r-val" id="rName">—</div></div>
+              <div class="result-field"><div class="r-label">Document Type</div>     <div class="r-val" id="rType">—</div></div>
+              <div class="result-field"><div class="r-label">Purpose</div>           <div class="r-val" id="rPurpose">—</div></div>
+              <div class="result-field"><div class="r-label">Issued By</div>         <div class="r-val">Barangay Banicain</div></div>
+              <div class="result-field"><div class="r-label">Date Issued</div>       <div class="r-val" id="rDate">—</div></div>
+              <div class="result-field"><div class="r-label">Valid Until</div>       <div class="r-val" id="rValid">—</div></div>
+              <div class="result-field"><div class="r-label">Reference No.</div>     <div class="r-val" id="rRef">—</div></div>
+              <div class="result-field"><div class="r-label">Current Status</div>   <div class="r-val" id="rStatus">—</div></div>
+            </div>
+
+            <!-- Admin action panel -->
+            <div class="admin-actions" id="adminActions">
+              <div class="admin-actions-title">Admin Actions</div>
+              <div class="action-buttons">
+                <button class="action-btn btn-process" id="btnProcess">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+                  Mark Processing
+                </button>
+                <button class="action-btn btn-ready" id="btnReady">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                  Mark Ready
+                </button>
+                <button class="action-btn btn-release" id="btnRelease">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                  Mark Released
+                </button>
+                <button class="action-btn btn-reject" id="btnReject">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                  Reject
+                </button>
+                <button class="action-btn btn-release" id="btnViewQR" style="background:#EBF0FB;color:var(--primary);border-color:#C5D3EE;display:none;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3"/><path d="M20 14v.01"/><path d="M14 20h.01"/><path d="M17 20h3"/><path d="M20 17v3"/></svg>
+                  View QR
+                </button>
+              </div>
+              <div class="action-note" id="actionNote"></div>
+            </div>
+
+            <!-- Processing Timeline -->
+            <div class="timeline-wrap">
+              <div class="timeline-heading">Processing Timeline</div>
+              <div class="timeline">
+                <div class="tl-row">
+                  <div class="tl-spine">
+                    <div class="tl-dot" id="dotSubmitted"></div>
+                    <div class="tl-line" id="lineSubmitted"></div>
+                  </div>
+                  <div class="tl-info">
+                    <div class="tl-label" id="lblSubmitted">Submitted</div>
+                    <div class="tl-time"  id="timeSubmitted">—</div>
+                  </div>
+                </div>
+                <div class="tl-row">
+                  <div class="tl-spine">
+                    <div class="tl-dot" id="dotProcessing"></div>
+                    <div class="tl-line" id="lineProcessing"></div>
+                  </div>
+                  <div class="tl-info">
+                    <div class="tl-label muted" id="lblProcessing">Processing Started</div>
+                    <div class="tl-time pending-txt" id="timeProcessing">Awaiting</div>
+                  </div>
+                </div>
+                <div class="tl-row">
+                  <div class="tl-spine">
+                    <div class="tl-dot" id="dotReady"></div>
+                    <div class="tl-line" id="lineReady"></div>
+                  </div>
+                  <div class="tl-info">
+                    <div class="tl-label muted" id="lblReady">Ready for Pickup</div>
+                    <div class="tl-time pending-txt" id="timeReady">Awaiting</div>
+                  </div>
+                </div>
+                <div class="tl-row">
+                  <div class="tl-spine">
+                    <div class="tl-dot" id="dotReleased"></div>
+                  </div>
+                  <div class="tl-info">
+                    <div class="tl-label muted" id="lblReleased">Released</div>
+                    <div class="tl-time pending-txt" id="timeReleased">Awaiting</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ── QR CODE MODAL (Mark Ready / View QR) ── -->
+<div class="modal-overlay" id="qr-modal">
+  <div class="modal-box" style="max-width:480px;">
+    <div class="modal-header">
+      <h3>QR Code</h3>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding-bottom:16px;">
+      <canvas id="qr-canvas" style="border:6px solid var(--bg);border-radius:12px;"></canvas>
+      <div style="background:var(--bg);border-radius:10px;padding:12px 20px;text-align:center;width:100%;">
+        <div style="font-size:10px;font-weight:800;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;">Document Code</div>
+        <div id="modal-doc-code" style="font-size:18px;font-weight:800;color:var(--primary);font-family:'Poppins',sans-serif;letter-spacing:1px;">—</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;">
+        <div style="background:var(--bg);border-radius:8px;padding:10px 14px;">
+          <div style="font-size:10px;font-weight:800;color:var(--text-light);text-transform:uppercase;margin-bottom:3px;">Reference No.</div>
+          <div id="modal-ref-no" style="font-size:13px;font-weight:700;color:var(--text-main);">—</div>
+        </div>
+        <div style="background:var(--bg);border-radius:8px;padding:10px 14px;">
+          <div style="font-size:10px;font-weight:800;color:var(--text-light);text-transform:uppercase;margin-bottom:3px;">Resident</div>
+          <div id="modal-resident" style="font-size:13px;font-weight:700;color:var(--text-main);">—</div>
+        </div>
+        <div style="background:var(--bg);border-radius:8px;padding:10px 14px;grid-column:1/-1;">
+          <div style="font-size:10px;font-weight:800;color:var(--text-light);text-transform:uppercase;margin-bottom:3px;">Document Type</div>
+          <div id="modal-doc-type" style="font-size:13px;font-weight:700;color:var(--text-main);">—</div>
+        </div>
+        <!-- Expiry display row — shown in View QR mode -->
+        <div id="modal-expiry-row" style="display:none;background:var(--bg);border-radius:8px;padding:10px 14px;grid-column:1/-1;">
+          <div style="font-size:10px;font-weight:800;color:var(--text-light);text-transform:uppercase;margin-bottom:3px;">Expires On</div>
+          <div id="modal-expiry-display" style="font-size:13px;font-weight:700;color:var(--red);"></div>
+        </div>
+      </div>
+
+      <!-- Expiry date picker — shown when generating QR -->
+      <div id="expiry-picker" style="width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:14px 16px;">
+        <div style="font-size:10px;font-weight:800;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:10px;">
+          Expiration Date <span style="color:var(--red);">*</span>
+        </div>
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;">
+          <select id="expiry-month" style="height:38px;border:1.5px solid var(--border);border-radius:8px;background:#fff;padding:0 10px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;color:var(--text-main);outline:none;cursor:pointer;">
+            <option value="">Month</option>
+            <option value="1">January</option><option value="2">February</option><option value="3">March</option>
+            <option value="4">April</option><option value="5">May</option><option value="6">June</option>
+            <option value="7">July</option><option value="8">August</option><option value="9">September</option>
+            <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+          </select>
+          <select id="expiry-day" style="height:38px;border:1.5px solid var(--border);border-radius:8px;background:#fff;padding:0 10px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;color:var(--text-main);outline:none;cursor:pointer;">
+            <option value="">Day</option>
+          </select>
+          <input id="expiry-year" type="number" placeholder="Year"
+            style="height:38px;border:1.5px solid var(--border);border-radius:8px;background:#fff;padding:0 10px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;color:var(--text-main);outline:none;width:100%;"
+            min="2024" max="2099">
+        </div>
+        <div id="expiry-error" style="display:none;margin-top:7px;font-size:11px;font-weight:800;color:var(--red);"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button id="cancel-ready" style="flex:1;height:42px;background:transparent;border:2px solid var(--border);border-radius:10px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:800;color:var(--text-sub);cursor:pointer;">Cancel</button>
+      <button id="confirm-ready" style="flex:2;height:42px;background:var(--green);border:none;border-radius:10px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:800;color:#fff;cursor:pointer;">Confirm & Mark Ready</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CONFIRM STATUS MODAL ── -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal-box">
+    <h3 id="confirmTitle">Confirm Action</h3>
+    <p  id="confirmBody">Are you sure?</p>
+    <textarea class="reject-note" id="rejectNote" placeholder="Optional: reason for rejection…" style="display:none;"></textarea>
+    <div class="modal-btn-row">
+      <button class="modal-btn-cancel" id="confirmCancel">Cancel</button>
+      <button class="modal-btn-confirm" id="confirmOk">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── LOGOUT MODAL ── -->
+<div id="logoutModal">
+  <div class="logout-box">
+    <h3>Sign Out</h3>
+    <p>Are you sure you want to sign out of BarangayDocs Admin?</p>
+    <div class="logout-btns">
+      <button class="btn-cancel" onclick="document.getElementById('logoutModal').classList.remove('show')">Cancel</button>
+      <button class="btn-logout" id="confirmLogout">Sign Out</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST ── -->
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+<script type="module" src="adminscanqr.js"></script>
+</body>
+</html>

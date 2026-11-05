@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=390, initial-scale=1.0">
+  <title>BarangayDocs - Login</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap"
+    rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #1B3A6B;
+      --primary-light: #2A5298;
+      --accent: #4FC3F7;
+      --bg: #F0F4FA;
+      --card-bg: #FFFFFF;
+      --border: #D0DCF0;
+      --text-main: #1B3A6B;
+      --text-sub: #6B7A99;
+      --text-light: #9AA5BC;
+      --accent-green: #28A745;
+      --error: #DC3545;
+    }
+
+    body {
+      font-family: 'Nunito', sans-serif;
+      background: var(--bg);
+      width: 390px;
+      min-height: 844px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* HEADER */
+    .header {
+      background: var(--primary);
+      padding: 40px 24px 32px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-icon {
+      width: 48px;
+      height: 48px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      border: 1.5px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .logo-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .logo-icon .ph {
+      width: 28px;
+      height: 28px;
+      background: rgba(255, 255, 255, 0.35);
+      border-radius: 6px;
+    }
+
+    .logo-text {
+      font-family: 'Poppins', sans-serif;
+      font-size: 24px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .logo-text span {
+      color: var(--accent);
+    }
+
+    .header-sub {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.65);
+      text-align: center;
+    }
+
+    /* FORM CARD */
+    .form-card {
+      background: var(--card-bg);
+      margin: -16px 14px 0;
+      border-radius: 20px;
+      border: 1.5px solid var(--border);
+      padding: 24px 20px;
+      flex: 1;
+    }
+
+    .form-title {
+      font-family: 'Poppins', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+
+    .form-subtitle {
+      font-size: 12px;
+      color: var(--text-sub);
+      margin-bottom: 24px;
+    }
+
+    /* FIELD */
+    .field {
+      margin-bottom: 16px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-sub);
+      margin-bottom: 6px;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+
+    .input-wrap {
+      position: relative;
+    }
+
+    .input-wrap input {
+      width: 100%;
+      height: 48px;
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 0 44px 0 16px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 14px;
+      color: var(--text-main);
+      background: var(--bg);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .input-wrap input:focus {
+      border-color: var(--primary-light);
+      background: #fff;
+    }
+
+    .input-wrap input::placeholder {
+      color: var(--text-light);
+    }
+
+    .input-icon {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      opacity: 0.35;
+    }
+
+    .toggle-pw {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      cursor: pointer;
+      opacity: 0.4;
+      font-size: 14px;
+      user-select: none;
+      color: var(--text-main);
+    }
+
+    /* FORGOT PASSWORD */
+    .forgot-row {
+      text-align: right;
+      margin-top: -8px;
+      margin-bottom: 16px;
+    }
+
+    .forgot-row a {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--primary-light);
+      text-decoration: none;
+    }
+
+    /* LOGIN BUTTON */
+    .btn-primary {
+      width: 100%;
+      height: 50px;
+      background: var(--primary);
+      border: none;
+      border-radius: 14px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 15px;
+      font-weight: 800;
+      color: #fff;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background 0.2s, transform 0.15s;
+    }
+
+    .btn-primary:active {
+      transform: scale(0.98);
+      background: var(--primary-light);
+    }
+
+    /* DIVIDER */
+    .or-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 20px 0;
+    }
+
+    .or-row .line {
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .or-row span {
+      font-size: 12px;
+      color: var(--text-light);
+      font-weight: 700;
+    }
+
+    /* REGISTER LINK */
+    .register-row {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 13px;
+      color: var(--text-sub);
+    }
+
+    .register-row a {
+      color: var(--primary);
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    /* FOOTER NOTE */
+    .footer-note {
+      text-align: center;
+      padding: 16px;
+      font-size: 11px;
+      color: var(--text-light);
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="logo-wrap">
+      <div class="logo-icon">
+        <!-- REPLACE src with your logo -->
+        <img src="/barangaydocsicon.png" alt="logo"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+        <div class="ph" style="display:none;"></div>
+      </div>
+      <div class="logo-text">BARANGAY<span>DOCS</span></div>
+    </div>
+    <div class="header-sub">Barangay Banicain, Olongapo City</div>
+  </div>
+
+  <!-- FORM CARD -->
+  <div class="form-card">
+    <div class="form-title">Welcome back!</div>
+    <div class="form-subtitle">Sign in to your account to continue</div>
+
+    <!-- EMAIL -->
+    <div class="field">
+      <label>Email Address</label>
+      <div class="input-wrap">
+        <input type="email" placeholder="Enter your email">
+        <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="#1B3A6B" stroke-width="2">
+          <rect x="2" y="4" width="20" height="16" rx="2" />
+          <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+        </svg>
+      </div>
+    </div>
+
+    <!-- PASSWORD -->
+    <div class="field">
+      <label>Password</label>
+      <div class="input-wrap">
+        <input type="password" id="pw" placeholder="Enter your password">
+        <span class="toggle-pw" onclick="togglePw()">👁</span>
+      </div>
+    </div>
+
+    <!-- FORGOT PASSWORD -->
+    <div class="forgot-row">
+      <a href="#">Forgot password?</a>
+    </div>
+
+    <!-- LOGIN BUTTON -->
+    <button class="btn-primary" onclick="window.location.href='barangaydocs_mobile.html'">
+      Sign In
+    </button>
+
+    <!-- DIVIDER -->
+    <div class="or-row">
+      <div class="line"></div>
+      <span>OR</span>
+      <div class="line"></div>
+    </div>
+
+    <!-- REGISTER LINK -->
+    <div class="register-row">
+      Don't have an account?
+      <a href="barangaydocs_register.html">Register here</a>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer-note">
+    Barangay Banicain Official Document System &bull; v1.0
+  </div>
+
+  <script>
+    function togglePw() {
+      const pw = document.getElementById('pw');
+      pw.type = pw.type === 'password' ? 'text' : 'password';
+    }
+  </script>
+
+</body>
+
+</html>

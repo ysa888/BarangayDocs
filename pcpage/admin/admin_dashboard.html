@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=390, initial-scale=1.0">
+  <title>BarangayDocs - Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --primary: #1B3A6B; --primary-light: #2A5298; --accent: #4FC3F7;
+      --bg: #F0F4FA; --card-bg: #FFFFFF; --border: #D0DCF0;
+      --text-main: #1B3A6B; --text-sub: #6B7A99; --text-light: #9AA5BC;
+      --green: #28A745; --green-bg: #D4EDDA; --green-text: #155724;
+      --yellow: #FFC107; --yellow-bg: #FFF3CD; --yellow-text: #856404;
+      --red: #DC3545; --red-bg: #F8D7DA; --red-text: #721C24;
+      --blue-bg: #CCE5FF; --blue-text: #004085; --sidebar-w: 220px;
+    }
+    body { font-family: 'Nunito', sans-serif; background: var(--bg); min-height: 100vh; display: flex; flex-direction: column; }
+    .top-navbar { background: var(--primary); height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; position: fixed; top: 0; left: 0; right: 0; z-index: 200; box-shadow: 0 2px 12px rgba(27,58,107,0.3); }
+    .navbar-left { display: flex; align-items: center; gap: 14px; }
+    .hamburger-btn { width: 36px; height: 36px; background: rgba(255,255,255,0.12); border: none; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-direction: column; gap: 4px; }
+    .hamburger-btn span { display: block; width: 18px; height: 2px; background: #fff; border-radius: 2px; }
+    .navbar-logo { display: flex; align-items: center; gap: 8px; }
+    .logo-text { font-family: 'Poppins', sans-serif; font-size: 18px; font-weight: 800; color: #fff; }
+    .logo-text span { color: var(--accent); }
+    .admin-badge { background: var(--accent); color: var(--primary); font-size: 9px; font-weight: 800; padding: 2px 7px; border-radius: 10px; letter-spacing: 0.5px; }
+    .navbar-right { display: flex; align-items: center; gap: 12px; }
+    .notif-btn { width: 36px; height: 36px; background: rgba(255,255,255,0.12); border: none; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; }
+    .notif-btn svg { width: 18px; height: 18px; stroke: #fff; }
+    .notif-dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--red); border: 2px solid var(--primary); }
+    .admin-avatar { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.3); display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer; }
+    .admin-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .admin-avatar .av-ph { font-size: 14px; color: #fff; font-weight: 800; }
+    .layout { display: flex; margin-top: 60px; min-height: calc(100vh - 60px); }
+    .sidebar { width: var(--sidebar-w); background: var(--card-bg); border-right: 1.5px solid var(--border); position: fixed; top: 60px; left: 0; bottom: 0; overflow-y: auto; transition: transform 0.25s; z-index: 100; }
+    .sidebar.collapsed { transform: translateX(calc(-1 * var(--sidebar-w))); }
+    .sidebar-section { padding: 16px 12px 8px; }
+    .sidebar-section-label { font-size: 10px; font-weight: 800; color: var(--text-light); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 6px; padding: 0 8px; }
+    .sidebar-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; cursor: pointer; text-decoration: none; transition: background 0.15s, color 0.15s; margin-bottom: 2px; }
+    .sidebar-item svg { width: 18px; height: 18px; stroke: var(--text-sub); flex-shrink: 0; }
+    .sidebar-item span { font-size: 13px; font-weight: 700; color: var(--text-sub); }
+    .sidebar-item:hover { background: var(--bg); }
+    .sidebar-item:hover svg { stroke: var(--primary); }
+    .sidebar-item:hover span { color: var(--primary); }
+    .sidebar-item.active { background: #EBF0FB; }
+    .sidebar-item.active svg { stroke: var(--primary); }
+    .sidebar-item.active span { color: var(--primary); }
+    .sidebar-badge { margin-left: auto; background: var(--red); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 10px; min-width: 20px; text-align: center; }
+    .sidebar-badge.yellow { background: var(--yellow); color: #000000; }
+    .sidebar-badge.red { background: var(--red); color: #000000; }
+    .sidebar-divider { height: 1px; background: var(--border); margin: 4px 12px; }
+    .main { margin-left: var(--sidebar-w); flex: 1; padding: 24px; transition: margin-left 0.25s; }
+    .main.expanded { margin-left: 0; }
+    .page-header { margin-bottom: 20px; }
+    .page-header h1 { font-family: 'Poppins', sans-serif; font-size: 22px; font-weight: 700; color: var(--text-main); }
+    .page-header p { font-size: 13px; color: var(--text-sub); margin-top: 3px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 20px; }
+    .stat-card { background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 14px; padding: 16px; }
+    .stat-card .stat-label { font-size: 11px; font-weight: 700; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 8px; }
+    .stat-card .stat-num { font-family: 'Poppins', sans-serif; font-size: 26px; font-weight: 700; color: var(--text-main); }
+    .stat-card .stat-sub { font-size: 11px; color: var(--text-light); margin-top: 4px; }
+    .stat-card.pending .stat-num { color: var(--yellow-text); }
+    .stat-card.ready .stat-num { color: var(--green-text); }
+    .stat-card.rejected .stat-num { color: var(--red-text); }
+    .stat-card.users .stat-num { color: var(--primary); }
+    .table-card { background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 16px; overflow: hidden; }
+    .table-head-row { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1.5px solid var(--border); background: var(--bg); }
+    .table-head-row span { font-size: 10px; font-weight: 800; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.5px; }
+    .table-row { display: flex; align-items: center; padding: 13px 16px; border-bottom: 1px solid var(--border); gap: 10px; transition: background 0.15s; }
+    .table-row:last-child { border-bottom: none; }
+    .table-row:hover { background: var(--bg); }
+    .col-icon { width: 38px; flex-shrink: 0; }
+    .col-name { flex: 2; min-width: 0; }
+    .col-user { flex: 1.5; min-width: 0; }
+    .col-date { width: 100px; flex-shrink: 0; }
+    .col-status { width: 100px; flex-shrink: 0; }
+    .col-action { width: 120px; flex-shrink: 0; text-align: right; }
+    .doc-icon-sm { width: 34px; height: 34px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .doc-icon-sm img { width: 24px; height: 24px; object-fit: contain; }
+    .doc-icon-sm .d-ph { width: 20px; height: 20px; background: var(--border); border-radius: 5px; }
+    .col-name h4 { font-size: 13px; font-weight: 800; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .col-name p { font-size: 11px; color: var(--text-sub); margin-top: 1px; }
+    .col-user span { font-size: 12px; font-weight: 700; color: var(--text-main); }
+    .col-date span { font-size: 12px; color: var(--text-sub); }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; }
+    .badge.pending { background: var(--yellow-bg); color: var(--yellow-text); }
+    .badge.processing { background: var(--blue-bg); color: var(--blue-text); }
+    .badge.ready { background: var(--green-bg); color: var(--green-text); }
+    .badge.rejected { background: var(--red-bg); color: var(--red-text); }
+    .action-row { display: flex; gap: 6px; justify-content: flex-end; }
+    .btn-approve { padding: 5px 10px; background: var(--green-bg); color: var(--green-text); border: 1.5px solid #C3E6CB; border-radius: 7px; font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800; cursor: pointer; transition: background 0.15s; }
+    .btn-approve:hover { background: #C3E6CB; }
+    .btn-reject { padding: 5px 10px; background: var(--red-bg); color: var(--red-text); border: 1.5px solid #F5C6CB; border-radius: 7px; font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800; cursor: pointer; transition: background 0.15s; }
+    .btn-reject:hover { background: #F5C6CB; }
+    .btn-view { padding: 5px 10px; background: var(--bg); color: var(--text-sub); border: 1.5px solid var(--border); border-radius: 7px; font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800; cursor: pointer; }
+    .btn-process { padding: 5px 10px; background: var(--blue-bg); color: var(--blue-text); border: 1.5px solid #B8DAFF; border-radius: 7px; font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800; cursor: pointer; }
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 500; align-items: center; justify-content: center; }
+    .modal-overlay.show { display: flex; }
+    .modal-box { background: var(--card-bg); border-radius: 20px; padding: 24px; width: 440px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .modal-header h3 { font-family: 'Poppins', sans-serif; font-size: 16px; font-weight: 700; color: var(--text-main); }
+    .modal-close { width: 32px; height: 32px; background: var(--bg); border: none; border-radius: 8px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+    .modal-field { margin-bottom: 14px; }
+    .modal-field label { display: block; font-size: 11px; font-weight: 700; color: var(--text-sub); margin-bottom: 5px; text-transform: uppercase; }
+    .modal-field p { font-size: 14px; font-weight: 700; color: var(--text-main); background: var(--bg); border: 1.5px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+    .modal-field select { width: 100%; height: 44px; border: 1.5px solid var(--border); border-radius: 10px; padding: 0 14px; font-family: 'Nunito', sans-serif; font-size: 14px; color: var(--text-main); background: var(--bg); outline: none; appearance: none; cursor: pointer; }
+    .modal-field textarea { width: 100%; height: 80px; border: 1.5px solid var(--border); border-radius: 10px; padding: 10px 14px; font-family: 'Nunito', sans-serif; font-size: 14px; color: var(--text-main); background: var(--bg); outline: none; resize: none; }
+    .modal-btn-row { display: flex; gap: 10px; margin-top: 16px; }
+    .modal-btn-cancel { flex: 1; height: 44px; background: transparent; border: 1.5px solid var(--border); border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800; color: var(--text-sub); cursor: pointer; }
+    .modal-btn-save { flex: 2; height: 44px; background: var(--primary); border: none; border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800; color: #fff; cursor: pointer; }
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1e1e2e; color: #fff; border-radius: 12px; padding: 12px 20px; font-size: 13px; font-weight: 700; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 999; white-space: nowrap; }
+    .toast.show { opacity: 1; }
+    @media (max-width: 900px) { .stats-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 640px) { .sidebar { transform: translateX(calc(-1 * var(--sidebar-w))); } .sidebar.open { transform: translateX(0); } .main { margin-left: 0; } .stats-grid { grid-template-columns: 1fr 1fr; } }
+  </style>
+</head>
+<body>
+
+<nav class="top-navbar">
+  <div class="navbar-left">
+    <button class="hamburger-btn" onclick="toggleSidebar()">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="navbar-logo">
+      <span class="logo-text">BARANGAY<span>DOCS</span></span>
+      <span class="admin-badge">ADMIN</span>
+    </div>
+  </div>
+  <div class="navbar-right">
+    <button class="notif-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <div class="notif-dot"></div>
+    </button>
+    <div class="admin-avatar">
+      <img src="admin_avatar.png" alt="" onerror="this.outerHTML='<span class=\'av-ph\'>A</span>'">
+    </div>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Overview</div>
+      <div class="sidebar-item active" onclick="window.location.href='admin_dashboard.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Dashboard</span>
+      </div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Requests</div>
+      <div class="sidebar-item" onclick="window.location.href='admin_pending_requests.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>Pending Requests</span>
+        <span class="sidebar-badge yellow" id="pending-requests-badge">—</span>
+      </div>
+      <div class="sidebar-item" onclick="window.location.href='admin_all_requests.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"/></svg>
+        <span>All Requests</span>
+      </div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Users</div>
+      <div class="sidebar-item" onclick="window.location.href='admin_pending_users.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+        <span>Pending Users</span>
+        <span class="sidebar-badge red" id="pending-users-badge">—</span>
+      </div>
+      <div class="sidebar-item" onclick="window.location.href='admin_all_users.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>All Users</span>
+      </div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Tools</div>
+      <div class="sidebar-item" onclick="window.location.href='admin_scanqr.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h3v3H7zM14 7h3v3h-3zM7 14h3v3H7zM14 14h3v3h-3z"/></svg>
+        <span>Scan QR</span>
+      </div>
+      <div class="sidebar-item" onclick="window.location.href='admin_documents.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h3v3H7zM14 7h3v3h-3zM7 14h3v3H7zM14 14h3v3h-3z"/></svg>
+        <span>Documents</span>
+      </div>
+    </div>
+        <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Audit Logs</div>
+      <div class="sidebar-item" onclick="window.location.href='admin_history.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h3v3H7zM14 7h3v3h-3zM7 14h3v3H7zM14 14h3v3h-3z"/></svg>
+        <span>History</span>
+      </div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-item" id="sign-out-btn" style="cursor:pointer;">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke="#DC3545"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span style="color:#DC3545;">Sign Out</span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main" id="mainContent">
+    <div class="page-header">
+      <h1>Dashboard</h1>
+      <p>Barangay Banicain Document Management System</p>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card pending">
+        <div class="stat-label">Pending Requests</div>
+        <div class="stat-num" id="dash-pending">—</div>
+        <div class="stat-sub">Needs your action</div>
+      </div>
+      <div class="stat-card ready">
+        <div class="stat-label">Ready for Pickup</div>
+        <div class="stat-num" id="dash-ready">—</div>
+        <div class="stat-sub">Documents ready</div>
+      </div>
+      <div class="stat-card rejected">
+        <div class="stat-label">Rejected</div>
+        <div class="stat-num" id="dash-rejected">—</div>
+        <div class="stat-sub">This month</div>
+      </div>
+      <div class="stat-card users">
+        <div class="stat-label">Registered Users</div>
+        <div class="stat-num" id="dash-users">—</div>
+        <div class="stat-sub" id="dash-users-sub">Loading...</div>
+      </div>
+    </div>
+
+    <div class="page-header" style="margin-top:8px; margin-bottom:12px;">
+      <h1 style="font-size:16px;">Recent Requests</h1>
+    </div>
+    <div class="table-card">
+      <div class="table-head-row">
+        <span class="col-icon"></span>
+        <span class="col-name">Document</span>
+        <span class="col-user">Resident</span>
+        <span class="col-date">Date</span>
+        <span class="col-status">Status</span>
+        <span class="col-action">Action</span>
+      </div>
+      <div id="recent-requests-body">
+        <div style="padding:24px;text-align:center;color:var(--text-sub);font-size:13px;">Loading...</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalOutside(event)">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="modalTitle">Request Details</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module" src="admindashboard.js"></script>
+</body>
+</html>

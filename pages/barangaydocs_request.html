@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=390, initial-scale=1.0">
+  <title>BarangayDocs - My Requests</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap"
+    rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #1B3A6B;
+      --primary-light: #2A5298;
+      --accent: #4FC3F7;
+      --bg: #F0F4FA;
+      --card-bg: #FFFFFF;
+      --border: #D0DCF0;
+      --text-main: #1B3A6B;
+      --text-sub: #6B7A99;
+      --text-light: #9AA5BC;
+      --green: #28A745;
+      --yellow: #FFC107;
+      --red: #DC3545;
+      --blue: #2A5298;
+    }
+
+    body {
+      font-family: 'Nunito', sans-serif;
+      background: var(--bg);
+      width: 390px;
+      min-height: 844px;
+      margin: 0 auto;
+    }
+
+    /* ── NAVBAR ── */
+    .navbar {
+      background: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .hamburger {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      cursor: pointer;
+    }
+
+    .hamburger span {
+      display: block;
+      width: 22px;
+      height: 2px;
+      background: #fff;
+      border-radius: 2px;
+    }
+
+    .logo-text {
+      font-family: 'Poppins', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .logo-text span {
+      color: var(--accent);
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .logo-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .logo-ph {
+      width: 20px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.4);
+      border-radius: 4px;
+    }
+
+    /* ── PAGE HEADER ── */
+    .page-header {
+      background: var(--primary);
+      padding: 4px 16px 20px;
+    }
+
+    .page-header h1 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .page-header p {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.6);
+      margin-top: 2px;
+    }
+
+    /* ── TABS ── */
+    .tabs-wrap {
+      background: var(--primary);
+      padding: 0 16px 16px;
+    }
+
+    .tabs {
+      display: flex;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 3px;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 9px 0;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.5);
+      cursor: pointer;
+      border-radius: 10px;
+      transition: all 0.2s;
+    }
+
+    .tab.active {
+      background: #fff;
+      color: var(--primary);
+    }
+
+    /* ── NEW REQUEST BUTTON ── */
+    .new-btn-wrap {
+      padding: 14px 14px 10px;
+    }
+
+    .new-request-btn {
+      width: 100%;
+      height: 52px;
+      background: var(--primary);
+      border: none;
+      border-radius: 14px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 15px;
+      font-weight: 800;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+
+    .new-request-btn:active {
+      background: var(--primary-light);
+    }
+
+    /* ── CONTENT ── */
+    .content {
+      padding: 0 14px 80px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    /* ── REQUEST CARD ── */
+    .request-card {
+      background: var(--card-bg);
+      border: 2px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .request-card:active {
+      border-color: var(--primary);
+    }
+
+    .card-top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .req-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: #EEF3FB;
+      border: 1.5px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .req-icon img {
+      width: 34px;
+      height: 34px;
+      object-fit: contain;
+    }
+
+    .req-icon .req-ph {
+      width: 30px;
+      height: 30px;
+      background: #C5D0E6;
+      border-radius: 8px;
+    }
+
+    .req-name {
+      flex: 1;
+    }
+
+    .req-name h3 {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text-main);
+      line-height: 1.2;
+    }
+
+    .req-name p {
+      font-size: 11px;
+      color: var(--text-sub);
+      margin-top: 3px;
+    }
+
+    /* ── BADGES ── */
+    .badge {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 800;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .badge.pending {
+      background: #FFF3CD;
+      color: #856404;
+    }
+
+    .badge.processing {
+      background: #CCE5FF;
+      color: #004085;
+    }
+
+    .badge.ready {
+      background: #D4EDDA;
+      color: #155724;
+    }
+
+    .badge.rejected {
+      background: #F8D7DA;
+      color: #721C24;
+    }
+
+    /* ── CARD DETAILS ROW ── */
+    .card-details {
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .detail-pair {
+      display: flex;
+      gap: 20px;
+    }
+
+    .detail-item .d-label {
+      font-size: 10px;
+      color: var(--text-light);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .detail-item .d-val {
+      font-size: 12px;
+      color: var(--text-main);
+      font-weight: 800;
+      margin-top: 2px;
+    }
+
+    .track-btn {
+      padding: 7px 16px;
+      background: var(--bg);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--primary);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .track-btn:hover {
+      background: var(--border);
+    }
+
+    /* ── PROGRESS TRACKER ── */
+    .progress-track {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      display: none;
+    }
+
+    .progress-track.show {
+      display: block;
+    }
+
+    .track-row {
+      display: flex;
+      align-items: flex-start;
+    }
+
+    .track-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .track-dot {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 800;
+      color: #fff;
+      position: relative;
+      z-index: 1;
+      flex-shrink: 0;
+    }
+
+    .track-dot.done {
+      background: var(--green);
+    }
+
+    .track-dot.active {
+      background: var(--primary);
+    }
+
+    .track-dot.rejected {
+      background: var(--red);
+    }
+
+    .track-connector {
+      flex: 1;
+      height: 2px;
+      background: var(--border);
+      margin-top: 11px;
+      margin-bottom: 0;
+    }
+
+    .track-connector.done {
+      background: var(--green);
+    }
+
+    .track-label {
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--text-light);
+      text-align: center;
+    }
+
+    .track-step.done .track-label {
+      color: var(--green);
+    }
+
+    .track-step.active .track-label {
+      color: var(--primary);
+    }
+
+    /* ── EMPTY STATE ── */
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      display: none;
+    }
+
+    .empty-state.show {
+      display: block;
+    }
+
+    .empty-state svg {
+      width: 56px;
+      height: 56px;
+      stroke: var(--text-light);
+      margin-bottom: 14px;
+    }
+
+    .empty-state h3 {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-bottom: 6px;
+    }
+
+    .empty-state p {
+      font-size: 13px;
+      color: var(--text-sub);
+      line-height: 1.5;
+    }
+
+    /* ── NEW REQUEST MODAL (bottom sheet) ── */
+    .sheet-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 200;
+      align-items: flex-end;
+      justify-content: center;
+      width: 390px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .sheet-overlay.show {
+      display: flex;
+    }
+
+    .sheet {
+      background: var(--card-bg);
+      border-radius: 20px 20px 0 0;
+      width: 100%;
+      max-height: 88vh;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .sheet-handle {
+      width: 40px;
+      height: 4px;
+      background: var(--border);
+      border-radius: 4px;
+      margin: 0 auto 16px;
+    }
+
+    .sheet-title {
+      font-family: 'Poppins', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+
+    .sheet-sub {
+      font-size: 12px;
+      color: var(--text-sub);
+      margin-bottom: 18px;
+    }
+
+    /* doc type grid inside sheet */
+    .doc-type-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .doc-type-btn {
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 8px;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-sub);
+      cursor: pointer;
+      background: var(--bg);
+      transition: all 0.2s;
+      line-height: 1.3;
+    }
+
+    .doc-type-btn.selected {
+      border-color: var(--primary);
+      background: #EBF0FB;
+      color: var(--primary);
+    }
+
+    .doc-type-icon {
+      font-size: 22px;
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    .doc-type-btn img {
+      width: 28px;
+      height: 28px;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto 5px;
+    }
+
+    /* sheet fields */
+    .s-field {
+      margin-bottom: 13px;
+    }
+
+    .s-field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-sub);
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .s-field select,
+    .s-field textarea {
+      width: 100%;
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 14px;
+      color: var(--text-main);
+      background: var(--bg);
+      outline: none;
+      transition: border-color 0.2s;
+      appearance: none;
+    }
+
+    .s-field select {
+      height: 48px;
+      padding: 0 14px;
+    }
+
+    .s-field select:focus,
+    .s-field textarea:focus {
+      border-color: var(--primary-light);
+      background: #fff;
+    }
+
+    .s-field textarea {
+      resize: none;
+      height: 76px;
+    }
+
+    .sel-wrap {
+      position: relative;
+    }
+
+    .sel-wrap::after {
+      content: '▾';
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-light);
+      pointer-events: none;
+    }
+
+    .sheet-btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .btn-cancel {
+      flex: 1;
+      height: 50px;
+      background: transparent;
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text-sub);
+      cursor: pointer;
+    }
+
+    .btn-submit {
+      flex: 2;
+      height: 50px;
+      background: var(--primary);
+      border: none;
+      border-radius: 14px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 14px;
+      font-weight: 800;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-submit:active {
+      background: var(--primary-light);
+    }
+
+    /* ── SUCCESS MODAL ── */
+    .success-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 300;
+      align-items: center;
+      justify-content: center;
+      width: 390px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .success-overlay.show {
+      display: flex;
+    }
+
+    .success-modal {
+      background: #fff;
+      border-radius: 20px;
+      padding: 28px 24px;
+      width: 320px;
+      text-align: center;
+    }
+
+    .success-check {
+      font-size: 52px;
+      margin-bottom: 12px;
+    }
+
+    .success-modal h3 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 8px;
+    }
+
+    .success-modal p {
+      font-size: 13px;
+      color: var(--text-sub);
+      line-height: 1.6;
+      margin-bottom: 14px;
+    }
+
+    .success-ref {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--primary);
+      background: #EBF0FB;
+      padding: 8px 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      display: inline-block;
+    }
+
+    .success-done-btn {
+      width: 100%;
+      height: 46px;
+      background: var(--primary);
+      border: none;
+      border-radius: 12px;
+      color: #fff;
+      font-family: 'Nunito', sans-serif;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    /* ── BOTTOM NAV ── */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 390px;
+      height: 64px;
+      background: var(--card-bg);
+      border-top: 1.5px solid var(--border);
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      z-index: 100;
+    }
+
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      cursor: pointer;
+      flex: 1;
+      padding: 6px 0;
+      text-decoration: none;
+    }
+
+    .nav-icon {
+      width: 26px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .nav-icon img {
+      width: 22px;
+      height: 22px;
+      object-fit: contain;
+    }
+
+    .nav-ph {
+      width: 22px;
+      height: 22px;
+      background: #C5D0E6;
+      border-radius: 5px;
+    }
+
+    .nav-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-light);
+    }
+
+    .nav-item.active .nav-label {
+      color: var(--primary);
+    }
+
+    .nav-item.active .nav-ph {
+      background: var(--primary);
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <div class="hamburger"><span></span><span></span><span></span></div>
+    <span class="logo-text">BARANGAY<span>DOCS</span></span>
+    <div class="logo-icon">
+      <img src="/barangaydocsicon.png" alt="logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+      <div class="logo-ph" style="display:none;"></div>
+    </div>
+  </nav>
+
+  <!-- PAGE HEADER -->
+  <div class="page-header">
+    <h1>My Requests</h1>
+    <p>Track your document requests</p>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs-wrap">
+    <div class="tabs">
+      <div class="tab active" onclick="filterTab('all', this)">All</div>
+      <div class="tab" onclick="filterTab('pending', this)">Pending</div>
+      <div class="tab" onclick="filterTab('ready', this)">Ready</div>
+      <div class="tab" onclick="filterTab('rejected', this)">Rejected</div>
+    </div>
+  </div>
+
+  <!-- NEW REQUEST BUTTON -->
+  <div class="new-btn-wrap">
+    <button class="new-request-btn" onclick="openSheet()">
+      ＋ &nbsp;New Document Request
+    </button>
+  </div>
+
+  <!-- REQUESTS LIST -->
+  <div class="content" id="requestList">
+
+    <!-- Sample 1 — Processing -->
+    <div class="request-card" data-status="processing">
+      <div class="card-top">
+        <div class="req-icon">
+          <img src="/barangayclearance.png" alt=""
+            onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+          <div class="req-ph" style="display:none;"></div>
+        </div>
+        <div class="req-name">
+          <h3>Barangay Clearance</h3>
+          <p>Ref: BRY-2026-001</p>
+        </div>
+        <span class="badge processing">Processing</span>
+      </div>
+      <div class="card-details">
+        <div class="detail-pair">
+          <div class="detail-item">
+            <div class="d-label">Requested</div>
+            <div class="d-val">Mar 17, 2026</div>
+          </div>
+          <div class="detail-item">
+            <div class="d-label">Purpose</div>
+            <div class="d-val">Employment</div>
+          </div>
+        </div>
+        <button class="track-btn" onclick="toggleTrack(this)">Track</button>
+      </div>
+      <div class="progress-track">
+        <div class="track-row">
+          <div class="track-step done">
+            <div class="track-dot done">✓</div>
+            <div class="track-label">Submitted</div>
+          </div>
+          <div class="track-connector done"></div>
+          <div class="track-step active">
+            <div class="track-dot active">2</div>
+            <div class="track-label">Processing</div>
+          </div>
+          <div class="track-connector"></div>
+          <div class="track-step">
+            <div class="track-dot">3</div>
+            <div class="track-label">Approved</div>
+          </div>
+          <div class="track-connector"></div>
+          <div class="track-step">
+            <div class="track-dot">4</div>
+            <div class="track-label">Ready</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sample 2 — Ready -->
+    <div class="request-card" data-status="ready">
+      <div class="card-top">
+        <div class="req-icon">
+          <img src="/certificateofresidency.png" alt=""
+            onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+          <div class="req-ph" style="display:none;"></div>
+        </div>
+        <div class="req-name">
+          <h3>Certificate of Residency</h3>
+          <p>Ref: BRY-2026-002</p>
+        </div>
+        <span class="badge ready">Ready</span>
+      </div>
+      <div class="card-details">
+        <div class="detail-pair">
+          <div class="detail-item">
+            <div class="d-label">Requested</div>
+            <div class="d-val">Mar 10, 2026</div>
+          </div>
+          <div class="detail-item">
+            <div class="d-label">Purpose</div>
+            <div class="d-val">Travel</div>
+          </div>
+        </div>
+        <button class="track-btn" onclick="toggleTrack(this)">Track</button>
+      </div>
+      <div class="progress-track">
+        <div class="track-row">
+          <div class="track-step done">
+            <div class="track-dot done">✓</div>
+            <div class="track-label">Submitted</div>
+          </div>
+          <div class="track-connector done"></div>
+          <div class="track-step done">
+            <div class="track-dot done">✓</div>
+            <div class="track-label">Processing</div>
+          </div>
+          <div class="track-connector done"></div>
+          <div class="track-step done">
+            <div class="track-dot done">✓</div>
+            <div class="track-label">Approved</div>
+          </div>
+          <div class="track-connector done"></div>
+          <div class="track-step done">
+            <div class="track-dot done">✓</div>
+            <div class="track-label">Ready</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sample 3 — Pending -->
+    <div class="request-card" data-status="pending">
+      <div class="card-top">
+        <div class="req-icon">
+          <img src="/certificateofindigency.png" alt=""
+            onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+          <div class="req-ph" style="display:none;"></div>
+        </div>
+        <div class="req-name">
+          <h3>Certificate of Indigency</h3>
+          <p>Ref: BRY-2026-003</p>
+        </div>
+        <span class="badge pending">Pending</span>
+      </div>
+      <div class="card-details">
+        <div class="detail-pair">
+          <div class="detail-item">
+            <div class="d-label">Requested</div>
+            <div class="d-val">Mar 25, 2026</div>
+          </div>
+          <div class="detail-item">
+            <div class="d-label">Purpose</div>
+            <div class="d-val">Medical</div>
+          </div>
+        </div>
+        <button class="track-btn" onclick="toggleTrack(this)">Track</button>
+      </div>
+      <div class="progress-track">
+        <div class="track-row">
+          <div class="track-step done">
+            <div class="track-dot done">✓</div>
+            <div class="track-label">Submitted</div>
+          </div>
+          <div class="track-connector"></div>
+          <div class="track-step">
+            <div class="track-dot">2</div>
+            <div class="track-label">Processing</div>
+          </div>
+          <div class="track-connector"></div>
+          <div class="track-step">
+            <div class="track-dot">3</div>
+            <div class="track-label">Approved</div>
+          </div>
+          <div class="track-connector"></div>
+          <div class="track-step">
+            <div class="track-dot">4</div>
+            <div class="track-label">Ready</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sample 4 — Rejected -->
+    <div class="request-card" data-status="rejected">
+      <div class="card-top">
+        <div class="req-icon">
+          <img src="/barangaybusinessclearance.png" alt=""
+            onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+          <div class="req-ph" style="display:none;"></div>
+        </div>
+        <div class="req-name">
+          <h3>Barangay Business Clearance</h3>
+          <p>Ref: BRY-2026-004</p>
+        </div>
+        <span class="badge rejected">Rejected</span>
+      </div>
+      <div class="card-details">
+        <div class="detail-pair">
+          <div class="detail-item">
+            <div class="d-label">Requested</div>
+            <div class="d-val">Mar 5, 2026</div>
+          </div>
+          <div class="detail-item">
+            <div class="d-label">Reason</div>
+            <div class="d-val">Incomplete</div>
+          </div>
+        </div>
+        <button class="track-btn" onclick="toggleTrack(this)">Track</button>
+      </div>
+      <div class="progress-track">
+        <div class="track-row">
+          <div class="track-step done">
+            <div class="track-dot done">✓</div>
+            <div class="track-label">Submitted</div>
+          </div>
+          <div class="track-connector done"></div>
+          <div class="track-step rejected">
+            <div class="track-dot rejected">✕</div>
+            <div class="track-label">Rejected</div>
+          </div>
+          <div class="track-connector"></div>
+          <div class="track-step">
+            <div class="track-dot">3</div>
+            <div class="track-label">Approved</div>
+          </div>
+          <div class="track-connector"></div>
+          <div class="track-step">
+            <div class="track-dot">4</div>
+            <div class="track-label">Ready</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- EMPTY STATE -->
+  <div class="empty-state" id="emptyState">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5">
+      <path
+        d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z" />
+    </svg>
+    <h3>No Requests Found</h3>
+    <p>You have no requests in this category yet.</p>
+  </div>
+
+  <!-- NEW REQUEST BOTTOM SHEET -->
+  <div class="sheet-overlay" id="sheetOverlay" onclick="closeSheetOutside(event)">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">New Document Request</div>
+      <div class="sheet-sub">Select a document and fill in the details</div>
+
+      <!-- Document type selector -->
+      <div class="doc-type-grid" id="docTypeGrid">
+        <div class="doc-type-btn selected" data-name="Barangay Clearance" data-icon="icon_clearance.png"
+          onclick="selectDoc(this)">
+          <img src="icon_clearance.png" onerror="this.outerHTML='<span class=\'doc-type-icon\'>📄</span>'">
+          Barangay Clearance
+        </div>
+        <div class="doc-type-btn" data-name="Cert. of Residency" data-icon="icon_residency.png"
+          onclick="selectDoc(this)">
+          <img src="icon_residency.png" onerror="this.outerHTML='<span class=\'doc-type-icon\'>🏠</span>'">
+          Cert. of Residency
+        </div>
+        <div class="doc-type-btn" data-name="Cert. of Indigency" data-icon="icon_indigency.png"
+          onclick="selectDoc(this)">
+          <img src="icon_indigency.png" onerror="this.outerHTML='<span class=\'doc-type-icon\'>👥</span>'">
+          Cert. of Indigency
+        </div>
+        <div class="doc-type-btn" data-name="Business Clearance" data-icon="icon_business.png"
+          onclick="selectDoc(this)">
+          <img src="icon_business.png" onerror="this.outerHTML='<span class=\'doc-type-icon\'>💼</span>'">
+          Business Clearance
+        </div>
+        <div class="doc-type-btn" data-name="Job Seeker Cert." data-icon="icon_jobseeker.png" onclick="selectDoc(this)">
+          <img src="icon_jobseeker.png" onerror="this.outerHTML='<span class=\'doc-type-icon\'>👔</span>'">
+          Job Seeker Cert.
+        </div>
+        <div class="doc-type-btn" data-name="Good Moral Char." data-icon="icon_moral.png" onclick="selectDoc(this)">
+          <img src="icon_moral.png" onerror="this.outerHTML='<span class=\'doc-type-icon\'>⭐</span>'">
+          Good Moral Char.
+        </div>
+        <div class="doc-type-btn" data-name="Solo Parent Cert." data-icon="icon_soloparent.png"
+          onclick="selectDoc(this)">
+          <img src="icon_soloparent.png" onerror="this.outerHTML='<span class=\'doc-type-icon\'>👨‍👧</span>'">
+          Solo Parent Cert.
+        </div>
+        <div class="doc-type-btn" data-name="Working Permit" data-icon="icon_working.png" onclick="selectDoc(this)">
+          <img src="icon_working.png" onerror="this.outerHTML='<span class=\'doc-type-icon\'>📋</span>'">
+          Working Permit
+        </div>
+      </div>
+
+      <div class="s-field">
+        <label>Purpose</label>
+        <div class="sel-wrap">
+          <select id="purposeSelect">
+            <option value="">Select purpose</option>
+            <option>Employment</option>
+            <option>Travel</option>
+            <option>Medical</option>
+            <option>School / Scholarship</option>
+            <option>Government Requirement</option>
+            <option>Loan Application</option>
+            <option>Business</option>
+            <option>Other</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="s-field">
+        <label>Additional Notes (Optional)</label>
+        <textarea id="notesInput" placeholder="Any special instructions..."></textarea>
+      </div>
+
+      <div class="sheet-btn-row">
+        <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
+        <button class="btn-submit" onclick="submitRequest()">Submit Request</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUCCESS MODAL -->
+  <div class="success-overlay" id="successOverlay">
+    <div class="success-modal">
+      <div class="success-check">✅</div>
+      <h3>Request Submitted!</h3>
+      <p>Your document request has been submitted successfully. You will be notified once it is ready.</p>
+      <div class="success-ref" id="successRef">Ref: BRY-2026-00000</div>
+      <button class="success-done-btn" onclick="closeDone()">Done</button>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <a href="barangaydocs_mobile.html" class="nav-item active">
+      <div class="nav-icon">
+        <img src="/home.png" alt="Home"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+        <div class="nav-ph" style="display:none;"></div>
+      </div>
+      <span class="nav-label">Home</span>
+    </a>
+    <a href="barangaydocs_request.html" class="nav-item">
+      <div class="nav-icon">
+        <img src="/request.png" alt="Request"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+        <div class="nav-ph" style="display:none;"></div>
+      </div>
+      <span class="nav-label">Request</span>
+    </a>
+    <a href="barangaydocs_scanqr.html" class="nav-item">
+      <div class="nav-icon">
+        <img src="/scan.png" alt="Scan QR"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+        <div class="nav-ph" style="display:none;"></div>
+      </div>
+      <span class="nav-label">Scan QR</span>
+    </a>
+    <a href="barangaydocs_account.html" class="nav-item">
+      <div class="nav-icon">
+        <img src="/accounticon.png" alt="Account"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+        <div class="nav-ph" style="display:none;"></div>
+      </div>
+      <span class="nav-label">Account</span>
+    </a>
+  </nav>
+
+  <script>
+    // ── TAB FILTER ──
+    function filterTab(status, el) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+      const cards = document.querySelectorAll('.request-card');
+      let visible = 0;
+      cards.forEach(card => {
+        const show = status === 'all' || card.dataset.status === status;
+        card.style.display = show ? 'block' : 'none';
+        if (show) visible++;
+      });
+      document.getElementById('emptyState').classList.toggle('show', visible === 0);
+    }
+
+    // ── TRACK TOGGLE ──
+    function toggleTrack(btn) {
+      const card = btn.closest('.request-card');
+      const track = card.querySelector('.progress-track');
+      const isOpen = track.classList.contains('show');
+      track.classList.toggle('show');
+      btn.textContent = isOpen ? 'Track' : 'Hide';
+    }
+
+    // ── SHEET ──
+    function openSheet() {
+      document.getElementById('sheetOverlay').classList.add('show');
+      // Reset form
+      document.querySelectorAll('.doc-type-btn').forEach((b, i) => b.classList.toggle('selected', i === 0));
+      document.getElementById('purposeSelect').value = '';
+      document.getElementById('notesInput').value = '';
+    }
+    function closeSheet() { document.getElementById('sheetOverlay').classList.remove('show'); }
+    function closeSheetOutside(e) { if (e.target === document.getElementById('sheetOverlay')) closeSheet(); }
+
+    // ── SELECT DOC ──
+    function selectDoc(el) {
+      document.querySelectorAll('.doc-type-btn').forEach(b => b.classList.remove('selected'));
+      el.classList.add('selected');
+    }
+
+    // ── HELPERS ──
+    function generateRef() {
+      return 'BRY-2026-' + Math.floor(10000 + Math.random() * 90000);
+    }
+    function getToday() {
+      const d = new Date();
+      const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return m[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+    }
+
+    // ── SUBMIT ──
+    function submitRequest() {
+      const selected = document.querySelector('.doc-type-btn.selected');
+      if (!selected) return;
+
+      const docName = selected.dataset.name;
+      const iconSrc = selected.dataset.icon;
+      const purpose = document.getElementById('purposeSelect').value || 'Not specified';
+      const ref = generateRef();
+      const today = getToday();
+
+      // Store pending
+      window._pending = { docName, iconSrc, purpose, ref, today };
+
+      // Close sheet, show success
+      closeSheet();
+      document.getElementById('successRef').textContent = 'Ref: ' + ref;
+      document.getElementById('successOverlay').classList.add('show');
+    }
+
+    // ── DONE ──
+    function closeDone() {
+      document.getElementById('successOverlay').classList.remove('show');
+
+      if (window._pending) {
+        const { docName, iconSrc, purpose, ref, today } = window._pending;
+
+        const card = document.createElement('div');
+        card.className = 'request-card';
+        card.dataset.status = 'pending';
+        card.innerHTML = `
+        <div class="card-top">
+          <div class="req-icon">
+            <img src="${iconSrc}" alt=""
+              onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+            <div class="req-ph" style="display:none;"></div>
+          </div>
+          <div class="req-name">
+            <h3>${docName}</h3>
+            <p>Ref: ${ref}</p>
+          </div>
+          <span class="badge pending">Pending</span>
+        </div>
+        <div class="card-details">
+          <div class="detail-pair">
+            <div class="detail-item">
+              <div class="d-label">Requested</div>
+              <div class="d-val">${today}</div>
+            </div>
+            <div class="detail-item">
+              <div class="d-label">Purpose</div>
+              <div class="d-val">${purpose}</div>
+            </div>
+          </div>
+          <button class="track-btn" onclick="toggleTrack(this)">Track</button>
+        </div>
+        <div class="progress-track">
+          <div class="track-row">
+            <div class="track-step done">
+              <div class="track-dot done">✓</div>
+              <div class="track-label">Submitted</div>
+            </div>
+            <div class="track-connector"></div>
+            <div class="track-step">
+              <div class="track-dot">2</div>
+              <div class="track-label">Processing</div>
+            </div>
+            <div class="track-connector"></div>
+            <div class="track-step">
+              <div class="track-dot">3</div>
+              <div class="track-label">Approved</div>
+            </div>
+            <div class="track-connector"></div>
+            <div class="track-step">
+              <div class="track-dot">4</div>
+              <div class="track-label">Ready</div>
+            </div>
+          </div>
+        </div>
+      `;
+
+        // Insert at top of list
+        const list = document.getElementById('requestList');
+        list.insertBefore(card, list.firstChild);
+
+        window._pending = null;
+
+        // Switch to All tab to show it
+        filterTab('all', document.querySelector('.tab'));
+      }
+    }
+  </script>
+</body>
+
+</html>

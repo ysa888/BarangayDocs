@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=390, initial-scale=1.0">
+  <title>BarangayDocs - Home</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap"
+    rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #1B3A6B;
+      --primary-light: #2A5298;
+      --accent: #4FC3F7;
+      --bg: #F0F4FA;
+      --card-bg: #FFFFFF;
+      --border: #D0DCF0;
+      --text-main: #1B3A6B;
+      --text-sub: #6B7A99;
+      --text-light: #9AA5BC;
+      --green: #28A745;
+      --green-bg: #D4EDDA;
+      --green-text: #155724;
+      --yellow-bg: #FFF3CD;
+      --yellow-text: #856404;
+      --red-bg: #F8D7DA;
+      --red-text: #721C24;
+    }
+
+    body {
+      font-family: 'Nunito', sans-serif;
+      background: var(--bg);
+      width: 390px;
+      min-height: 844px;
+      margin: 0 auto;
+      overflow-x: hidden;
+    }
+
+    /* ── NAVBAR ── */
+    .navbar {
+      background: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .hamburger {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      cursor: pointer;
+    }
+
+    .hamburger span {
+      display: block;
+      width: 22px;
+      height: 2px;
+      background: #fff;
+      border-radius: 2px;
+    }
+
+    .logo-text {
+      font-family: 'Poppins', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .logo-text span {
+      color: var(--accent);
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .logo-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .logo-ph {
+      width: 20px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.4);
+      border-radius: 4px;
+    }
+
+    /* ─── CONTENT ─── */
+    .content {
+      padding: 14px 14px 80px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* ─── WELCOME CARD ─── */
+    .welcome-card {
+      background: var(--card-bg);
+      border: 2px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+    }
+
+    .welcome-label {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-sub);
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .user-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .avatar {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      border: 2.5px solid var(--border);
+      background: #E4EAF5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .avatar-ph {
+      width: 32px;
+      height: 32px;
+      background: #B8C6DE;
+      border-radius: 50%;
+      position: relative;
+    }
+
+    .avatar-ph::after {
+      content: '';
+      position: absolute;
+      bottom: -7px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 44px;
+      height: 22px;
+      background: #B8C6DE;
+      border-radius: 50% 50% 0 0;
+    }
+
+    .user-info h2 {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--text-main);
+      line-height: 1.2;
+    }
+
+    .user-info p {
+      font-size: 11px;
+      color: var(--text-sub);
+      margin-top: 3px;
+      line-height: 1.4;
+    }
+
+    .divider {
+      height: 1.5px;
+      background: var(--border);
+      margin: 0 0 12px;
+    }
+
+    .requests-label {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-sub);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .pill-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .pill {
+      flex: 1;
+      padding: 6px 4px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .pill.pending {
+      background: var(--yellow-bg);
+      color: var(--yellow-text);
+    }
+
+    .pill.ready {
+      background: var(--green-bg);
+      color: var(--green-text);
+    }
+
+    .pill.rejected {
+      background: var(--red-bg);
+      color: var(--red-text);
+    }
+
+    /* ─── STATUS CARD ─── */
+    .status-card {
+      background: var(--card-bg);
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .status-info p:first-child {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--text-main);
+    }
+
+    .status-info p:first-child .active-text {
+      color: var(--green);
+    }
+
+    .status-info p:last-child {
+      font-size: 11px;
+      color: var(--text-sub);
+      margin-top: 2px;
+    }
+
+    .status-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.2);
+    }
+
+    /* ─── SEARCH ─── */
+    .search-wrap {
+      position: relative;
+    }
+
+    .search-wrap input {
+      width: 100%;
+      height: 46px;
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      background: var(--card-bg);
+      padding: 0 16px 0 44px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 14px;
+      color: var(--text-main);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-wrap input::placeholder {
+      color: var(--text-light);
+    }
+
+    .search-wrap input:focus {
+      border-color: var(--primary-light);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      opacity: 0.35;
+    }
+
+    /* ─── SECTION TITLE ─── */
+    .section-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-bottom: 10px;
+    }
+
+    /* ─── DOC GRID ─── */
+    .doc-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .doc-card {
+      background: var(--card-bg);
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+
+    .doc-card:active {
+      transform: scale(0.97);
+      border-color: var(--primary);
+    }
+
+    .doc-icon-area {
+      height: 90px;
+      background: #EEF3FB;
+      border-bottom: 1.5px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .doc-icon-area img {
+      width: 64px;
+      height: 64px;
+      object-fit: contain;
+    }
+
+    .icon-ph {
+      width: 52px;
+      height: 52px;
+      background: #D0DCF0;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 800;
+      color: #8A9BBF;
+      text-align: center;
+      line-height: 1.3;
+      padding: 4px;
+    }
+
+    .doc-label {
+      padding: 10px 8px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text-main);
+      line-height: 1.3;
+    }
+
+    /* ─── UNAVAILABLE ─── */
+    .unavailable-section .doc-icon-area {
+      background: #F5F5F5;
+    }
+
+    .unavailable-section .doc-label {
+      color: var(--text-light);
+    }
+
+    .unavailable-section .doc-card {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    /* ─── MORE BTN ─── */
+    .more-btn {
+      display: block;
+      width: 130px;
+      margin: 4px auto 0;
+      padding: 10px 0;
+      background: var(--card-bg);
+      border: 2px solid var(--primary);
+      border-radius: 12px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--primary);
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .more-btn:active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    /* ─── ABOUT US ─── */
+    .about-card {
+      background: var(--primary);
+      border-radius: 16px;
+      padding: 18px 16px;
+    }
+
+    .about-card h3 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+
+    .about-card p {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.7);
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+
+    .about-divider {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.15);
+      margin: 12px 0;
+    }
+
+    .about-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .about-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .about-row svg {
+      width: 16px;
+      height: 16px;
+      stroke: var(--accent);
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .about-row span {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.75);
+      font-weight: 600;
+      line-height: 1.4;
+    }
+
+    .about-vision {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-top: 10px;
+    }
+
+    .about-vision p {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.65);
+      line-height: 1.5;
+      margin-bottom: 0;
+      font-style: italic;
+    }
+
+    /* ─── BOTTOM NAV ─── */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 390px;
+      height: 64px;
+      background: var(--card-bg);
+      border-top: 1.5px solid var(--border);
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      z-index: 100;
+    }
+
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      cursor: pointer;
+      flex: 1;
+      padding: 6px 0;
+      text-decoration: none;
+    }
+
+    .nav-icon {
+      width: 26px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .nav-icon img {
+      width: 22px;
+      height: 22px;
+      object-fit: contain;
+    }
+
+    .nav-ph {
+      width: 22px;
+      height: 22px;
+      background: #C5D0E6;
+      border-radius: 5px;
+    }
+
+    .nav-label {
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--text-light);
+    }
+
+    .nav-item.active .nav-label {
+      color: var(--primary);
+    }
+
+    .nav-item.active .nav-ph {
+      background: var(--primary);
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <div class="hamburger"><span></span><span></span><span></span></div>
+    <div class="navbar-logo">
+      <span class="logo-text">BARANGAY<span>DOCS</span></span>
+    </div>
+    <div class="logo-icon">
+      <img src="/barangaydocsicon.png" alt="logo"
+        onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+      <div class="logo-ph" style="display:none;"></div>
+    </div>
+  </nav>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- WELCOME CARD -->
+    <div class="welcome-card">
+      <div class="welcome-label">Welcome back</div>
+      <div class="user-row">
+        <div class="avatar">
+          <img src="/user.png" alt="profile"
+            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+          <div class="avatar-ph" style="display:none;"></div>
+        </div>
+        <div class="user-info">
+          <h2>Gen Lhetter S. Villanueva</h2>
+          <p>Barangay: Barangay Banicain,<br>Olongapo City</p>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="requests-label">All Requests</div>
+      <div class="pill-row">
+        <div class="pill pending">Pending: 0</div>
+        <div class="pill ready">Ready: 0</div>
+        <div class="pill rejected">Rejected: 0</div>
+      </div>
+    </div>
+
+    <!-- BARANGAY STATUS -->
+    <div class="status-card">
+      <div class="status-info">
+        <p>Barangay Status: <span class="active-text">Active</span></p>
+        <p>Mon &ndash; Fri &bull; 9:00 AM &ndash; 5:00 PM</p>
+      </div>
+      <div class="status-dot"></div>
+    </div>
+
+    <!-- SEARCH -->
+    <div class="search-wrap">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="#1B3A6B" stroke-width="2.5">
+        <circle cx="11" cy="11" r="8" />
+        <path d="m21 21-4.35-4.35" />
+      </svg>
+      <input type="text" placeholder="Search documents..." id="searchInput">
+    </div>
+
+    <!-- AVAILABLE DOCUMENTS -->
+    <div>
+      <div class="section-title">Available Documents:</div>
+      <div class="doc-grid" id="docGrid">
+
+        <div class="doc-card" onclick="location.href='barangaydocs_request.html'">
+          <div class="doc-icon-area">
+            <img src="/barangayclearance.png" alt=""
+              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+            <div class="icon-ph" style="display:none;">Place Icon</div>
+          </div>
+          <div class="doc-label">Barangay Clearance</div>
+        </div>
+
+        <div class="doc-card" onclick="location.href='barangaydocs_request.html'">
+          <div class="doc-icon-area">
+            <img src="/certificateofresidency.png" alt=""
+              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+            <div class="icon-ph" style="display:none;">Place Icon</div>
+          </div>
+          <div class="doc-label">Certificate of Residency</div>
+        </div>
+
+        <div class="doc-card" onclick="location.href='barangaydocs_request.html'">
+          <div class="doc-icon-area">
+            <img src="/certificateofindigency.png" alt=""
+              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+            <div class="icon-ph" style="display:none;">Place Icon</div>
+          </div>
+          <div class="doc-label">Certificate of Indigency</div>
+        </div>
+
+        <div class="doc-card" onclick="location.href='barangaydocs_request.html'">
+          <div class="doc-icon-area">
+            <img src="/certificateofgoodmoralcharacter.png" alt=""
+              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+            <div class="icon-ph" style="display:none;">Place Icon</div>
+          </div>
+          <div class="doc-label">Certificate of Good Moral Character</div>
+        </div>
+
+        <div class="doc-card" onclick="location.href='barangaydocs_request.html'">
+          <div class="doc-icon-area">
+            <img src="/firsttimejobseekercertificate.png" alt=""
+              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+            <div class="icon-ph" style="display:none;">Place Icon</div>
+          </div>
+          <div class="doc-label">First-Time Job Seeker Certificate</div>
+        </div>
+
+        <div class="doc-card" onclick="location.href='barangaydocs_request.html'">
+          <div class="doc-icon-area">
+            <img src="/barangaybusinessclearance.png" alt=""
+              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+            <div class="icon-ph" style="display:none;">Place Icon</div>
+          </div>
+          <div class="doc-label">Barangay Business Clearance</div>
+        </div>
+
+        <div class="doc-card" onclick="location.href='barangaydocs_request.html'">
+          <div class="doc-icon-area">
+            <img src="/soloparentcertificate.png" alt=""
+              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+            <div class="icon-ph" style="display:none;">Place Icon</div>
+          </div>
+          <div class="doc-label">Solo Parent Certificate</div>
+        </div>
+
+        <div class="doc-card" onclick="location.href='barangaydocs_request.html'">
+          <div class="doc-icon-area">
+            <img src="/workingpermit.png" alt=""
+              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+            <div class="icon-ph" style="display:none;">Place Icon</div>
+          </div>
+          <div class="doc-label">Working Permit</div>
+        </div>
+
+      </div>
+      <br>
+      <button class="more-btn">More</button>
+    </div>
+
+    <!-- UNAVAILABLE DOCUMENTS -->
+    <div class="unavailable-section">
+      <div class="section-title" style="color:var(--text-sub);">Unavailable Documents:</div>
+      <div class="doc-grid">
+        <div class="doc-card">
+          <div class="doc-icon-area">
+            <div class="icon-ph">Coming Soon</div>
+          </div>
+          <div class="doc-label">&mdash;</div>
+        </div>
+        <div class="doc-card">
+          <div class="doc-icon-area">
+            <div class="icon-ph">Coming Soon</div>
+          </div>
+          <div class="doc-label">&mdash;</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABOUT US -->
+    <div class="about-card">
+      <h3>About BarangayDocs</h3>
+      <p>BarangayDocs is an online document request system developed for Barangay Banicain, Olongapo City. This system
+        aims to simplify and modernize the process of requesting barangay documents for all residents.</p>
+      <div class="about-divider"></div>
+      <div class="about-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+          <circle cx="12" cy="10" r="3" />
+        </svg>
+        <span>Barangay Banicain, Olongapo City, Zambales</span>
+      </div>
+      <div class="about-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+          <path
+            d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 11.5 19.79 19.79 0 0 1 1.58 2.82 2 2 0 0 1 3.55 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.54a16 16 0 0 0 6 6l1.95-1.95a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+        </svg>
+        <span>(047) XXX-XXXX</span>
+      </div>
+      <div class="about-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+          <rect x="2" y="4" width="20" height="16" rx="2" />
+          <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+        </svg>
+        <span>banicain@olongapo.gov.ph</span>
+      </div>
+      <div class="about-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+        <span>Mon &ndash; Fri &bull; 9:00 AM &ndash; 5:00 PM</span>
+      </div>
+      <div class="about-vision">
+        <p>Currently serving Barangay Banicain. Built with the goal of expanding to all barangays of Olongapo City.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <a href="barangaydocs_mobile.html" class="nav-item active">
+      <div class="nav-icon">
+        <img src="/home.png" alt="Home"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+        <div class="nav-ph" style="display:none;"></div>
+      </div>
+      <span class="nav-label">Home</span>
+    </a>
+    <a href="barangaydocs_request.html" class="nav-item">
+      <div class="nav-icon">
+        <img src="/request.png" alt="Request"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+        <div class="nav-ph" style="display:none;"></div>
+      </div>
+      <span class="nav-label">Request</span>
+    </a>
+    <a href="barangaydocs_scanqr.html" class="nav-item">
+      <div class="nav-icon">
+        <img src="/scan.png" alt="Scan QR"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+        <div class="nav-ph" style="display:none;"></div>
+      </div>
+      <span class="nav-label">Scan QR</span>
+    </a>
+    <a href="barangaydocs_account.html" class="nav-item">
+      <div class="nav-icon">
+        <img src="/accounticon.png" alt="Account"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+        <div class="nav-ph" style="display:none;"></div>
+      </div>
+      <span class="nav-label">Account</span>
+    </a>
+  </nav>
+
+  <script>
+    document.getElementById('searchInput').addEventListener('input', function () {
+      const q = this.value.toLowerCase();
+      document.querySelectorAll('#docGrid .doc-card').forEach(card => {
+        const label = card.querySelector('.doc-label').textContent.toLowerCase();
+        card.style.display = label.includes(q) ? '' : 'none';
+      });
+    });
+  </script>
+
+</body>
+
+</html>

@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, initial-scale=1.0">
+  <title>BarangayDocs - All Users</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --primary: #1B3A6B; --primary-light: #2A5298; --accent: #4FC3F7;
+      --bg: #F0F4FA; --card-bg: #FFFFFF; --border: #D0DCF0;
+      --text-main: #1B3A6B; --text-sub: #6B7A99; --text-light: #9AA5BC;
+      --green: #28A745; --green-bg: #D4EDDA; --green-text: #155724;
+      --yellow: #FFC107; --yellow-bg: #FFF3CD; --yellow-text: #856404;
+      --red: #DC3545; --red-bg: #F8D7DA; --red-text: #721C24;
+      --blue-bg: #CCE5FF; --blue-text: #004085; --sidebar-w: 220px;
+    }
+    body { font-family: 'Nunito', sans-serif; background: var(--bg); min-height: 100vh; display: flex; flex-direction: column; }
+    .top-navbar { background: var(--primary); height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; position: fixed; top: 0; left: 0; right: 0; z-index: 200; box-shadow: 0 2px 12px rgba(27,58,107,0.3); }
+    .navbar-left { display: flex; align-items: center; gap: 14px; }
+    .hamburger-btn { width: 36px; height: 36px; background: rgba(255,255,255,0.12); border: none; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-direction: column; gap: 4px; }
+    .hamburger-btn span { display: block; width: 18px; height: 2px; background: #fff; border-radius: 2px; }
+    .navbar-logo { display: flex; align-items: center; gap: 8px; }
+    .logo-text { font-family: 'Poppins', sans-serif; font-size: 18px; font-weight: 800; color: #fff; }
+    .logo-text span { color: var(--accent); }
+    .admin-badge { background: var(--accent); color: var(--primary); font-size: 9px; font-weight: 800; padding: 2px 7px; border-radius: 10px; letter-spacing: 0.5px; }
+    .navbar-right { display: flex; align-items: center; gap: 12px; }
+    .notif-btn { width: 36px; height: 36px; background: rgba(255,255,255,0.12); border: none; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; }
+    .notif-btn svg { width: 18px; height: 18px; stroke: #fff; }
+    .notif-dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--red); border: 2px solid var(--primary); }
+    .admin-avatar { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.3); display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer; }
+    .admin-avatar .av-ph { font-size: 14px; color: #fff; font-weight: 800; }
+    .layout { display: flex; margin-top: 60px; min-height: calc(100vh - 60px); }
+    .sidebar { width: var(--sidebar-w); background: var(--card-bg); border-right: 1.5px solid var(--border); position: fixed; top: 60px; left: 0; bottom: 0; overflow-y: auto; transition: transform 0.25s; z-index: 100; }
+    .sidebar.collapsed { transform: translateX(calc(-1 * var(--sidebar-w))); }
+    .sidebar-section { padding: 16px 12px 8px; }
+    .sidebar-section-label { font-size: 10px; font-weight: 800; color: var(--text-light); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 6px; padding: 0 8px; }
+    .sidebar-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; cursor: pointer; text-decoration: none; transition: background 0.15s; margin-bottom: 2px; }
+    .sidebar-item svg { width: 18px; height: 18px; stroke: var(--text-sub); flex-shrink: 0; }
+    .sidebar-item span { font-size: 13px; font-weight: 700; color: var(--text-sub); }
+    .sidebar-item:hover { background: var(--bg); }
+    .sidebar-item:hover svg { stroke: var(--primary); }
+    .sidebar-item:hover span { color: var(--primary); }
+    .sidebar-item.active { background: #EBF0FB; }
+    .sidebar-item.active svg { stroke: var(--primary); }
+    .sidebar-item.active span { color: var(--primary); }
+    .sidebar-badge { margin-left: auto; background: var(--red); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 10px; min-width: 20px; text-align: center; }
+    .sidebar-badge.yellow { background: var(--yellow); color: #000000; }
+    .sidebar-badge.red { background: var(--red); color: #000000; }
+    .sidebar-divider { height: 1px; background: var(--border); margin: 4px 12px; }
+    .main { margin-left: var(--sidebar-w); flex: 1; padding: 24px; transition: margin-left 0.25s; }
+    .main.expanded { margin-left: 0; }
+    .page-header { margin-bottom: 20px; }
+    .page-header h1 { font-family: 'Poppins', sans-serif; font-size: 22px; font-weight: 700; color: var(--text-main); }
+    .page-header p { font-size: 13px; color: var(--text-sub); margin-top: 3px; }
+    .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+    .search-wrap { position: relative; flex: 1; min-width: 200px; }
+    .search-wrap input { width: 100%; height: 42px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--card-bg); padding: 0 14px 0 40px; font-family: 'Nunito', sans-serif; font-size: 13px; color: var(--text-main); outline: none; }
+    .search-wrap input::placeholder { color: var(--text-light); }
+    .search-wrap input:focus { border-color: var(--primary-light); }
+    .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; opacity: 0.4; }
+    .filter-select { height: 42px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--card-bg); padding: 0 32px 0 12px; font-family: 'Nunito', sans-serif; font-size: 13px; color: var(--text-main); outline: none; appearance: none; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239AA5BC' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; }
+    .table-card { background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 16px; overflow: hidden; }
+    .table-head-row { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1.5px solid var(--border); background: var(--bg); }
+    .table-head-row span { font-size: 10px; font-weight: 800; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.5px; }
+    .table-row { display: flex; align-items: center; padding: 13px 16px; border-bottom: 1px solid var(--border); gap: 10px; transition: background 0.15s; }
+    .table-row:last-child { border-bottom: none; }
+    .table-row:hover { background: var(--bg); }
+    .col-date { width: 100px; flex-shrink: 0; }
+    .col-date span { font-size: 12px; color: var(--text-sub); }
+    .col-status { width: 100px; flex-shrink: 0; }
+    .col-action { width: 160px; flex-shrink: 0; text-align: right; }
+    .col-uname { flex: 2; display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .col-uname h4 { font-size: 13px; font-weight: 800; color: var(--text-main); }
+    .col-uname p { font-size: 11px; color: var(--text-sub); }
+    .col-contact { flex: 1.5; }
+    .col-contact span { font-size: 12px; color: var(--text-sub); }
+    .col-brgy { flex: 1; }
+    .col-brgy span { font-size: 12px; color: var(--text-sub); }
+    .user-avatar-sm { width: 32px; height: 32px; border-radius: 50%; background: var(--bg); border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: var(--primary); flex-shrink: 0; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; }
+    .badge.active { background: var(--green-bg); color: var(--green-text); }
+    .badge.inactive { background: var(--red-bg); color: var(--red-text); }
+    .badge.waiting { background: var(--yellow-bg); color: var(--yellow-text); }
+    .action-row { display: flex; gap: 6px; justify-content: flex-end; }
+    .btn-approve { padding: 5px 10px; background: var(--green-bg); color: var(--green-text); border: 1.5px solid #C3E6CB; border-radius: 7px; font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800; cursor: pointer; }
+    .btn-reject { padding: 5px 10px; background: var(--red-bg); color: var(--red-text); border: 1.5px solid #F5C6CB; border-radius: 7px; font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800; cursor: pointer; }
+    .btn-view { padding: 5px 10px; background: var(--bg); color: var(--text-sub); border: 1.5px solid var(--border); border-radius: 7px; font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800; cursor: pointer; }
+    .btn-info { padding: 5px 10px; background: var(--blue-bg); color: var(--blue-text); border: 1.5px solid #b8daff; border-radius: 7px; font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800; cursor: pointer; }
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1e1e2e; color: #fff; border-radius: 12px; padding: 12px 20px; font-size: 13px; font-weight: 700; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 999; white-space: nowrap; }
+    .toast.show { opacity: 1; }
+
+    /* VIEW MODAL */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(10,20,50,0.55); backdrop-filter: blur(3px); z-index: 999; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal-box { background: #fff; border-radius: 20px; width: 100%; max-width: 540px; max-height: 90vh; overflow-y: auto; box-shadow: 0 24px 60px rgba(27,58,107,0.18); overflow: hidden; animation: modalIn 0.25s ease; }
+    @keyframes modalIn { from { opacity:0; transform:translateY(16px) scale(0.98); } to { opacity:1; transform:translateY(0) scale(1); } }
+    .modal-top { background: var(--primary); padding: 28px; display: flex; align-items: center; gap: 16px; }
+    .modal-avatar { width: 56px; height: 56px; border-radius: 50%; background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.3); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; color: #fff; flex-shrink: 0; }
+    .modal-top-info h3 { font-family: 'Poppins', sans-serif; font-size: 18px; font-weight: 700; color: #fff; }
+    .modal-top-info p { font-size: 13px; color: rgba(255,255,255,0.65); margin-top: 2px; }
+    .modal-top-info .badge { margin-top: 6px; }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 24px 0; }
+    .modal-header h4 { font-size: 13px; font-weight: 800; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px; }
+    .modal-close { width: 32px; height: 32px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--bg); font-size: 16px; color: var(--text-sub); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .modal-close:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .modal-body { padding: 16px 24px 24px; overflow-y: auto; max-height: calc(90vh - 160px); }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+    .detail-item label { font-size: 10px; font-weight: 800; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.4px; display: block; margin-bottom: 3px; }
+    .detail-item span { font-size: 13px; font-weight: 700; color: var(--text-main); }
+    .detail-item.full { grid-column: 1 / -1; }
+    /* Valid ID image section */
+    .valid-id-section { margin-top: 20px; padding-top: 18px; border-top: 1.5px solid var(--border); }
+    .valid-id-section label { font-size: 10px; font-weight: 800; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.4px; display: block; margin-bottom: 10px; }
+    .valid-id-img-wrap { border: 1.5px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg); min-height: 120px; display: flex; align-items: center; justify-content: center; }
+    .valid-id-img-wrap img { width: 100%; max-height: 280px; object-fit: contain; display: block; }
+    .valid-id-no-img { font-size: 12px; color: var(--text-light); font-weight: 700; padding: 32px; text-align: center; }
+    .btn-open-id { display: inline-block; margin-top: 10px; padding: 7px 14px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 800; cursor: pointer; text-decoration: none; }
+    .btn-open-id:hover { background: var(--primary-light); }
+
+    @media (max-width: 900px) { .col-contact, .col-brgy { display: none; } }
+    @media (max-width: 640px) { .sidebar { transform: translateX(calc(-1 * var(--sidebar-w))); } .sidebar.open { transform: translateX(0); } .main { margin-left: 0; } }
+  </style>
+</head>
+<body>
+
+<nav class="top-navbar">
+  <div class="navbar-left">
+    <button class="hamburger-btn" onclick="toggleSidebar()"><span></span><span></span><span></span></button>
+    <div class="navbar-logo">
+      <span class="logo-text">BARANGAY<span>DOCS</span></span>
+      <span class="admin-badge">ADMIN</span>
+    </div>
+  </div>
+  <div class="navbar-right">
+    <button class="notif-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <div class="notif-dot"></div>
+    </button>
+    <div class="admin-avatar"><span class="av-ph">A</span></div>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Overview</div>
+      <div class="sidebar-item" onclick="window.location.href='admin_dashboard.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Dashboard</span>
+      </div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Requests</div>
+      <div class="sidebar-item" onclick="window.location.href='admin_pending_requests.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>Pending Requests</span>
+        <span class="sidebar-badge yellow" id="pending-requests-badge">—</span>
+      </div>
+      <div class="sidebar-item" onclick="window.location.href='admin_all_requests.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"/></svg>
+        <span>All Requests</span>
+      </div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Users</div>
+      <div class="sidebar-item" onclick="window.location.href='admin_pending_users.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+        <span>Pending Users</span>
+        <span class="sidebar-badge red" id="pending-users-badge">—</span>
+      </div>
+      <div class="sidebar-item active" onclick="window.location.href='admin_all_users.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>All Users</span>
+      </div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Tools</div>
+      <div class="sidebar-item" onclick="window.location.href='admin_scanqr.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h3v3H7zM14 7h3v3h-3zM7 14h3v3H7zM14 14h3v3h-3z"/></svg>
+        <span>Scan QR</span>
+      </div>
+      <div class="sidebar-item" onclick="window.location.href='admin_documents.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h3v3H7zM14 7h3v3h-3zM7 14h3v3H7zM14 14h3v3h-3z"/></svg>
+        <span>Documents</span>
+      </div>
+    </div>
+        <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Audit Logs</div>
+      <div class="sidebar-item" onclick="window.location.href='admin_history.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h3v3H7zM14 7h3v3h-3zM7 14h3v3H7zM14 14h3v3h-3z"/></svg>
+        <span>History</span>
+      </div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-item" id="sign-out-btn" style="cursor:pointer;">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke="#DC3545"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span style="color:#DC3545;">Sign Out</span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main" id="mainContent">
+    <div class="page-header">
+      <h1>All Users</h1>
+      <p>Manage all registered residents</p>
+    </div>
+    <div class="filter-bar">
+      <div class="search-wrap">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="#1B3A6B" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input id="search-input" type="text" placeholder="Search by name or email...">
+      </div>
+      <select class="filter-select" id="status-filter">
+        <option value="all">All Status</option>
+        <option value="approved">Active</option>
+        <option value="rejected">Rejected</option>
+        <option value="pending">Pending</option>
+      </select>
+    </div>
+    <div class="table-card">
+      <div class="table-head-row">
+        <span style="width:38px;flex-shrink:0;"></span>
+        <span class="col-uname" style="flex:2;">Resident</span>
+        <span class="col-contact">Contact</span>
+        <span class="col-date">Joined</span>
+        <span class="col-brgy">Address</span>
+        <span class="col-status">Status</span>
+        <span class="col-action">Action</span>
+      </div>
+      <div id="all-users-body"></div>
+    </div>
+  </main>
+</div>
+
+<!-- VIEW USER MODAL -->
+<div class="modal-overlay" id="user-modal">
+  <div class="modal-box">
+    <div class="modal-top">
+      <div class="modal-avatar" id="modal-initials">--</div>
+      <div class="modal-top-info">
+        <h3 id="modal-name">—</h3>
+        <p id="modal-email">—</p>
+        <span class="badge" id="modal-status">—</span>
+      </div>
+    </div>
+    <div class="modal-header">
+      <h4>Resident Details</h4>
+      <button class="modal-close" id="close-modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <label>Contact Number</label>
+          <span id="modal-contact">—</span>
+        </div>
+        <div class="detail-item">
+          <label>Date of Birth</label>
+          <span id="modal-birthday">—</span>
+        </div>
+        <div class="detail-item">
+          <label>Sex</label>
+          <span id="modal-sex">—</span>
+        </div>
+        <div class="detail-item">
+          <label>Civil Status</label>
+          <span id="modal-civil">—</span>
+        </div>
+        <div class="detail-item full">
+          <label>Home Address</label>
+          <span id="modal-address">—</span>
+        </div>
+        <div class="detail-item">
+          <label>Years of Residency</label>
+          <span id="modal-years">—</span>
+        </div>
+        <div class="detail-item">
+          <label>Date Registered</label>
+          <span id="modal-joined">—</span>
+        </div>
+      </div>
+      <!-- Valid ID Image -->
+      <div class="valid-id-section">
+        <label>Valid ID Submitted</label>
+        <div class="valid-id-img-wrap" id="modal-valid-id-wrap">
+          <div class="valid-id-no-img">No ID uploaded</div>
+        </div>
+        <a id="modal-open-id-btn" href="#" target="_blank" class="btn-open-id" style="display:none;">
+          🔗 Open Full Image
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module" src="allusers.js"></script>
+</body>
+</html>
