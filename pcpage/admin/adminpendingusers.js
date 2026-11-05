@@ -14,7 +14,7 @@ import {
     query,
     where
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
-
+import { sendSMS } from './sms.js';
 // =============================================
 // Firebase Config & Init
 // =============================================
@@ -150,6 +150,8 @@ async function approveUser(uid, row) {
             approvedAt: new Date().toISOString()
         });
 
+        sendSMS(row._userData.contactNumber, 'BarangayDocs: Your account is APPROVED. You can now log in.');
+
         row._userData = { ...row._userData, status: 'approved' };
         row.querySelector('.badge').className   = 'badge active';
         row.querySelector('.badge').textContent = 'Active';
@@ -173,6 +175,8 @@ async function rejectUser(uid, row) {
             status:     'rejected',
             rejectedAt: new Date().toISOString()
         });
+
+        sendSMS(row._userData.contactNumber, 'BarangayDocs: Your registration was not approved. Please visit the barangay hall.');
 
         row._userData = { ...row._userData, status: 'rejected' };
         row.querySelector('.badge').className   = 'badge inactive';

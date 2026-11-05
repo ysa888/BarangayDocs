@@ -19,7 +19,7 @@ import {
     getDoc,
     serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
-
+import { sendSMS } from './sms.js';
 // =============================================
 // Firebase Config & Init
 // =============================================
@@ -281,6 +281,14 @@ function wireRowButtons(row, docId, data) {
         });
     });
 }
+async function notifyRequest(docId, makeMsg) {
+  const rs = await getDoc(doc(db, 'requests', docId));
+  if (!rs.exists()) return;
+  const r = rs.data();
+  const res = r.uid ? await getDoc(doc(db, 'residents', r.uid)) : null;
+  const phone = res?.exists() ? res.data().contactNumber : null;
+  sendSMS(phone, makeMsg(r));
+}
 
 // =============================================
 // Update request status in Firestore
@@ -334,6 +342,8 @@ function openRejectModal(docId, row) {
             updatedAt: serverTimestamp()
         });
 
+        notifyRequest(docId, r => `BarangayDocs: Request ${r.referenceNo} was rejected. Check the app for the reason.`);
+        
         const badge = row.querySelector('.badge');
         if (badge) { badge.className = 'badge rejected'; badge.textContent = 'Rejected'; }
         const actionCol = row.querySelector('.col-action');
@@ -407,6 +417,8 @@ function openReadyModal(docId, data, row) {
                 readyAt:    serverTimestamp(),
                 updatedAt:  serverTimestamp()
             });
+
+            notifyRequest(docId, r => `BarangayDocs: Ref ${r.referenceNo} (${r.documentType}) is READY for pickup.`);
 
             const badge = row.querySelector('.badge');
             if (badge) { badge.className = 'badge ready'; badge.textContent = 'Ready for Release'; }
