@@ -828,12 +828,10 @@ function showVerifyResult(data, refNo) {
         // Badge — show status
         const badge = card.querySelector('.result-badge');
         if (badge) {
-            if (data.status === 'ready') {
+            if (['approved', 'ready', 'released'].includes(data.status)) {
                 badge.style.background = 'var(--green-bg)';
                 badge.style.color      = 'var(--green-text)';
-                badge.innerHTML = `
-                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke="var(--green-text)"><path d="M20 6L9 17l-5-5"/></svg>
-                    VERIFIED — Authentic Document`;
+                badge.innerHTML        = '✓ VERIFIED — Authentic Document';
             } else if (data.status === 'rejected') {
                 badge.style.background = 'var(--red-bg)';
                 badge.style.color      = 'var(--red-text)';
@@ -866,12 +864,33 @@ function showVerifyResult(data, refNo) {
             const statusMap = {
                 pending:    { text: 'Pending',             color: 'var(--yellow)' },
                 processing: { text: 'Processing',          color: '#1565C0'       },
+                approved:   { text: 'Active • Valid',      color: 'var(--green)'  },
                 ready:      { text: 'Active • Valid',      color: 'var(--green)'  },
+                released:   { text: 'Active • Valid',      color: 'var(--green)'  },
                 rejected:   { text: 'Rejected',            color: 'var(--red)'    }
             };
             const s = statusMap[data.status] || statusMap.pending;
             statusField.textContent  = s.text;
             statusField.style.color  = s.color;
+        }
+
+        // Timeline — Processing step
+        const tProc = el('timeProcessing');
+        if (tProc && ['processing', 'approved', 'ready', 'released'].includes(data.status)) {
+            const when = data.processedAt || data.approvedAt || data.readyAt || data.updatedAt;
+            tProc.textContent = when ? formatDate(when) : 'Done';
+            tProc.classList.remove('pending-txt');
+        }
+
+        // Timeline — Ready for Pickup step
+        if (['ready', 'released'].includes(data.status)) {
+            const lblReady  = el('lblReady');
+            const timeReady = el('timeReady');
+            if (lblReady) lblReady.classList.remove('muted');
+            if (timeReady) {
+                timeReady.textContent = data.readyAt ? formatDate(data.readyAt) : 'Done';
+                timeReady.classList.remove('pending-txt');
+            }
         }
     }
 }
