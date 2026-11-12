@@ -328,13 +328,13 @@ if (isRegisterPage) {
         // Disable button + show loading state
         const submitBtn = el('step3-submit');
         submitBtn.disabled = true;
-        submitBtn.textContent = '⏳ Uploading ID...';
+        submitBtn.textContent = '» Uploading ID...';
 
         try {
             // Step 1: Upload Valid ID to Cloudinary
             const { url: validIdUrl, publicId: validIdPublicId } = await uploadToCloudinary(validIdFile);
 
-            submitBtn.textContent = '⏳ Creating account...';
+            submitBtn.textContent = '» Creating account...';
 
             // Step 2: Create Firebase Auth account
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);

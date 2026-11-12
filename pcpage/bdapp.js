@@ -841,7 +841,7 @@ function showVerifyResult(data, refNo) {
             } else {
                 badge.style.background = 'var(--yellow-bg)';
                 badge.style.color      = 'var(--yellow-text)';
-                badge.innerHTML        = '⏳ PENDING — Document Not Yet Issued';
+                badge.innerHTML        = '○ PENDING — Document Not Yet Issued';
             }
         }
 
