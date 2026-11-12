@@ -90,6 +90,7 @@ if (isLoginPage) {
 
             if (!userDoc.exists()) {
                 alert('Account not found. Please register first.');
+                await signOut(auth);
                 return;
             }
 

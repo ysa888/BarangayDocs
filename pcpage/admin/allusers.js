@@ -2,13 +2,14 @@
 // Firebase Imports
 // =============================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signOut, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import {
     getFirestore,
     collection,
     getDocs,
     doc,
     updateDoc,
+    deleteDoc,
     getDoc,
     onSnapshot,   // ← ADDED
     query,        // ← ADDED
@@ -128,7 +129,8 @@ function getActionButtons(uid, status) {
     } else {
         return `
             <button class="btn-info info-btn" data-uid="${uid}">Info</button>
-            <button class="btn-approve activate-btn" data-uid="${uid}">Activate</button>`;
+            <button class="btn-approve activate-btn" data-uid="${uid}">Activate</button>
+            <button class="btn-reject delete-btn" data-uid="${uid}">Delete</button>`;
     }
 }
 
@@ -169,6 +171,7 @@ function buildRow(uid, data) {
     row.querySelector('.reject-btn')?.addEventListener('click',     () => updateStatus(uid, 'rejected', row));
     row.querySelector('.deactivate-btn')?.addEventListener('click', () => updateStatus(uid, 'rejected', row));
     row.querySelector('.activate-btn')?.addEventListener('click',   () => updateStatus(uid, 'approved', row));
+    row.querySelector('.delete-btn')?.addEventListener('click',     () => openDeleteModal(uid));
 
     return row;
 }
@@ -199,6 +202,7 @@ async function updateStatus(uid, newStatus, row) {
         row.querySelector('.reject-btn')?.addEventListener('click',     () => updateStatus(uid, 'rejected', row));
         row.querySelector('.deactivate-btn')?.addEventListener('click', () => updateStatus(uid, 'rejected', row));
         row.querySelector('.activate-btn')?.addEventListener('click',   () => updateStatus(uid, 'approved', row));
+        row.querySelector('.delete-btn')?.addEventListener('click',     () => openDeleteModal(uid));
 
         const messages = {
             approved: '✓ User activated successfully',
@@ -284,6 +288,105 @@ document.getElementById('close-modal').addEventListener('click', () => {
 });
 document.getElementById('user-modal').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) document.getElementById('user-modal').classList.remove('open');
+});
+
+// =============================================
+// Delete User (rejected / deactivated only, admin password required)
+// =============================================
+let pendingDeleteUid = null;
+
+function openDeleteModal(uid) {
+    const user = allUsers.find(u => u.uid === uid);
+    if (!user) return;
+
+    // Safety: only rejected / deactivated accounts can be deleted
+    if (user.status !== 'rejected') {
+        showToast('Only rejected or deactivated users can be deleted.');
+        return;
+    }
+
+    pendingDeleteUid = uid;
+    document.getElementById('delete-user-name').textContent = `${user.firstName} ${user.lastName}`;
+    document.getElementById('delete-password').value = '';
+    setDeleteError('');
+    setDeleteBusy(false);
+    document.getElementById('delete-modal').classList.add('open');
+    document.getElementById('delete-password').focus();
+}
+
+function closeDeleteModal() {
+    pendingDeleteUid = null;
+    document.getElementById('delete-password').value = '';
+    document.getElementById('delete-modal').classList.remove('open');
+}
+
+function setDeleteError(msg) {
+    const e = document.getElementById('delete-error');
+    e.textContent = msg;
+    e.style.display = msg ? 'block' : 'none';
+}
+
+function setDeleteBusy(busy) {
+    const btn = document.getElementById('delete-confirm-btn');
+    btn.disabled = busy;
+    btn.textContent = busy ? 'Deleting...' : 'Delete Permanently';
+    document.getElementById('delete-cancel-btn').disabled = busy;
+}
+
+async function confirmDelete() {
+    const uid      = pendingDeleteUid;
+    const password = document.getElementById('delete-password').value;
+    const admin    = auth.currentUser;
+
+    if (!uid) return;
+    if (!password) return setDeleteError('Please enter your admin password.');
+    if (!admin || !admin.email) return setDeleteError('Could not verify your admin account. Please sign in again.');
+
+    const user = allUsers.find(u => u.uid === uid);
+    if (!user || user.status !== 'rejected') return setDeleteError('Only rejected or deactivated users can be deleted.');
+
+    setDeleteBusy(true);
+    setDeleteError('');
+
+    // Step 1: re-check the admin's password
+    try {
+        const credential = EmailAuthProvider.credential(admin.email, password);
+        await reauthenticateWithCredential(admin, credential);
+    } catch (err) {
+        console.error('Re-auth error:', err);
+        setDeleteBusy(false);
+        if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+            setDeleteError('Incorrect password. The user was not deleted.');
+        } else if (err.code === 'auth/too-many-requests') {
+            setDeleteError('Too many attempts. Please wait a few minutes and try again.');
+        } else {
+            setDeleteError('Could not verify your password. Please try again.');
+        }
+        return;
+    }
+
+    // Step 2: delete the resident record
+    try {
+        await deleteDoc(doc(db, 'residents', uid));
+
+        allUsers = allUsers.filter(u => u.uid !== uid);
+        closeDeleteModal();
+        applyFilters();
+        showToast('User deleted permanently');
+    } catch (err) {
+        console.error('Delete error:', err);
+        setDeleteBusy(false);
+        setDeleteError('Failed to delete user. Check your Firestore rules allow admins to delete residents.');
+    }
+}
+
+document.getElementById('delete-confirm-btn').addEventListener('click', confirmDelete);
+document.getElementById('delete-cancel-btn').addEventListener('click', closeDeleteModal);
+document.getElementById('delete-modal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget && !document.getElementById('delete-confirm-btn').disabled) closeDeleteModal();
+});
+document.getElementById('delete-password').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') confirmDelete();
 });
 
 // =============================================

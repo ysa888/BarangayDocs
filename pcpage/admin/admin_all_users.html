@@ -119,6 +119,21 @@
     .btn-open-id { display: inline-block; margin-top: 10px; padding: 7px 14px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 800; cursor: pointer; text-decoration: none; }
     .btn-open-id:hover { background: var(--primary-light); }
 
+    /* Delete user modal */
+    .delete-box { max-width: 440px; padding: 26px 28px; }
+    .delete-box h3 { font-family: 'Poppins', sans-serif; font-size: 18px; font-weight: 800; color: var(--red); margin-bottom: 8px; }
+    .delete-box p { font-size: 13px; color: var(--text-sub); line-height: 1.7; }
+    .delete-box p b { color: var(--text-main); }
+    .delete-box label { display: block; font-size: 11px; font-weight: 800; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.4px; margin: 18px 0 8px; }
+    .delete-box input[type="password"] { width: 100%; height: 46px; border: 2px solid var(--border); border-radius: 12px; padding: 0 14px; font-family: 'Nunito', sans-serif; font-size: 14px; color: var(--text-main); background: var(--bg); outline: none; }
+    .delete-box input[type="password"]:focus { border-color: var(--primary-light); background: #fff; }
+    .delete-error { display: none; margin-top: 10px; padding: 9px 12px; border-radius: 10px; background: var(--red-bg); color: var(--red-text); font-size: 12px; font-weight: 700; }
+    .delete-actions { display: flex; gap: 10px; margin-top: 20px; }
+    .delete-actions button { flex: 1; height: 44px; border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800; cursor: pointer; }
+    .delete-actions .delete-cancel { background: #fff; border: 2px solid var(--border); color: var(--text-sub); }
+    .delete-actions .delete-confirm { background: var(--red); border: none; color: #fff; }
+    .delete-actions button:disabled { opacity: 0.55; cursor: not-allowed; }
+
     /* ID + Face side-by-side verification */
     .verify-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
     .verify-col { min-width: 0; }
@@ -317,6 +332,21 @@
   </div>
 </div>
 <div class="lightbox" id="lightbox"><img id="lightbox-img" src="" alt="Enlarged photo"></div>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE USER MODAL -->
+<div class="modal-overlay" id="delete-modal">
+  <div class="modal-box delete-box">
+    <h3>Delete User</h3>
+    <p>You are about to permanently delete <b id="delete-user-name">this user</b>. This removes their resident record and cannot be undone.</p>
+    <label for="delete-password">Enter your admin password to confirm</label>
+    <input type="password" id="delete-password" placeholder="Admin password" autocomplete="current-password">
+    <div class="delete-error" id="delete-error"></div>
+    <div class="delete-actions">
+      <button type="button" class="delete-cancel" id="delete-cancel-btn">Cancel</button>
+      <button type="button" class="delete-confirm" id="delete-confirm-btn">Delete Permanently</button>
     </div>
   </div>
 </div>
