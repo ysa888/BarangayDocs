@@ -98,6 +98,49 @@ function formatDate(isoString) {
 }
 
 // =============================================
+// Verification images (ID + face) with click-to-enlarge
+// =============================================
+function renderVerifyImage(wrapId, openBtnId, url, altText, emptyText) {
+    const wrap    = el(wrapId);
+    const openBtn = el(openBtnId);
+    wrap.innerHTML = '';
+
+    const showMessage = (text) => {
+        wrap.innerHTML = '';
+        const msg = document.createElement('div');
+        msg.className = 'valid-id-no-img';
+        msg.textContent = text;
+        wrap.appendChild(msg);
+        openBtn.style.display = 'none';
+    };
+
+    if (!url) {
+        showMessage(emptyText);
+        return;
+    }
+
+    const img = document.createElement('img');
+    img.alt = altText;
+    img.src = url;
+    img.addEventListener('error', () => showMessage('Image failed to load'));
+    img.addEventListener('click', () => openLightbox(url));
+    wrap.appendChild(img);
+
+    openBtn.href = url;
+    openBtn.style.display = 'inline-block';
+}
+
+function openLightbox(url) {
+    el('lightbox-img').src = url;
+    el('lightbox').classList.add('open');
+}
+
+el('lightbox')?.addEventListener('click', () => {
+    el('lightbox').classList.remove('open');
+    el('lightbox-img').src = '';
+});
+
+// =============================================
 // View User — INFO Modal
 // =============================================
 function viewUser(uid, data) {
@@ -119,17 +162,9 @@ function viewUser(uid, data) {
     statusBadge.className   = `badge ${cls}`;
     statusBadge.textContent = lbl;
 
-    // Valid ID image
-    const wrap    = el('modal-valid-id-wrap');
-    const openBtn = el('modal-open-id-btn');
-    if (data.validIdUrl) {
-        wrap.innerHTML = `<img src="${data.validIdUrl}" alt="Valid ID" onerror="this.parentElement.innerHTML='<div class=\\'valid-id-no-img\\'>Image failed to load</div>'" />`;
-        openBtn.href   = data.validIdUrl;
-        openBtn.style.display = 'inline-block';
-    } else {
-        wrap.innerHTML        = '<div class="valid-id-no-img">No ID uploaded</div>';
-        openBtn.style.display = 'none';
-    }
+    // Valid ID image + Face photo (shown side by side for comparison)
+    renderVerifyImage('modal-valid-id-wrap', 'modal-open-id-btn', data.validIdUrl, 'Valid ID', 'No ID uploaded');
+    renderVerifyImage('modal-face-wrap',     'modal-open-face-btn', data.faceUrl,  'Face photo', 'No face photo uploaded');
 
     el('user-modal').classList.add('open');
 }
