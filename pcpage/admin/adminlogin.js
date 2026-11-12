@@ -60,7 +60,7 @@ document.getElementById('admin-login-btn').addEventListener('click', async () =>
         }
 
         // Verified admin — redirect to admin panel
-        window.location.href = 'admin_pending_users.html';
+        window.location.href = 'admin_dashboard.html';
 
     } catch (error) {
         console.error('Admin login error:', error.code, error.message);
