@@ -103,13 +103,38 @@ function formatDate(val) {
 }
 
 function getBadgeClass(status) {
-    const map = { pending: 'pending', processing: 'processing', approved: 'processing', ready: 'ready', released: 'active', rejected: 'rejected' };
+    const map = { pending: 'pending', processing: 'processing', approved: 'approved', ready: 'ready', released: 'released', rejected: 'rejected' };
     return map[status] || 'pending';
 }
 
 function getBadgeLabel(status) {
     const map = { pending: 'Submitted', processing: 'Processing', approved: 'Approved', ready: 'Ready for Release', released: 'Released', rejected: 'Rejected' };
     return map[status] || status;
+}
+
+// Document validity — only meaningful once a QR/expiry exists
+// (status 'ready' or 'released'). Returns 'active', 'expired' or null.
+function getValidity(status, expiresAt) {
+    if (status !== 'ready' && status !== 'released') return null;
+    if (!expiresAt) return null;
+    const d = expiresAt?.toDate ? expiresAt.toDate() : new Date(expiresAt);
+    if (isNaN(d.getTime())) return null;
+    return d.getTime() < Date.now() ? 'expired' : 'active';
+}
+
+// Status cell = main status badge + (ready/released only) Active/Expired badge
+function statusCellHTML(status, expiresAt) {
+    const v = getValidity(status, expiresAt);
+    const validity = v
+        ? `<span class="badge validity ${v}">${v === 'active' ? 'Active' : 'Expired'}</span>`
+        : '';
+    return `<div class="status-stack"><span class="badge ${getBadgeClass(status)}">${getBadgeLabel(status)}</span>${validity}</div>`;
+}
+
+function renderStatusCell(row, status, expiresAt) {
+    const cell = row.querySelector('.col-status');
+    if (cell) cell.innerHTML = statusCellHTML(status, expiresAt);
+    row.dataset.status = status;
 }
 
 function docIcon(name) {
@@ -233,32 +258,32 @@ function formatExpiry(val) {
 
 // =============================================
 // Build action buttons based on status
+// Reject now lives in the ⋮ kebab menu and is
+// available at every active stage (not released).
 // =============================================
 function getActionButtons(docId, status) {
+    const kebab = `<button class="kebab-btn" data-id="${docId}" data-action="kebab" title="More actions">&#8942;</button>`;
+
     if (status === 'pending') {
-        return `
-            <button class="btn-process" data-id="${docId}" data-action="processing">Process</button>
-            <button class="btn-reject"  data-id="${docId}" data-action="reject">Reject</button>`;
+        return `<button class="btn-process" data-id="${docId}" data-action="processing">Process</button>${kebab}`;
     }
     if (status === 'processing') {
-        return `
-            <button class="btn-approve" data-id="${docId}" data-action="approved">Approve</button>
-            <button class="btn-reject"  data-id="${docId}" data-action="reject">Reject</button>`;
+        return `<button class="btn-approve" data-id="${docId}" data-action="approved">Approve</button>${kebab}`;
     }
     if (status === 'approved') {
-        return `
-            <button class="btn-approve" data-id="${docId}" data-action="ready">Mark Ready + QR</button>`;
+        return `<button class="btn-approve" data-id="${docId}" data-action="ready">Mark Ready + QR</button>${kebab}`;
     }
     if (status === 'ready') {
         return `
-            <button class="btn-approve"   data-id="${docId}" data-action="released">Mark Released</button>
-            <button class="btn-view"      data-id="${docId}" data-action="viewqr">View QR</button>
-            <button class="btn-view-doc"  data-id="${docId}" data-action="viewdocument">View Document</button>`;
+            <button class="btn-approve"  data-id="${docId}" data-action="released">Mark Released</button>
+            <button class="btn-view"     data-id="${docId}" data-action="viewqr">View QR</button>
+            <button class="btn-view-doc" data-id="${docId}" data-action="viewdocument">View Document</button>
+            ${kebab}`;
     }
     if (status === 'released') {
         return `
-            <button class="btn-view"      data-id="${docId}" data-action="viewqr">View QR</button>
-            <button class="btn-view-doc"  data-id="${docId}" data-action="viewdocument">View Document</button>`;
+            <button class="btn-view"     data-id="${docId}" data-action="viewqr">View QR</button>
+            <button class="btn-view-doc" data-id="${docId}" data-action="viewdocument">View Document</button>`;
     }
     if (status === 'rejected') {
         return `<span style="font-size:11px;color:var(--red-text);">Rejected</span>`;
@@ -271,16 +296,54 @@ function getActionButtons(docId, status) {
 // =============================================
 function wireRowButtons(row, docId, data) {
     row.querySelectorAll('[data-action]').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', (e) => {
             const action = btn.dataset.action;
-            if (action === 'reject')         openRejectModal(docId, row);
-            else if (action === 'viewqr')      openQRModal(docId, data);
-            else if (action === 'ready')       openReadyModal(docId, data, row);
-            else if (action === 'viewdocument') openDocumentModal(docId, data);
+            if (action === 'kebab')              { e.stopPropagation(); openKebabMenu(btn, docId, row); }
+            else if (action === 'reject')        openRejectModal(docId, row);
+            else if (action === 'viewqr')        openQRModal(docId, data);
+            else if (action === 'ready')         openReadyModal(docId, data, row);
+            else if (action === 'viewdocument')  openDocumentModal(docId, data);
             else updateRequestStatus(docId, action, row, data);
         });
     });
 }
+
+// =============================================
+// Kebab (⋮) menu
+// Attached to <body> so the table card's
+// overflow:hidden can't clip it.
+// =============================================
+function closeKebabMenu() {
+    document.querySelectorAll('.kebab-menu').forEach(m => m.remove());
+}
+
+function openKebabMenu(btn, docId, row) {
+    const alreadyOpen = document.querySelector('.kebab-menu');
+    closeKebabMenu();
+    if (alreadyOpen && alreadyOpen.dataset.for === docId) return; // second click toggles it closed
+
+    const menu = document.createElement('div');
+    menu.className = 'kebab-menu';
+    menu.dataset.for = docId;
+    menu.innerHTML = `<button class="kebab-item danger" type="button">✕ Reject request</button>`;
+    document.body.appendChild(menu);
+
+    const r = btn.getBoundingClientRect();
+    menu.style.top  = `${r.bottom + 4}px`;
+    menu.style.left = `${Math.max(8, r.right - menu.offsetWidth)}px`;
+
+    menu.querySelector('.kebab-item').addEventListener('click', () => {
+        closeKebabMenu();
+        openRejectModal(docId, row);
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.kebab-menu') && !e.target.closest('.kebab-btn')) closeKebabMenu();
+});
+window.addEventListener('scroll', closeKebabMenu, true);
+window.addEventListener('resize', closeKebabMenu);
+
 async function notifyRequest(docId, makeMsg) {
   const rs = await getDoc(doc(db, 'requests', docId));
   if (!rs.exists()) return;
@@ -304,11 +367,7 @@ async function updateRequestStatus(docId, newStatus, row, data) {
         await updateDoc(doc(db, 'requests', docId), updateData);
 
         // Update row UI
-        const badge = row.querySelector('.badge');
-        if (badge) {
-            badge.className = `badge ${getBadgeClass(newStatus)}`;
-            badge.textContent = getBadgeLabel(newStatus);
-        }
+        renderStatusCell(row, newStatus, data.expiresAt);
 
         const actionCol = row.querySelector('.col-action');
         if (actionCol) {
@@ -344,8 +403,7 @@ function openRejectModal(docId, row) {
 
         notifyRequest(docId, r => `BarangayDocs: Request ${r.referenceNo} was rejected. Check the app for the reason.`);
         
-        const badge = row.querySelector('.badge');
-        if (badge) { badge.className = 'badge rejected'; badge.textContent = 'Rejected'; }
+        renderStatusCell(row, 'rejected');
         const actionCol = row.querySelector('.col-action');
         if (actionCol) actionCol.innerHTML = `<div class="action-row">${getActionButtons(docId, 'rejected')}</div>`;
 
@@ -358,6 +416,8 @@ function openRejectModal(docId, row) {
         overlay.classList.remove('show');
         document.getElementById('reject-reason').value = '';
     };
+    // bottom "Cancel" button now works too
+    document.getElementById('cancel-reject-btn').onclick = document.getElementById('cancel-reject').onclick;
 }
 
 // =============================================
@@ -420,8 +480,7 @@ function openReadyModal(docId, data, row) {
 
             notifyRequest(docId, r => `BarangayDocs: Ref ${r.referenceNo} (${r.documentType}) is READY for pickup.`);
 
-            const badge = row.querySelector('.badge');
-            if (badge) { badge.className = 'badge ready'; badge.textContent = 'Ready for Release'; }
+            renderStatusCell(row, 'ready', expiry);
             const actionCol = row.querySelector('.col-action');
             if (actionCol) {
                 actionCol.innerHTML = `<div class="action-row">${getActionButtons(docId, 'ready')}</div>`;
@@ -858,7 +917,7 @@ function buildRow(docId, data) {
         <div class="col-date"><span>${formatDate(data.createdAt)}</span></div>
         <div class="col-purpose"><span>${data.purpose || '—'}</span></div>
         <div class="col-status">
-            <span class="badge ${getBadgeClass(data.status)}">${getBadgeLabel(data.status)}</span>
+            ${statusCellHTML(data.status, data.expiresAt)}
         </div>
         <div class="col-action">
             <div class="action-row">${getActionButtons(docId, data.status)}</div>

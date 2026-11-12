@@ -113,6 +113,26 @@
     @media (max-width: 900px) { .col-purpose { display: none; } }
     @media (max-width: 640px) { .sidebar { transform: translateX(calc(-1 * var(--sidebar-w))); } .sidebar.open { transform: translateX(0); } .main { margin-left: 0; } }
   </style>
+  <style>
+    /* Kebab (⋮) menu */
+    .action-row { align-items: center; }
+    .kebab-btn { width: 28px; height: 28px; border: 1.5px solid var(--border); border-radius: 7px; background: var(--card-bg); color: var(--text-sub); font-size: 18px; font-weight: 800; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+    .kebab-btn:hover { background: var(--bg); color: var(--primary); }
+    .kebab-menu { position: fixed; z-index: 2000; min-width: 160px; background: #fff; border: 1.5px solid var(--border); border-radius: 10px; padding: 4px; box-shadow: 0 10px 30px rgba(27,58,107,0.18); }
+    .kebab-item { width: 100%; text-align: left; padding: 9px 12px; border: none; background: transparent; border-radius: 7px; font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 800; cursor: pointer; }
+    .kebab-item.danger { color: var(--red-text); }
+    .kebab-item.danger:hover { background: var(--red-bg); }
+    /* Status badges */
+    .col-status { width: 130px; }
+    .status-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+    .badge.approved { background: #D6EEF5; color: #0B5566; }
+    .badge.released { background: #E2DAF3; color: #3F2A7A; }
+    .badge.validity { font-size: 9px; padding: 2px 8px; background: transparent; }
+    .badge.validity.active { border: 1.5px solid #28A745; color: var(--green-text); background: var(--green-bg); }
+    .badge.validity.expired { border: 1.5px solid #DC3545; color: var(--red-text); background: var(--red-bg); }
+    .badge.validity.active::before { content: '● '; color: #28A745; }
+    .badge.validity.expired::before { content: '● '; color: #DC3545; }
+  </style>
 </head>
 <body>
 
