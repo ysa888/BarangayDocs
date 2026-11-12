@@ -547,7 +547,7 @@
       background: #fff;
       border-radius: 20px;
       width: 100%;
-      max-width: 540px;
+      max-width: 760px;
       max-height: 90vh;
       overflow-y: auto;
       box-shadow: 0 24px 60px rgba(27, 58, 107, 0.18);
@@ -647,6 +647,15 @@
       text-decoration: none;
     }
     .btn-open-id:hover { background: var(--primary-light); }
+
+    /* ID + Face side-by-side verification */
+    .verify-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .verify-col { min-width: 0; }
+    .valid-id-img-wrap img { cursor: zoom-in; }
+    #modal-face-wrap img { object-fit: cover; max-height: 280px; }
+    .lightbox { display: none; position: fixed; inset: 0; background: rgba(10,20,50,0.85); z-index: 1200; align-items: center; justify-content: center; padding: 24px; cursor: zoom-out; }
+    .lightbox.open { display: flex; }
+    .lightbox img { max-width: 100%; max-height: 100%; border-radius: 12px; background: #fff; }
 
     @media (max-width: 900px) {
       .col-contact,
@@ -862,14 +871,28 @@
         </div>
         <!-- Valid ID Image -->
         <div class="valid-id-section">
-          <label>Valid ID Submitted</label>
-          <div class="valid-id-img-wrap" id="modal-valid-id-wrap">
-            <div class="valid-id-no-img">No ID uploaded</div>
-          </div>
-          <a id="modal-open-id-btn" href="#" target="_blank" class="btn-open-id" style="display:none;">
-            🔗 Open Full Image
-          </a>
-        </div>
+  <div class="verify-pair">
+    <div class="verify-col">
+      <label>Valid ID Submitted</label>
+      <div class="valid-id-img-wrap" id="modal-valid-id-wrap">
+        <div class="valid-id-no-img">No ID uploaded</div>
+      </div>
+      <a id="modal-open-id-btn" href="#" target="_blank" class="btn-open-id" style="display:none;">
+        Open Full Image
+      </a>
+    </div>
+    <div class="verify-col">
+      <label>Face Photo Submitted</label>
+      <div class="valid-id-img-wrap" id="modal-face-wrap">
+        <div class="valid-id-no-img">No face photo uploaded</div>
+      </div>
+      <a id="modal-open-face-btn" href="#" target="_blank" class="btn-open-id" style="display:none;">
+        Open Full Image
+      </a>
+    </div>
+  </div>
+</div>
+<div class="lightbox" id="lightbox"><img id="lightbox-img" src="" alt="Enlarged photo"></div>
       </div>
     </div>
   </div>

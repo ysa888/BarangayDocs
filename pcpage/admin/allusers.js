@@ -213,6 +213,49 @@ async function updateStatus(uid, newStatus, row) {
 }
 
 // =============================================
+// Verification images (ID + face) with click-to-enlarge
+// =============================================
+function renderVerifyImage(wrapId, openBtnId, url, altText, emptyText) {
+    const wrap    = document.getElementById(wrapId);
+    const openBtn = document.getElementById(openBtnId);
+    wrap.innerHTML = '';
+
+    const showMessage = (text) => {
+        wrap.innerHTML = '';
+        const msg = document.createElement('div');
+        msg.className = 'valid-id-no-img';
+        msg.textContent = text;
+        wrap.appendChild(msg);
+        openBtn.style.display = 'none';
+    };
+
+    if (!url) {
+        showMessage(emptyText);
+        return;
+    }
+
+    const img = document.createElement('img');
+    img.alt = altText;
+    img.src = url;
+    img.addEventListener('error', () => showMessage('Image failed to load'));
+    img.addEventListener('click', () => openLightbox(url));
+    wrap.appendChild(img);
+
+    openBtn.href = url;
+    openBtn.style.display = 'inline-block';
+}
+
+function openLightbox(url) {
+    document.getElementById('lightbox-img').src = url;
+    document.getElementById('lightbox').classList.add('open');
+}
+
+document.getElementById('lightbox').addEventListener('click', () => {
+    document.getElementById('lightbox').classList.remove('open');
+    document.getElementById('lightbox-img').src = '';
+});
+
+// =============================================
 // View User Modal
 // =============================================
 function viewUser(uid, data) {
@@ -229,17 +272,9 @@ function viewUser(uid, data) {
     document.getElementById('modal-status').className     = `badge ${getBadgeClass(data.status)}`;
     document.getElementById('modal-initials').textContent = getInitials(data.firstName, data.lastName);
 
-    // Valid ID image
-    const wrap    = document.getElementById('modal-valid-id-wrap');
-    const openBtn = document.getElementById('modal-open-id-btn');
-    if (data.validIdUrl) {
-        wrap.innerHTML = `<img src="${data.validIdUrl}" alt="Valid ID" onerror="this.parentElement.innerHTML='<div class=\\'valid-id-no-img\\'>Image failed to load</div>'" />`;
-        openBtn.href   = data.validIdUrl;
-        openBtn.style.display = 'inline-block';
-    } else {
-        wrap.innerHTML        = '<div class="valid-id-no-img">No ID uploaded</div>';
-        openBtn.style.display = 'none';
-    }
+    // Valid ID image + Face photo (shown side by side for comparison)
+    renderVerifyImage('modal-valid-id-wrap', 'modal-open-id-btn', data.validIdUrl, 'Valid ID', 'No ID uploaded');
+    renderVerifyImage('modal-face-wrap',     'modal-open-face-btn', data.faceUrl,  'Face photo', 'No face photo uploaded');
 
     document.getElementById('user-modal').classList.add('open');
 }

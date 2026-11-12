@@ -614,6 +614,172 @@
       color: #721c24;
     }
 
+    /* =============================================
+       FACE PHOTO (SELFIE) STYLES
+       ============================================= */
+    .verify-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      align-items: start;
+      margin-bottom: 18px;
+    }
+
+    .verify-grid .field { margin-bottom: 0; }
+
+    .face-box {
+      border: 2px dashed var(--border);
+      border-radius: 13px;
+      padding: 24px 16px;
+      text-align: center;
+      background: var(--bg);
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .face-box.has-file {
+      border-style: solid;
+      border-color: var(--accent-green);
+      background: #F2FBF4;
+    }
+
+    .face-box svg.face-icon {
+      width: 40px;
+      height: 40px;
+      stroke: var(--primary-light);
+      fill: none;
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      margin-bottom: 8px;
+    }
+
+    .face-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .face-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 40px;
+      border-radius: 10px;
+      border: 2px solid var(--primary);
+      background: #fff;
+      color: var(--primary);
+      font-family: 'Nunito', sans-serif;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .face-btn:hover { background: #EAF0FB; }
+
+    .face-btn.primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .face-btn.primary:hover { background: var(--primary-light); }
+
+    .face-btn svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .face-tips {
+      font-size: 11px;
+      color: var(--text-light);
+      line-height: 1.6;
+      margin-top: 12px;
+    }
+
+    #face-preview-img {
+      max-height: 220px;
+      object-fit: cover;
+    }
+
+    /* Camera modal */
+    .cam-box { max-width: 460px; }
+
+    .cam-stage {
+      position: relative;
+      background: #0B1426;
+      border-radius: 14px;
+      overflow: hidden;
+      aspect-ratio: 4 / 3;
+    }
+
+    .cam-stage video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1); /* mirror preview like a selfie */
+    }
+
+    .cam-guide {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 46%;
+      aspect-ratio: 3 / 4;
+      transform: translate(-50%, -50%);
+      border: 3px dashed rgba(255, 255, 255, 0.75);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .cam-msg {
+      font-size: 13px;
+      color: var(--text-sub);
+      text-align: center;
+      margin-top: 12px;
+      line-height: 1.6;
+    }
+
+    .cam-msg.error { color: var(--error); font-weight: 700; }
+
+    .cam-footer {
+      display: flex;
+      gap: 10px;
+      padding: 16px 28px;
+      border-top: 2px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .cam-footer button {
+      flex: 1;
+      height: 46px;
+      border-radius: 12px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .cam-footer .cam-cancel {
+      background: #fff;
+      border: 2px solid var(--border);
+      color: var(--text-sub);
+    }
+
+    .cam-footer .cam-capture {
+      background: var(--primary);
+      border: none;
+      color: #fff;
+    }
+
+    .cam-footer .cam-capture:disabled { opacity: 0.5; cursor: not-allowed; }
+
     /* MODAL OVERLAY */
     .modal-overlay {
       display: none;
@@ -786,8 +952,8 @@
         <div class="vstep" id="vstep2">
           <div class="vstep-dot" id="vdot2">2</div>
           <div class="vstep-text">
-            <h4>Home Address & Valid ID</h4>
-            <p>Provide your complete address in Barangay Banicain and upload a valid ID for verification.</p>
+            <h4>Home Address, ID & Face Photo</h4>
+            <p>Provide your complete address in Barangay Banicain and upload a valid ID and a face photo for verification.</p>
           </div>
         </div>
         <div class="vstep" id="vstep3">
@@ -877,8 +1043,8 @@
       <!-- STEP 2 -->
       <div class="step-panel" id="panel2">
         <div class="form-header">
-          <h1>Home Address & Valid ID</h1>
-          <p>Step 2 of 3 &bull; Enter your address and upload a valid ID</p>
+          <h1>Home Address, Valid ID & Face Photo</h1>
+          <p>Step 2 of 3 &bull; Enter your address, upload a valid ID, and add a face photo</p>
         </div>
 
         <div class="field">
@@ -922,6 +1088,7 @@
              Accepted: School ID, National ID, PhilHealth ID,
              Barangay ID, Passport, Driver's License
              ============================================= -->
+        <div class="verify-grid">
         <div class="field">
           <label>Upload Valid ID</label>
 
@@ -944,6 +1111,49 @@
               <button class="id-remove-btn" id="id-remove-btn" type="button">✕ Remove</button>
             </div>
           </div>
+        </div>
+
+        <!-- =============================================
+             FACE PHOTO (SELFIE) - camera or upload
+             Admin compares this with the valid ID
+             ============================================= -->
+        <div class="field">
+          <label>Face Photo</label>
+
+          <div class="face-box" id="face-box">
+            <svg class="face-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="8" r="4"></circle>
+              <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"></path>
+            </svg>
+            <div class="id-upload-title">Add a clear photo of your face</div>
+            <div class="id-upload-hint">JPG, PNG, WEBP &bull; Max 5MB</div>
+
+            <div class="face-actions">
+              <button type="button" class="face-btn primary" id="face-camera-btn">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h4l2-3h6l2 3h4v11H3z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>
+                Use Camera
+              </button>
+              <button type="button" class="face-btn" id="face-upload-btn">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"></path><path d="M7 9l5-5 5 5"></path><path d="M4 20h16"></path></svg>
+                Upload Photo
+              </button>
+            </div>
+            <input type="file" id="face-file" accept="image/*" hidden>
+
+            <div class="face-tips">
+              Face the camera, use good lighting.<br>
+              No mask, sunglasses, or cap.
+            </div>
+          </div>
+
+          <div class="id-preview-area" id="face-preview-area">
+            <img id="face-preview-img" src="" alt="Face Preview">
+            <div class="id-preview-info">
+              <span>Face photo ready: <span id="face-file-name"></span></span>
+              <button class="id-remove-btn" id="face-remove-btn" type="button">✕ Remove</button>
+            </div>
+          </div>
+        </div>
         </div>
 
         <div class="btn-row">
@@ -1073,8 +1283,9 @@
       <div class="modal-body">
         <h4>1. Data We Collect</h4>
         <p>We collect personal information including your full name, date of birth, sex, civil status, home address,
-          years of residency, contact number, and email address. This information is required to verify your identity as
-          a resident of Barangay Banicain.</p>
+          years of residency, contact number, and email address. We also collect a photo of your valid ID and a photo of
+          your face. These are used only by authorized Barangay personnel to confirm that you are the person on the
+          ID and a resident of Barangay Banicain.</p>
 
         <h4>2. How We Use Your Data</h4>
         <p>Your data is used exclusively for processing barangay document requests, verifying your residency, and
@@ -1096,6 +1307,27 @@
       </div>
       <div class="modal-footer">
         <button id="close-privacy-btn">I Understand</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CAMERA MODAL -->
+  <div class="modal-overlay" id="modal-camera">
+    <div class="modal-box cam-box">
+      <div class="modal-header">
+        <h3>Take a Face Photo</h3>
+        <button class="modal-close" id="close-camera" type="button">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="cam-stage">
+          <video id="cam-video" autoplay playsinline muted></video>
+          <div class="cam-guide"></div>
+        </div>
+        <div class="cam-msg" id="cam-msg">Allow camera access, then center your face inside the outline.</div>
+      </div>
+      <div class="cam-footer">
+        <button type="button" class="cam-cancel" id="cam-cancel">Cancel</button>
+        <button type="button" class="cam-capture" id="cam-capture" disabled>Capture</button>
       </div>
     </div>
   </div>

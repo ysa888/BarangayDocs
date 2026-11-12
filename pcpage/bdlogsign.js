@@ -30,11 +30,11 @@ const db = getFirestore(app);
 const CLOUDINARY_CLOUD_NAME = 'ddizbxtdd';
 const CLOUDINARY_UPLOAD_PRESET = 'barangaydocs_preset'; // ← replace with your preset name
 
-async function uploadToCloudinary(file) {
+async function uploadToCloudinary(file, folder = 'barangaydocs/valid_ids') {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-    formData.append('folder', 'barangaydocs/valid_ids');
+    formData.append('folder', folder);
 
     const res = await fetch(
         `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
@@ -273,6 +273,133 @@ if (isRegisterPage) {
     });
 
     // ------------------------------------------
+    // Step 2 - Face Photo (Camera or Upload)
+    // ------------------------------------------
+    const MAX_FACE_BYTES = 5 * 1024 * 1024;
+    let faceFile = null;          // File object used at submit time
+    let camStream = null;
+
+    const faceBox        = el('face-box');
+    const facePreviewBox = el('face-preview-area');
+    const facePreviewImg = el('face-preview-img');
+    const faceNameLabel  = el('face-file-name');
+    const faceFileInput  = el('face-file');
+    const camModal       = el('modal-camera');
+    const camVideo       = el('cam-video');
+    const camMsg         = el('cam-msg');
+    const camCaptureBtn  = el('cam-capture');
+
+    function setFace(file) {
+        if (facePreviewImg.src.startsWith('blob:')) URL.revokeObjectURL(facePreviewImg.src);
+        faceFile = file;
+        facePreviewImg.src = URL.createObjectURL(file);
+        faceNameLabel.textContent = file.name;
+        facePreviewBox.style.display = 'block';
+        faceBox.classList.add('has-file');
+    }
+
+    function clearFace() {
+        if (facePreviewImg.src.startsWith('blob:')) URL.revokeObjectURL(facePreviewImg.src);
+        faceFile = null;
+        faceFileInput.value = '';
+        facePreviewImg.src = '';
+        faceNameLabel.textContent = '';
+        facePreviewBox.style.display = 'none';
+        faceBox.classList.remove('has-file');
+    }
+
+    // Upload a picture
+    el('face-upload-btn').addEventListener('click', () => faceFileInput.click());
+
+    faceFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            faceFileInput.value = '';
+            return alert('Please choose an image file (JPG, PNG, or WEBP).');
+        }
+        if (file.size > MAX_FACE_BYTES) {
+            faceFileInput.value = '';
+            return alert('Face photo is too large. Maximum size is 5MB.');
+        }
+        setFace(file);
+    });
+
+    el('face-remove-btn').addEventListener('click', clearFace);
+
+    // Live camera
+    function stopCamera() {
+        if (camStream) {
+            camStream.getTracks().forEach(t => t.stop());
+            camStream = null;
+        }
+        camVideo.srcObject = null;
+        camCaptureBtn.disabled = true;
+    }
+
+    function closeCamera() {
+        stopCamera();
+        camModal.classList.remove('open');
+    }
+
+    async function openCamera() {
+        camMsg.className = 'cam-msg';
+        camMsg.textContent = 'Allow camera access, then center your face inside the outline.';
+        camCaptureBtn.disabled = true;
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            alert('Camera is not available in this browser or connection. Please use the Upload Photo option instead. (Camera needs HTTPS or localhost.)');
+            return;
+        }
+
+        camModal.classList.add('open');
+
+        try {
+            camStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 960 } },
+                audio: false
+            });
+            camVideo.srcObject = camStream;
+            await camVideo.play();
+            camCaptureBtn.disabled = false;
+        } catch (err) {
+            console.error('Camera error:', err);
+            camMsg.className = 'cam-msg error';
+            if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
+                camMsg.textContent = 'Camera permission was denied. Allow camera access in your browser settings, or close this and use Upload Photo.';
+            } else if (err.name === 'NotFoundError' || err.name === 'OverconstrainedError') {
+                camMsg.textContent = 'No camera was found on this device. Please use Upload Photo instead.';
+            } else {
+                camMsg.textContent = 'Could not start the camera. Please use Upload Photo instead.';
+            }
+        }
+    }
+
+    function captureFrame() {
+        if (!camStream || !camVideo.videoWidth) return;
+
+        const canvas = document.createElement('canvas');
+        canvas.width  = camVideo.videoWidth;
+        canvas.height = camVideo.videoHeight;
+        // Save the un-mirrored frame so the admin sees a true photo
+        canvas.getContext('2d').drawImage(camVideo, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob((blob) => {
+            if (!blob) return alert('Could not capture the photo. Please try again.');
+            const file = new File([blob], `face-${Date.now()}.jpg`, { type: 'image/jpeg' });
+            setFace(file);
+            closeCamera();
+        }, 'image/jpeg', 0.9);
+    }
+
+    el('face-camera-btn').addEventListener('click', openCamera);
+    el('close-camera').addEventListener('click', closeCamera);
+    el('cam-cancel').addEventListener('click', closeCamera);
+    camCaptureBtn.addEventListener('click', captureFrame);
+    camModal.addEventListener('click', (e) => { if (e.target === e.currentTarget) closeCamera(); });
+    window.addEventListener('pagehide', stopCamera);
+
+    // ------------------------------------------
     // Step 2 — Next Button
     // ------------------------------------------
     el('step2-back').addEventListener('click', () => nextStep(1));
@@ -285,6 +412,7 @@ if (isRegisterPage) {
         if (!houseNumber)    return alert('Please enter your House No. / Street.');
         if (!yearsResidency) return alert('Please enter your Years of Residency.');
         if (!validIdFile)    return alert('Please upload a valid ID before proceeding.');
+        if (!faceFile)       return alert('Please take or upload a face photo before proceeding.');
 
         nextStep(3);
     });
@@ -315,6 +443,11 @@ if (isRegisterPage) {
             return nextStep(2);
         }
 
+        if (!faceFile) {
+            alert('Face photo is missing. Please go back to Step 2 and add your face photo.');
+            return nextStep(2);
+        }
+
         // Collect all fields from previous steps
         const firstName      = el('first-name').value.trim();
         const lastName       = el('last-name').value.trim();
@@ -333,6 +466,11 @@ if (isRegisterPage) {
         try {
             // Step 1: Upload Valid ID to Cloudinary
             const { url: validIdUrl, publicId: validIdPublicId } = await uploadToCloudinary(validIdFile);
+
+            submitBtn.textContent = '» Uploading face photo...';
+
+            // Step 1b: Upload face photo to Cloudinary
+            const { url: faceUrl, publicId: facePublicId } = await uploadToCloudinary(faceFile, 'barangaydocs/face_photos');
 
             submitBtn.textContent = '» Creating account...';
 
@@ -358,6 +496,8 @@ if (isRegisterPage) {
                 contactNumber,
                 validIdUrl,        // ← Cloudinary image URL (viewable by admin)
                 validIdPublicId,   // ← Cloudinary public ID (for future management)
+                faceUrl,           // ← Cloudinary face photo URL (admin compares with ID)
+                facePublicId,      // ← Cloudinary public ID of the face photo
                 status:          'pending',
                 role:            'resident',
                 createdAt:       new Date().toISOString()
@@ -376,7 +516,7 @@ if (isRegisterPage) {
             submitBtn.textContent = 'Create Account';
 
             if (error.message === 'Cloudinary upload failed') {
-                alert('Failed to upload your ID. Please check your internet connection and try again.');
+                alert('Failed to upload your ID or face photo. Please check your internet connection and try again.');
             } else if (error.code === 'auth/email-already-in-use') {
                 alert('This email is already registered. Please sign in instead.');
             } else if (error.code === 'auth/weak-password') {
