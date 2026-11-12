@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=1920, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BarangayDocs - Home</title>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
   <style>
@@ -26,7 +26,7 @@
       --red-text: #721C24;
       --sidebar-w: 260px;
     }
-    body { font-family: 'Nunito', sans-serif; background: var(--bg); min-height: 100vh; display: flex; }
+    body { font-family: 'Nunito', sans-serif; background: var(--bg); min-height: 100vh; display: flex; overflow-x: hidden; }
 
     /* ── SIDEBAR ── */
     .sidebar { width: var(--sidebar-w); min-height: 100vh; background: var(--primary); display: flex; flex-direction: column; position: fixed; left: 0; top: 0; bottom: 0; z-index: 200; }
@@ -56,6 +56,17 @@
     .main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
     .topbar { background: var(--card-bg); border-bottom: 1.5px solid var(--border); padding: 0 32px; height: 64px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
     .topbar-title { font-family: 'Poppins', sans-serif; font-size: 20px; font-weight: 700; color: var(--text-main); }
+
+    /* MOBILE MENU TOGGLE (hidden on desktop) */
+    .topbar-left { display: flex; align-items: center; }
+    .menu-toggle { display: none; width: 40px; height: 40px; border-radius: 12px; background: var(--bg); border: 2px solid var(--border); flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; margin-right: 12px; flex-shrink: 0; }
+    .menu-toggle span { display: block; width: 18px; height: 2px; background: var(--primary); border-radius: 2px; }
+    .menu-toggle:active { background: var(--border); }
+
+    /* MOBILE SIDEBAR BACKDROP */
+    .sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(27,58,107,0.45); z-index: 150; }
+    .sidebar-backdrop.show { display: block; }
+
     .topbar-right { display: flex; align-items: center; gap: 16px; }
     .search-wrap { position: relative; }
     .search-wrap input { width: 280px; height: 40px; border: 2px solid var(--border); border-radius: 12px; padding: 0 16px 0 42px; font-family: 'Nunito', sans-serif; font-size: 13px; color: var(--text-main); background: var(--bg); outline: none; transition: border-color 0.2s; }
@@ -176,9 +187,56 @@
     .modal-btns { display: flex; gap: 12px; }
     .btn-cancel { flex: 1; height: 46px; background: transparent; border: 2px solid var(--border); border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800; color: var(--text-sub); cursor: pointer; }
     .btn-logout { flex: 1; height: 46px; background: #DC3545; border: none; border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800; color: #fff; cursor: pointer; }
+
+    /* ── RESPONSIVE (tablet / mobile) ── */
+    @media (max-width: 1200px) {
+      .doc-grid { grid-template-columns: repeat(3, 1fr); }
+      .stats-row { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 1150px) {
+      .main-grid { grid-template-columns: 1fr; }
+      .right-col { flex-direction: row; flex-wrap: wrap; }
+      .user-card { flex: 1 1 340px; }
+      .status-card { flex: 1 1 220px; }
+      .about-card { flex: 1 1 100%; }
+    }
+    @media (max-width: 900px) {
+      .menu-toggle { display: flex; }
+      .sidebar { transform: translateX(-100%); transition: transform 0.28s ease; }
+      .sidebar.open { transform: translateX(0); box-shadow: 20px 0 50px rgba(0,0,0,0.25); }
+      .main { margin-left: 0; }
+      .search-wrap input { width: 200px; }
+    }
+    @media (max-width: 640px) {
+      .content { padding: 16px; gap: 16px; }
+      .topbar { padding: 0 16px; }
+      .topbar-title { font-size: 17px; }
+      .section-card { padding: 16px; }
+      .stats-row { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+      .doc-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+      .right-col { flex-direction: column; }
+      .user-card, .status-card, .about-card { flex: initial; width: 100%; }
+      .search-wrap input { width: 150px; padding-left: 36px; }
+      .search-icon { left: 12px; }
+      .notif-dropdown { position: fixed; left: 12px; right: 12px; top: 58px; width: auto; max-height: calc(100vh - 80px); }
+    }
+    @media (max-width: 480px) {
+      .uc-pills { flex-wrap: wrap; }
+      .pill { flex: 1 1 45%; }
+      .search-wrap input { width: 118px; }
+      .doc-icon-area { height: 64px; }
+      .doc-icon-area img { width: 40px; height: 40px; }
+      .about-card { padding: 16px; }
+      .modal { width: calc(100vw - 32px); padding: 24px; }
+      .stat-card { padding: 12px 14px; }
+      .stat-num { font-size: 24px; }
+    }
   </style>
 </head>
 <body>
+
+  <!-- MOBILE SIDEBAR BACKDROP -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
   <!-- SIDEBAR -->
   <aside class="sidebar">
@@ -236,7 +294,12 @@
   <!-- MAIN -->
   <div class="main">
     <div class="topbar">
-      <div class="topbar-title">Home</div>
+      <div class="topbar-left">
+        <button class="menu-toggle" id="menuToggle" aria-label="Toggle menu">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="topbar-title">Home</div>
+      </div>
       <div class="topbar-right">
         <div class="search-wrap">
           <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="#1B3A6B" stroke-width="2.5">
@@ -458,6 +521,17 @@
   </div>
 
   <script>
+    // Mobile sidebar toggler (hamburger + backdrop)
+    function toggleSidebar() {
+      document.querySelector('.sidebar').classList.toggle('open');
+      document.getElementById('sidebarBackdrop').classList.toggle('show');
+    }
+    document.getElementById('sidebarBackdrop').addEventListener('click', function () {
+      document.querySelector('.sidebar').classList.remove('open');
+      this.classList.remove('show');
+    });
+    document.getElementById('menuToggle').addEventListener('click', toggleSidebar);
+
     // Doc search (no Firebase needed)
     document.getElementById('searchInput').addEventListener('input', function () {
       const q = this.value.toLowerCase();

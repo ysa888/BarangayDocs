@@ -591,9 +591,38 @@
     }
     .fade-in.visible { opacity: 1; transform: translateY(0); }
 
+    /* MOBILE NAV TOGGLE */
+    .nav-toggle {
+      display: none; width: 42px; height: 42px; border-radius: 10px;
+      border: 2px solid var(--border); background: transparent;
+      flex-direction: column; align-items: center; justify-content: center;
+      gap: 4px; cursor: pointer; flex-shrink: 0;
+    }
+    .nav-toggle span { display: block; width: 20px; height: 2px; background: var(--primary); border-radius: 2px; transition: transform 0.25s ease, opacity 0.2s ease; }
+    .nav-toggle.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .nav-toggle.open span:nth-child(2) { opacity: 0; }
+    .nav-toggle.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+    .mobile-nav {
+      display: none; position: fixed; top: 72px; left: 0; right: 0; z-index: 99;
+      background: rgba(240,244,250,0.98); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border); padding: 10px 24px 16px;
+      flex-direction: column; gap: 4px;
+      box-shadow: 0 16px 32px rgba(27,58,107,0.14);
+    }
+    .mobile-nav.show { display: flex; }
+    .mobile-nav a { padding: 13px 10px; border-radius: 10px; font-size: 15px; font-weight: 700; color: var(--text-sub); text-decoration: none; }
+    .mobile-nav a:hover { background: rgba(27,58,107,0.06); color: var(--primary); }
+
+    @media (max-width: 1200px) {
+      nav { padding: 0 32px; }
+      .nav-links { gap: 20px; }
+      .hero-left, .hero-right { padding: 60px 40px; }
+    }
     @media (max-width: 900px) {
       nav { padding: 0 24px; }
       .nav-links { display: none; }
+      .nav-toggle { display: flex; }
       .hero { flex-direction: column; }
       .hero-left, .hero-right { width: 100%; padding: 48px 24px; }
       .hero-logo-text { font-size: 32px; }
@@ -605,6 +634,29 @@
       footer { flex-direction: column; gap: 16px; text-align: center; }
       .footer-links { flex-wrap: wrap; justify-content: center; }
       .final-cta { padding: 60px 24px; }
+    }
+    @media (max-width: 700px) {
+      .hero-left, .hero-right { padding: 40px 20px; }
+      .hero-logo-text { font-size: 28px; }
+      .hero-cta-box h2 { font-size: 22px; }
+      .cta-buttons { flex-direction: column; }
+      .or-divider { display: none; }
+      .section { padding: 48px 20px; }
+      .info-strip { padding: 48px 20px; }
+      .final-cta { padding: 48px 20px; }
+      .section-title { font-size: 26px; }
+    }
+    @media (max-width: 480px) {
+      .nav-cta .btn-outline { display: none; }
+      .nav-cta .btn-solid { padding: 9px 16px; font-size: 13px; }
+      .nav-logo-text { font-size: 17px; }
+      .hero-left, .hero-right { padding: 34px 18px; }
+      .hero-logo-text { font-size: 24px; }
+      .hero-cta-box { padding: 24px 18px; }
+      .hero-cta-box h2 { font-size: 20px; }
+      .section-title { font-size: 23px; }
+      .footer-links { flex-direction: column; gap: 8px; }
+      footer { padding: 32px 20px; }
     }
   </style>
 </head>
@@ -629,7 +681,17 @@
       <a href="barangaydocs_login.html" class="btn-outline">Sign In</a>
       <a href="barangaydocs_register.html" class="btn-solid">Register</a>
     </div>
+    <button class="nav-toggle" id="navToggle" aria-label="Toggle menu">
+      <span></span><span></span><span></span>
+    </button>
   </nav>
+
+  <!-- MOBILE NAV -->
+  <div class="mobile-nav" id="mobileNav">
+    <a href="#how-it-works">How It Works</a>
+    <a href="#documents">Documents</a>
+    <a href="#about">About</a>
+  </div>
 
   <!-- HERO -->
   <section class="hero">
@@ -1081,6 +1143,20 @@
       });
     }, { threshold: 0.12 });
     fadeEls.forEach(el => observer.observe(el));
+
+    // Mobile nav toggle
+    const navToggle = document.getElementById('navToggle');
+    const mobileNav = document.getElementById('mobileNav');
+    navToggle.addEventListener('click', () => {
+      const open = mobileNav.classList.toggle('show');
+      navToggle.classList.toggle('open', open);
+    });
+    mobileNav.querySelectorAll('a').forEach(a => {
+      a.addEventListener('click', () => {
+        mobileNav.classList.remove('show');
+        navToggle.classList.remove('open');
+      });
+    });
   </script>
 </body>
 </html>

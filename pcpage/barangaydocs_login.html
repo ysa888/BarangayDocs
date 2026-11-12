@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=1920, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BarangayDocs - Login</title>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
   <style>
@@ -26,6 +26,7 @@
       min-height: 100vh;
       width: 100%;
       display: flex;
+      overflow-x: hidden;
     }
     /* LEFT PANEL */
     .left-panel {
@@ -216,6 +217,38 @@
     .footer-note {
       margin-top: 48px; text-align: center;
       font-size: 12px; color: var(--text-light);
+    }
+
+    /* ── RESPONSIVE (tablet / mobile) ── */
+    @media (max-width: 1200px) and (min-width: 901px) {
+      .left-panel { padding: 60px 40px; }
+      .right-panel { padding: 40px; }
+      .logo-text { font-size: 34px; }
+      .features-wrap { margin-top: 40px; gap: 16px; }
+      .seal-row { margin-top: 36px; }
+    }
+    @media (max-width: 900px) {
+      body { flex-direction: column; }
+      .left-panel { width: 100%; padding: 40px 24px 32px; flex-shrink: 0; }
+      .brand-wrap { gap: 14px; }
+      .logo-row { gap: 12px; }
+      .logo-icon { width: 52px; height: 52px; border-radius: 14px; }
+      .logo-ph { width: 30px; height: 30px; }
+      .logo-text { font-size: 26px; }
+      .brand-tagline { font-size: 13px; }
+      .features-wrap, .seal-row { display: none; }
+      .right-panel { width: 100%; flex: 1; padding: 40px 24px; }
+    }
+    @media (max-width: 480px) {
+      .left-panel { padding: 28px 20px 24px; }
+      .logo-icon { width: 46px; height: 46px; }
+      .logo-text { font-size: 22px; }
+      .right-panel { padding: 32px 20px; }
+      .form-header { margin-bottom: 28px; }
+      .form-header h1 { font-size: 26px; }
+      .input-wrap input { height: 48px; font-size: 14px; }
+      .btn-primary { height: 50px; font-size: 15px; }
+      .footer-note { margin-top: 32px; }
     }
   </style>
 </head>

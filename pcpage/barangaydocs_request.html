@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=1920, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BarangayDocs - My Requests</title>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
   <style>
@@ -17,7 +17,7 @@
       --red-bg: #F8D7DA; --red-text: #721C24;
       --sidebar-w: 260px;
     }
-    body { font-family: 'Nunito', sans-serif; background: var(--bg); min-height: 100vh; display: flex; }
+    body { font-family: 'Nunito', sans-serif; background: var(--bg); min-height: 100vh; display: flex; overflow-x: hidden; }
 
     /* SIDEBAR */
     .sidebar { width: var(--sidebar-w); min-height: 100vh; background: var(--primary); display: flex; flex-direction: column; position: fixed; left: 0; top: 0; bottom: 0; z-index: 200; }
@@ -47,6 +47,17 @@
     .main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
     .topbar { background: var(--card-bg); border-bottom: 1.5px solid var(--border); padding: 0 32px; height: 64px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
     .topbar-title { font-family: 'Poppins', sans-serif; font-size: 20px; font-weight: 700; color: var(--text-main); }
+
+    /* MOBILE MENU TOGGLE (hidden on desktop) */
+    .topbar-left { display: flex; align-items: center; }
+    .menu-toggle { display: none; width: 40px; height: 40px; border-radius: 12px; background: var(--bg); border: 2px solid var(--border); flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; margin-right: 12px; flex-shrink: 0; }
+    .menu-toggle span { display: block; width: 18px; height: 2px; background: var(--primary); border-radius: 2px; }
+    .menu-toggle:active { background: var(--border); }
+
+    /* MOBILE SIDEBAR BACKDROP */
+    .sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(27,58,107,0.45); z-index: 150; }
+    .sidebar-backdrop.show { display: block; }
+
     .new-req-btn { height: 40px; padding: 0 20px; background: var(--primary); border: none; border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800; color: #fff; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; }
     .new-req-btn:hover { background: var(--primary-light); }
 
@@ -148,6 +159,9 @@
 </head>
 <body>
 
+  <!-- MOBILE SIDEBAR BACKDROP -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
   <!-- SIDEBAR -->
   <aside class="sidebar">
     <div class="sidebar-brand">
@@ -194,7 +208,12 @@
   <!-- MAIN -->
   <div class="main">
     <div class="topbar">
-      <div class="topbar-title">My Requests</div>
+      <div class="topbar-left">
+        <button class="menu-toggle" id="menuToggle" aria-label="Toggle menu">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="topbar-title">My Requests</div>
+      </div>
       <button class="new-req-btn" onclick="openModal()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         New Document Request
@@ -552,11 +571,71 @@
 }
 .btn-view-doc:hover { background: #254e8c; }
 
+/* ── RESPONSIVE (tablet / mobile) ── */
+@media (max-width: 900px) {
+  .menu-toggle { display: flex; }
+  .sidebar { transform: translateX(-100%); transition: transform 0.28s ease; }
+  .sidebar.open { transform: translateX(0); box-shadow: 20px 0 50px rgba(0,0,0,0.25); }
+  .main { margin-left: 0; }
+  .content { padding: 16px; }
+  .topbar { padding: 0 16px; }
+  .topbar-title { font-size: 17px; }
+  .tabs-bar { max-width: 100%; overflow-x: auto; }
+}
+@media (max-width: 720px) {
+  .new-req-btn { padding: 0 14px; }
+  .new-req-btn svg { display: none; }
+  .card-top { flex-wrap: wrap; }
+  .badge { margin-left: auto; }
+  .card-details { flex-direction: column; align-items: stretch; gap: 10px; }
+  .card-details .track-btn, .card-details .view-doc-btn { width: 100%; }
+  .track-row { flex-wrap: wrap; row-gap: 10px; }
+  .track-connector { min-width: 12px; }
+  .modal { padding: 22px 16px; }
+  .doc-type-grid { grid-template-columns: repeat(3, 1fr); }
+  .doc-preview-wrapper { width: 100vw; max-height: 100vh; border-radius: 0; }
+  .doc-preview-toolbar { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
+  .doc-preview-scroll { padding: 12px; }
+  .bry-doc { padding: 24px 16px; }
+  .bry-header-text { padding-right: 12px; }
+  .bry-header { gap: 12px; }
+  .bry-name { font-size: 22px; }
+  .bry-body { letter-spacing: 0.02em; }
+}
+@media (max-width: 480px) {
+  .doc-type-grid { grid-template-columns: repeat(2, 1fr); }
+  .modal-btn-row { flex-direction: column; }
+  .btn-cancel, .btn-submit { width: 100%; flex: none; }
+  .success-modal { width: calc(100vw - 32px); padding: 28px 20px; }
+  .logout-modal { width: calc(100vw - 32px); padding: 24px 20px; }
+  .dp-btn { padding: 7px 10px; font-size: 12px; }
+  .doc-preview-label { font-size: 12px; }
+  .bry-seal { width: 56px; height: 56px; }
+  .bry-republic { font-size: 10px; }
+  .bry-cert-title { font-size: 19px; }
+  .bry-footer { flex-direction: column; align-items: center; text-align: center; gap: 18px; }
+  .bry-qr-box { margin: 0 auto; }
+  .bry-qr-label { margin-left: 0; }
+  .bry-sign-sys { margin-top: 10px; }
+}
+
 /* @media print intentionally removed —
    printing is handled by the pop-up window in printDocument()
    which embeds its own styles and converts the QR canvas to an image. */
 </style>
 
+<script>
+  // Mobile sidebar toggler (hamburger + backdrop)
+  function toggleSidebar() {
+    document.querySelector('.sidebar').classList.toggle('open');
+    document.getElementById('sidebarBackdrop').classList.toggle('show');
+  }
+  document.getElementById('sidebarBackdrop').addEventListener('click', function () {
+    document.querySelector('.sidebar').classList.remove('open');
+    this.classList.remove('show');
+  });
+  document.getElementById('menuToggle').addEventListener('click', toggleSidebar);
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 <script type="module" src="request.js"></script>
 </body>

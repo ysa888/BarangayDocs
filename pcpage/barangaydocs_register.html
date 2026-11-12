@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=1920, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BarangayDocs - Register</title>
   <link
     href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap"
@@ -35,6 +35,7 @@
       min-height: 100vh;
       width: 100%;
       display: flex;
+      overflow-x: hidden;
     }
 
     /* LEFT PANEL */
@@ -728,6 +729,34 @@
     }
 
     .modal-footer button:hover { background: var(--primary-light); }
+
+    /* ── RESPONSIVE (tablet / mobile) ── */
+    @media (max-width: 1100px) {
+      .left-panel { padding: 40px; }
+      .right-panel { padding: 40px; }
+      .logo-text { font-size: 30px; }
+    }
+    @media (max-width: 900px) {
+      body { flex-direction: column; }
+      .left-panel { width: 100%; padding: 36px 24px 28px; flex-shrink: 0; }
+      .logo-row { gap: 12px; }
+      .logo-icon { width: 52px; height: 52px; border-radius: 14px; }
+      .logo-ph { width: 30px; height: 30px; border-radius: 8px; }
+      .logo-text { font-size: 26px; }
+      .brand-tagline { font-size: 12px; }
+      .steps-visual { display: none; }
+      .right-panel { width: 100%; flex: 1; padding: 32px 24px; }
+    }
+    @media (max-width: 560px) {
+      .two-col { grid-template-columns: 1fr; }
+      .right-panel { padding: 24px 16px; }
+      .form-header h1 { font-size: 23px; }
+      .form-header p { font-size: 13px; }
+      .btn-row { flex-direction: column; }
+      .btn-primary, .btn-secondary { width: 100%; flex: initial; }
+      .modal-box { width: calc(100vw - 32px); }
+      .modal-header, .modal-body, .modal-footer { padding-left: 18px; padding-right: 18px; }
+    }
   </style>
 </head>
 
