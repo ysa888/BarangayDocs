@@ -123,15 +123,18 @@
     .kebab-item.danger { color: var(--red-text); }
     .kebab-item.danger:hover { background: var(--red-bg); }
     /* Status badges */
-    .col-status { width: 130px; }
-    .status-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+    .col-status { width: 110px; flex-shrink: 0; }
+    .status-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 96px; }
+    .status-stack .badge { box-sizing: border-box; width: 100%; text-align: center; white-space: nowrap; line-height: 1.2; }
     .badge.approved { background: #D6EEF5; color: #0B5566; }
     .badge.released { background: #E2DAF3; color: #3F2A7A; }
-    .badge.validity { font-size: 9px; padding: 2px 8px; background: transparent; }
-    .badge.validity.active { border: 1.5px solid #28A745; color: var(--green-text); background: var(--green-bg); }
-    .badge.validity.expired { border: 1.5px solid #DC3545; color: var(--red-text); background: var(--red-bg); }
-    .badge.validity.active::before { content: '● '; color: #28A745; }
-    .badge.validity.expired::before { content: '● '; color: #DC3545; }
+    .status-stack .badge:not(.validity) { font-size: 9px; padding: 3px 4px; }
+    .badge.validity { font-size: 8px; padding: 2px 4px; display: flex; align-items: center; justify-content: center; gap: 3px; }
+    .badge.validity.active { border: 1px solid #28A745; color: var(--green-text); background: var(--green-bg); }
+    .badge.validity.expired { border: 1px solid #DC3545; color: var(--red-text); background: var(--red-bg); }
+    .badge.validity::before { content: ''; width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+    .badge.validity.active::before { background: #28A745; }
+    .badge.validity.expired::before { background: #DC3545; }
   </style>
 </head>
 <body>
