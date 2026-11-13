@@ -3,7 +3,7 @@
 // =============================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-analytics.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendEmailVerification, deleteUser } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
 // =============================================
@@ -419,6 +419,110 @@ if (isRegisterPage) {
     });
 
     // ------------------------------------------
+    // Email Verification LINK (Firebase)
+    // ------------------------------------------
+    const VC_RESEND_SECS = 60;
+    let vcPoll  = null;
+    let vcTimer = null;
+
+    const vcModal  = el('modal-verify');
+    const vcMsg    = el('vc-msg');
+    const vcResend = el('vc-resend');
+    const vcVerify = el('vc-verify');
+
+    function vcSetMsg(text, ok = false) {
+        vcMsg.textContent = text;
+        vcMsg.classList.toggle('ok', ok);
+    }
+
+    function startResendCooldown() {
+        clearInterval(vcTimer);
+        let left = VC_RESEND_SECS;
+        vcResend.disabled = true;
+        vcResend.textContent = `Resend in ${left}s`;
+        vcTimer = setInterval(() => {
+            left--;
+            if (left <= 0) {
+                clearInterval(vcTimer);
+                vcResend.disabled = false;
+                vcResend.textContent = 'Resend link';
+            } else {
+                vcResend.textContent = `Resend in ${left}s`;
+            }
+        }, 1000);
+    }
+
+    async function isEmailVerified(user) {
+        await user.reload();
+        return user.emailVerified;
+    }
+
+    // Sends the link, then waits until the user clicks it (or cancels)
+    async function verifyEmailByLink(user, email) {
+        try {
+            await sendEmailVerification(user);
+        } catch (err) {
+            try { await deleteUser(user); } catch (e) { console.error(e); }
+            throw err;
+        }
+
+        el('vc-email').textContent = email;
+        vcSetMsg('');
+        vcModal.classList.add('open');
+        startResendCooldown();
+
+        return new Promise((resolve, reject) => {
+            const finish = (ok) => {
+                clearInterval(vcPoll);
+                clearInterval(vcTimer);
+                vcModal.classList.remove('open');
+                ok ? resolve() : reject(new Error('verification-cancelled'));
+            };
+
+            // Auto-check every 3 seconds
+            vcPoll = setInterval(async () => {
+                try { if (await isEmailVerified(user)) finish(true); } catch (e) { /* retry next tick */ }
+            }, 3000);
+
+            vcVerify.onclick = async () => {
+                vcVerify.disabled = true;
+                try {
+                    if (await isEmailVerified(user)) return finish(true);
+                    vcSetMsg('Not verified yet. Click the link in your email first.');
+                } catch (e) {
+                    vcSetMsg('Could not check right now. Please try again.');
+                }
+                vcVerify.disabled = false;
+            };
+
+            vcResend.onclick = async () => {
+                vcResend.disabled = true;
+                vcResend.textContent = 'Sending...';
+                try {
+                    await sendEmailVerification(user);
+                    vcSetMsg('A new link was sent.', true);
+                    startResendCooldown();
+                } catch (e) {
+                    console.error('Resend error:', e);
+                    vcSetMsg(e.code === 'auth/too-many-requests'
+                        ? 'Too many requests. Please wait a while and try again.'
+                        : 'Could not resend the link. Please try again.');
+                    vcResend.disabled = false;
+                    vcResend.textContent = 'Resend link';
+                }
+            };
+
+            const cancel = async () => {
+                // remove the unverified account so the email can be used again
+                try { await deleteUser(user); } catch (e) { console.error(e); }
+                finish(false);
+            };
+            el('vc-cancel').onclick = cancel;
+            el('close-verify').onclick = cancel;
+        });
+    }
+
+    // ------------------------------------------
     // Step 3 — Account Setup + Firebase + Cloudinary
     // ------------------------------------------
     el('step3-back').addEventListener('click', () => nextStep(2));
@@ -479,6 +583,11 @@ if (isRegisterPage) {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
+            // Email must be verified by clicking the link sent to the inbox
+            submitBtn.textContent = '» Waiting for email verification...';
+            await verifyEmailByLink(user, email);
+            submitBtn.textContent = '» Saving account...';
+
             // Step 3: Save all data + ID URL to Firestore
             await setDoc(doc(db, 'residents', user.uid), {
                 uid:             user.uid,
@@ -516,7 +625,9 @@ if (isRegisterPage) {
             submitBtn.disabled = false;
             submitBtn.textContent = 'Create Account';
 
-            if (error.message === 'Cloudinary upload failed') {
+            if (error.message === 'verification-cancelled') {
+                return;
+            } else if (error.message === 'Cloudinary upload failed') {
                 alert('Failed to upload your ID or face photo. Please check your internet connection and try again.');
             } else if (error.code === 'auth/email-already-in-use') {
                 alert('This email is already registered. Please sign in instead.');
