@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>ITREND Dashboard</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-dark: #1A1A1A;
+            --bg-card: #252525;
+            --bg-sidebar: #1E1E1E;
+            --accent: #2EC4A0;
+            --accent-hover: #25A98A;
+            --text-white: #FFFFFF;
+            --text-muted: #9A9A9A;
+            --text-light: #C8C8C8;
+            --border: #333333;
+            --sidebar-width: 180px;
+            --topbar-height: 54px;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-white);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ── SIDEBAR ── */
+        aside {
+            width: var(--sidebar-width);
+            background-color: var(--bg-sidebar);
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+            flex-shrink: 0;
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            z-index: 10;
+        }
+
+        .sidebar-logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 14px 14px 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar-logo-icon {
+            width: 32px;
+            height: 32px;
+            background-color: var(--accent);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .sidebar-logo-icon svg {
+            width: 18px;
+            height: 18px;
+            fill: white;
+        }
+
+        .sidebar-logo span {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: var(--text-white);
+        }
+
+        .sidebar-section {
+            padding: 14px 10px 6px 10px;
+        }
+
+        .sidebar-section-label {
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 1.2px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+            padding-left: 8px;
+        }
+
+        .sidebar-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 10px;
+            border-radius: 7px;
+            cursor: pointer;
+            transition: background 0.15s;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-bottom: 1px;
+        }
+
+        .sidebar-item:hover { background: rgba(255,255,255,0.05); color: var(--text-light); }
+
+        .sidebar-item.active {
+            background-color: var(--accent);
+            color: white;
+        }
+
+        .sidebar-item.active svg { fill: white; }
+        .sidebar-item.active .nav-icon { color: white; }
+
+        .nav-icon {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            color: var(--text-muted);
+        }
+
+        .sidebar-item.active .nav-icon { color: white; }
+
+        .sidebar-divider {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 8px 12px;
+        }
+
+        .sidebar-settings {
+            margin-top: auto;
+        }
+
+        .sidebar-user {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            border-top: 1px solid var(--border);
+            cursor: pointer;
+        }
+
+        .user-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .user-info { flex: 1; min-width: 0; }
+        .user-name { font-size: 10px; font-weight: 600; color: var(--text-white); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .user-role { font-size: 9px; color: var(--text-muted); }
+        .user-arrow { color: var(--text-muted); font-size: 10px; }
+
+        /* ── RIGHT PANEL ── */
+        .right-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ── TOPBAR ── */
+        nav {
+            height: var(--topbar-height);
+            background-color: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            flex-shrink: 0;
+        }
+
+        .topbar-left { display: flex; align-items: center; gap: 12px; }
+
+        .hamburger {
+            background: none;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 4px;
+        }
+
+        .hamburger span {
+            display: block;
+            width: 20px;
+            height: 2px;
+            background: white;
+            border-radius: 2px;
+        }
+
+        .topbar-title {
+            font-size: 17px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: white;
+        }
+
+        .topbar-right { display: flex; align-items: center; gap: 10px; }
+
+        .notif-btn {
+            position: relative;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .notif-btn svg { width: 20px; height: 20px; fill: white; }
+
+        .notif-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            background: #FF4D4D;
+            color: white;
+            font-size: 8px;
+            font-weight: 700;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .profile-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: #2a8a72;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            color: white;
+            cursor: pointer;
+            border: 2px solid rgba(255,255,255,0.3);
+        }
+
+        /* ── MAIN ── */
+        main {
+            flex: 1;
+            overflow-y: auto;
+            padding: 18px 18px 18px 18px;
+            background-color: var(--bg-dark);
+        }
+
+        .page-title {
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            color: var(--text-white);
+            margin-bottom: 14px;
+        }
+
+        /* ── DASHBOARD 2-COL LAYOUT ── */
+        .dashboard-layout {
+            display: grid;
+            grid-template-columns: 220px 1fr;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .stats-col {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* ── STAT CARDS ── */
+
+        .stat-card {
+            background: var(--bg-card);
+            border-radius: 9px;
+            padding: 10px 12px 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            position: relative;
+            min-height: 76px;
+        }
+
+        .stat-label {
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 0.8px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-white);
+            line-height: 1.1;
+        }
+
+        .stat-sub {
+            font-size: 10px;
+            color: var(--accent);
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .stat-sub.online { color: var(--accent); }
+
+        .stat-mini-chart {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        /* ── TRENDING ── */
+        .trending-card {
+            background: var(--bg-card);
+            border-radius: 9px;
+            padding: 12px;
+        }
+
+        .trending-title {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        /* Filter tabs */
+        .filter-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+
+        .filter-tab {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            border-radius: 5px;
+            font-size: 9px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            background: transparent;
+            letter-spacing: 0.5px;
+        }
+
+        .filter-tab.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .filter-tab svg { width: 9px; height: 9px; }
+
+        .trending-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .trending-item:last-child { border-bottom: none; }
+
+        .trending-rank {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            width: 14px;
+        }
+
+        .trending-info { flex: 1; }
+        .trending-name { font-size: 11px; font-weight: 600; color: var(--text-white); }
+        .trending-sub { font-size: 9px; color: var(--text-muted); }
+
+        .trending-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .bar-mini {
+            display: flex;
+            align-items: flex-end;
+            gap: 2px;
+            height: 14px;
+        }
+
+        .bar-mini span {
+            width: 3px;
+            border-radius: 1px;
+            background: var(--accent);
+        }
+
+        .toggle-switch {
+            width: 30px;
+            height: 16px;
+            border-radius: 8px;
+            position: relative;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .toggle-switch.on { background: var(--accent); }
+        .toggle-switch.off { background: #555; }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: white;
+            transition: left 0.2s;
+        }
+
+        .toggle-switch.on::after { left: 16px; }
+        .toggle-switch.off::after { left: 2px; }
+
+        /* ── BOTTOM GRID ── */
+        .bottom-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+        }
+
+        .bottom-card {
+            background: var(--bg-card);
+            border-radius: 9px;
+            padding: 12px;
+        }
+
+        .bottom-card-title {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .table-header {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 6px;
+            padding: 3px 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 4px;
+        }
+
+        .th {
+            font-size: 8px;
+            font-weight: 600;
+            letter-spacing: 0.8px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .th:not(:first-child) { text-align: right; }
+
+        .table-row {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 6px;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+
+        .table-row:last-child { border-bottom: none; }
+
+        .td {
+            font-size: 10px;
+            font-weight: 500;
+            color: var(--text-light);
+        }
+
+        .td:not(:first-child) { text-align: right; color: var(--text-muted); }
+
+        /* AI Insights card */
+        .ai-insights-card {
+            background: var(--bg-card);
+            border-radius: 9px;
+            padding: 12px;
+        }
+
+        .ai-insights-title {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .ai-text {
+            font-size: 11px;
+            color: var(--text-light);
+            line-height: 1.6;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside>
+    <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">
+            <!-- Simple I icon -->
+            <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                <rect x="6" y="3" width="8" height="2.5" rx="1"/>
+                <rect x="8.5" y="6.5" width="3" height="7" rx="1"/>
+                <rect x="6" y="14.5" width="8" height="2.5" rx="1"/>
+            </svg>
+        </div>
+        <span>ITREND</span>
+    </div>
+
+    <div class="sidebar-section">
+        <div class="sidebar-section-label">MAIN</div>
+        <div class="sidebar-item active">
+            <span class="nav-icon">
+                <svg viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" width="14" height="14">
+                    <path d="M10 1.5l-8 6.5v10h5v-5h6v5h5v-10z"/>
+                </svg>
+            </span>
+            Dashboard
+        </div>
+        <div class="sidebar-item">
+            <span class="nav-icon">
+                <svg viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" width="14" height="14">
+                    <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                    <circle cx="10" cy="10" r="2"/>
+                    <line x1="10" y1="2" x2="10" y2="5" stroke="currentColor" stroke-width="1.5"/>
+                    <line x1="10" y1="15" x2="10" y2="18" stroke="currentColor" stroke-width="1.5"/>
+                    <line x1="2" y1="10" x2="5" y2="10" stroke="currentColor" stroke-width="1.5"/>
+                    <line x1="15" y1="10" x2="18" y2="10" stroke="currentColor" stroke-width="1.5"/>
+                </svg>
+            </span>
+            Map
+        </div>
+    </div>
+
+    <div class="sidebar-section">
+        <div class="sidebar-section-label">ANALYTICS</div>
+        <div class="sidebar-item">
+            <span class="nav-icon">
+                <svg viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" width="14" height="14">
+                    <path d="M10 2l1.8 5.4H17l-4.4 3.2 1.7 5.2L10 12.6l-4.3 3.2 1.7-5.2L3 7.4h5.2z"/>
+                </svg>
+            </span>
+            AI Insights
+        </div>
+        <div class="sidebar-item">
+            <span class="nav-icon">
+                <svg viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" width="14" height="14">
+                    <rect x="2" y="12" width="3" height="6" rx="1"/>
+                    <rect x="7" y="8" width="3" height="10" rx="1"/>
+                    <rect x="12" y="5" width="3" height="13" rx="1"/>
+                    <rect x="17" y="2" width="3" height="16" rx="1"/>
+                </svg>
+            </span>
+            Sales
+        </div>
+    </div>
+
+    <div class="sidebar-section">
+        <div class="sidebar-section-label">MANAGEMENT</div>
+        <div class="sidebar-item">
+            <span class="nav-icon">
+                <svg viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" width="14" height="14">
+                    <rect x="2" y="2" width="7" height="7" rx="1.5"/>
+                    <rect x="11" y="2" width="7" height="7" rx="1.5"/>
+                    <rect x="2" y="11" width="7" height="7" rx="1.5"/>
+                    <rect x="11" y="11" width="7" height="7" rx="1.5"/>
+                </svg>
+            </span>
+            Products
+        </div>
+        <div class="sidebar-item">
+            <span class="nav-icon">
+                <svg viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" width="14" height="14">
+                    <path d="M3 5h14v10H3z" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                    <path d="M7 5V3h6v2"/>
+                    <line x1="3" y1="9" x2="17" y2="9" stroke="currentColor" stroke-width="1"/>
+                </svg>
+            </span>
+            Branches
+        </div>
+        <div class="sidebar-item">
+            <span class="nav-icon">
+                <svg viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" width="14" height="14">
+                    <circle cx="10" cy="7" r="4"/>
+                    <path d="M3 18c0-4 3.1-6 7-6s7 2 7 6"/>
+                </svg>
+            </span>
+            Customers
+        </div>
+    </div>
+
+    <hr class="sidebar-divider">
+
+    <div class="sidebar-section sidebar-settings">
+        <div class="sidebar-item">
+            <span class="nav-icon">
+                <svg viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" width="14" height="14">
+                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+                    <path d="M17.7 8.4l-1.4-.3a6.9 6.9 0 00-.5-1.2l.8-1.2-1.3-1.3-1.2.8a6.9 6.9 0 00-1.2-.5l-.3-1.4H9.4l-.3 1.4a6.9 6.9 0 00-1.2.5l-1.2-.8-1.3 1.3.8 1.2a6.9 6.9 0 00-.5 1.2l-1.4.3v1.9l1.4.3a6.9 6.9 0 00.5 1.2l-.8 1.2 1.3 1.3 1.2-.8a6.9 6.9 0 001.2.5l.3 1.4h1.9l.3-1.4a6.9 6.9 0 001.2-.5l1.2.8 1.3-1.3-.8-1.2a6.9 6.9 0 00.5-1.2l1.4-.3V8.4z" stroke="currentColor" stroke-width="1.2" fill="none"/>
+                </svg>
+            </span>
+            Settings
+        </div>
+    </div>
+
+    <div class="sidebar-user">
+        <div class="user-avatar">JC</div>
+        <div class="user-info">
+            <div class="user-name">John Dela Cruz</div>
+            <div class="user-role">Business Owner</div>
+        </div>
+        <span class="user-arrow">›</span>
+    </div>
+</aside>
+
+<!-- RIGHT PANEL -->
+<div class="right-panel">
+    <!-- TOPBAR -->
+    <nav>
+        <div class="topbar-left">
+            <button class="hamburger">
+                <span></span><span></span><span></span>
+            </button>
+            <span class="topbar-title">ITREND</span>
+        </div>
+        <div class="topbar-right">
+            <div class="notif-btn">
+                <svg viewBox="0 0 20 20" fill="white" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M10 2a6 6 0 00-6 6v3l-2 2v1h16v-1l-2-2V8a6 6 0 00-6-6z"/>
+                    <path d="M10 18a2 2 0 002-2H8a2 2 0 002 2z"/>
+                </svg>
+                <div class="notif-badge">2</div>
+            </div>
+            <div class="profile-avatar">JC</div>
+        </div>
+    </nav>
+
+    <!-- MAIN CONTENT -->
+    <main>
+        <div class="page-title">DASHBOARD</div>
+
+        <!-- MAIN 2-COL LAYOUT -->
+        <div class="dashboard-layout">
+
+            <!-- LEFT: 4 stat cards stacked -->
+            <div class="stats-col">
+                <div class="stat-card">
+                    <div class="stat-label">Global Searches</div>
+                    <div class="stat-value">52.M</div>
+                    <div class="stat-sub">↑ 13 this week</div>
+                    <div class="stat-mini-chart">
+                        <svg width="70" height="28" viewBox="0 0 70 28">
+                            <polyline points="2,22 14,18 26,14 38,16 50,8 62,4 70,6" fill="none" stroke="#2EC4A0" stroke-width="1.5" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Active Trends</div>
+                    <div class="stat-value">52.M</div>
+                    <div class="stat-sub">↑ 1,525 rising</div>
+                    <div class="stat-mini-chart">
+                        <svg width="70" height="28" viewBox="0 0 70 28">
+                            <polyline points="2,20 12,16 24,18 34,10 46,12 58,6 70,4" fill="none" stroke="#2EC4A0" stroke-width="1.5" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Countries</div>
+                    <div class="stat-value">2.1M</div>
+                    <div class="stat-sub online">● online</div>
+                    <div class="stat-mini-chart">
+                        <svg width="70" height="28" viewBox="0 0 70 28">
+                            <polyline points="2,24 14,20 26,16 38,14 50,10 62,7 70,5" fill="none" stroke="#2EC4A0" stroke-width="1.5" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Live Users</div>
+                    <div class="stat-value">2.1M</div>
+                    <div class="stat-sub online">● online</div>
+                    <div class="stat-mini-chart">
+                        <svg width="70" height="28" viewBox="0 0 70 28">
+                            <polyline points="2,22 12,18 22,20 34,12 46,10 56,6 70,4" fill="none" stroke="#2EC4A0" stroke-width="1.5" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT: Trending Global -->
+            <div class="trending-card">
+                <div class="trending-title">Top Trending Global</div>
+
+                <!-- Filter tabs -->
+                <div class="filter-tabs">
+                    <button class="filter-tab active">
+                        <svg viewBox="0 0 10 10" fill="currentColor"><rect width="10" height="10" rx="2"/></svg>
+                        ALL
+                    </button>
+                    <button class="filter-tab">
+                        <svg viewBox="0 0 10 10" fill="currentColor"><path d="M1 8V4l4-3 4 3v4H6V6H4v2z"/></svg>
+                        PRODUCTS
+                    </button>
+                    <button class="filter-tab">
+                        <svg viewBox="0 0 10 10" fill="currentColor"><path d="M5 1a4 4 0 100 8A4 4 0 005 1z"/></svg>
+                        FOOD &amp; DRINKS
+                    </button>
+                    <button class="filter-tab">FASHION</button>
+                    <button class="filter-tab">PLACES</button>
+                </div>
+                <div class="filter-tabs">
+                    <button class="filter-tab">PLACES</button>
+                    <button class="filter-tab">ENTERTAINMENT</button>
+                    <button class="filter-tab">SERVICES</button>
+                    <button class="filter-tab">TECH</button>
+                    <button class="filter-tab">MORE ···</button>
+                </div>
+
+                <!-- Trending items -->
+                <div class="trending-item">
+                    <div class="trending-rank">1</div>
+                    <div class="trending-info">
+                        <div class="trending-name">JNX Hoodies</div>
+                    </div>
+                    <div class="trending-bar">
+                        <div class="bar-mini">
+                            <span style="height:4px"></span>
+                            <span style="height:7px"></span>
+                            <span style="height:5px"></span>
+                            <span style="height:10px"></span>
+                            <span style="height:8px"></span>
+                        </div>
+                        <div class="toggle-switch on"></div>
+                    </div>
+                </div>
+                <div class="trending-item">
+                    <div class="trending-rank">2</div>
+                    <div class="trending-info">
+                        <div class="trending-name">Taylor Swift Concert</div>
+                        <div class="trending-sub">Concert</div>
+                    </div>
+                    <div class="trending-bar">
+                        <div class="bar-mini">
+                            <span style="height:6px"></span>
+                            <span style="height:4px"></span>
+                            <span style="height:9px"></span>
+                            <span style="height:7px"></span>
+                            <span style="height:11px"></span>
+                        </div>
+                        <div class="toggle-switch on"></div>
+                    </div>
+                </div>
+                <div class="trending-item">
+                    <div class="trending-rank">3</div>
+                    <div class="trending-info">
+                        <div class="trending-name">&nbsp;</div>
+                    </div>
+                    <div class="trending-bar">
+                        <div class="bar-mini">
+                            <span style="height:5px"></span>
+                            <span style="height:8px"></span>
+                            <span style="height:6px"></span>
+                            <span style="height:4px"></span>
+                            <span style="height:7px"></span>
+                        </div>
+                        <div class="toggle-switch off"></div>
+                    </div>
+                </div>
+            </div><!-- end trending-card -->
+        </div><!-- end dashboard-layout -->
+
+        <!-- BOTTOM GRID -->
+        <div class="bottom-grid">
+            <!-- Top Countries -->
+            <div class="bottom-card">
+                <div class="bottom-card-title">Top Countries</div>
+                <div class="table-header">
+                    <div class="th">COUNTRY</div>
+                    <div class="th">CONSUMER</div>
+                    <div class="th">%</div>
+                </div>
+                <div class="table-row"><div class="td">United States</div><div class="td">66.7%</div><div class="td">—</div></div>
+                <div class="table-row"><div class="td">China</div><div class="td">15.7%</div><div class="td">—</div></div>
+                <div class="table-row"><div class="td">Japan</div><div class="td">55.7%</div><div class="td">—</div></div>
+                <div class="table-row"><div class="td">United Kingdom</div><div class="td">22.7%</div><div class="td">—</div></div>
+                <div class="table-row"><div class="td">India</div><div class="td">22.7%</div><div class="td">—</div></div>
+            </div>
+
+            <!-- Top Distributors -->
+            <div class="bottom-card">
+                <div class="bottom-card-title">Top Distributors</div>
+                <div class="table-header">
+                    <div class="th">COUNTRY</div>
+                    <div class="th">CONSUMER</div>
+                    <div class="th">%</div>
+                </div>
+                <div class="table-row"><div class="td">United States</div><div class="td">66.7%</div><div class="td">—</div></div>
+                <div class="table-row"><div class="td">China</div><div class="td">15.7%</div><div class="td">—</div></div>
+                <div class="table-row"><div class="td">Japan</div><div class="td">55.7%</div><div class="td">—</div></div>
+                <div class="table-row"><div class="td">United Kingdom</div><div class="td">22.7%</div><div class="td">—</div></div>
+                <div class="table-row"><div class="td">India</div><div class="td">22.7%</div><div class="td">—</div></div>
+            </div>
+
+            <!-- AI Insights -->
+            <div class="ai-insights-card">
+                <div class="ai-insights-title">AI Insights</div>
+                <div class="ai-text">
+                    The top trending products s ewda d pkdo waadjpjwa dklwn apowaj
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+</body>
+</html>
