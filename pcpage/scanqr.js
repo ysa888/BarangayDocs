@@ -851,6 +851,12 @@ const ICR_CSS = `
 .icr-thumb .tn div:last-child{font-size:11.5px;font-weight:600;color:var(--text-light,#9AA5BC)}
 .icr-thumb button{border:none;background:transparent;color:#DC3545;font-family:'Nunito',sans-serif;font-size:12.5px;font-weight:800;cursor:pointer;padding:6px 8px;border-radius:8px}
 .icr-thumb button:hover{background:var(--red-bg,#F8D7DA)}
+.icr-click{cursor:pointer;border-radius:10px;transition:background .15s}
+.icr-click:hover,.icr-click:focus-visible{background:rgba(42,82,152,.07);outline:none}
+.icr-click::after{content:"";display:inline-block;flex-shrink:0;width:14px;height:14px;margin-left:8px;vertical-align:middle;background:var(--primary-light,#2A5298);opacity:.4;transition:opacity .15s;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E") center/contain no-repeat}
+.icr-click:hover::after,.icr-click:focus-visible::after{opacity:1}
+@keyframes icrFlash{0%,100%{box-shadow:0 0 0 0 rgba(133,100,4,0)}40%{box-shadow:0 0 0 6px rgba(133,100,4,.28)}}
+.icr-banner.flash{animation:icrFlash 1.2s ease}
 .icr-banner{border-radius:14px;padding:12px 16px;font-size:13px;font-weight:700;line-height:1.5;margin-top:14px}
 .icr-banner.pending{background:var(--yellow-bg,#FFF3CD);color:var(--yellow-text,#856404)}
 .icr-banner.rejected{background:var(--red-bg,#F8D7DA);color:var(--red-text,#721C24)}
@@ -1148,7 +1154,7 @@ function wireInfoChangeRequest(user, userData, fullName) {
         busy = false;
     }
 
-    function openModal() {
+    function openModal(preselect) {
         if (hasPending) return;
         resetForm();
         setIcon('edit');
@@ -1156,6 +1162,11 @@ function wireInfoChangeRequest(user, userData, fullName) {
         el('icrSub').textContent = 'Tick what you want to update. Barangay staff will review your request before anything is changed.';
         form.hidden = false; viewDone.hidden = true;
         wrap.hidden = false;
+        // Opened from a clicked row → tick that item and show its inputs
+        if (typeof preselect === 'string' && el('icrChk_' + preselect)) {
+            el('icrChk_' + preselect).checked = true;
+            el('icrChk_' + preselect).dispatchEvent(new Event('change'));
+        }
     }
     function closeModal() { if (busy) return; wrap.hidden = true; }
 
@@ -1292,7 +1303,35 @@ function wireInfoChangeRequest(user, userData, fullName) {
             host.appendChild(banner); host.appendChild(trigger);
         }
     }
-    if (trigger) trigger.addEventListener('click', openModal);
+    if (trigger) trigger.addEventListener('click', () => openModal());
+
+    // ── Click a row in Personal Information → open the request with that item ticked ──
+    const ROW_MAP = { infoFullName: 'name', infoBirthday: 'birthday', infoSex: 'sex', infoCivilStatus: 'civil', infoAddress: 'address', infoResidency: 'residency' };
+    const flashBanner = () => {
+        if (!banner || banner.hidden) return;
+        banner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        banner.classList.add('flash');
+        setTimeout(() => banner.classList.remove('flash'), 1400);
+    };
+    // Pick the smallest element that holds only this one field (so rows never overlap)
+    const pickRow = (v) => {
+        const holdsOnlyThis = (n) => n && Object.keys(ROW_MAP).filter(i => el(i) && n.contains(el(i))).length === 1;
+        return [v.closest('[class*="row"], [class*="item"], li, tr'), v.parentElement, v].find(holdsOnlyThis) || v;
+    };
+    Object.entries(ROW_MAP).forEach(([id, key]) => {
+        const v = el(id);
+        if (!v) return;
+        const row = pickRow(v);
+        if (row.dataset.icr) return;
+        row.dataset.icr = key;
+        row.classList.add('icr-click');
+        row.tabIndex = 0;
+        row.setAttribute('role', 'button');
+        row.title = 'Click to request a change';
+        const go = () => (hasPending ? flashBanner() : openModal(key));
+        row.addEventListener('click', go);
+        row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+    });
 
     // Live status of the resident's latest request
     onSnapshot(query(collection(db, ICR_COLLECTION), where('uid', '==', user.uid)), (snap) => {
