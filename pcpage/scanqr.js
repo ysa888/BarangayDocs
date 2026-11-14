@@ -396,6 +396,9 @@ function initAccount(user, userData) {
     // Change Password from Settings card
     wireChangePassword(user);
 
+    // Request changes to name / birthday / sex / civil status / address / residency
+    wireInfoChangeRequest(user, userData, fullName);
+
     // Settings modals — About, Terms & Conditions, Privacy Policy
     wireSettingsModals();
 }
@@ -802,6 +805,392 @@ function wireChangePassword(user) {
 
     sendBtn.addEventListener('click',   () => sendResetLink(false));
     resendBtn.addEventListener('click', () => sendResetLink(true));
+}
+
+// =============================================
+// REQUEST INFORMATION CHANGE  (Account → Personal Information)
+// Residents can't edit identity details directly. They tick what they want
+// to change, fill in the new values, give a reason, and submit ONE request.
+// Staff review it (old → new) in `profileChangeRequests`; nothing on the
+// resident record changes until a request is approved.
+// Not changeable here: email, contact number (and barangay / city / province).
+// =============================================
+const ICR_COLLECTION = 'profileChangeRequests';
+
+const ICR_CSS = `
+.icr-modal{max-width:520px}
+.icr-intro{font-size:12.5px;color:var(--text-sub,#6B7A99);background:var(--bg,#F0F4FA);border-radius:12px;padding:10px 14px;margin-bottom:16px;line-height:1.55;font-weight:600}
+.icr-opt{border:2px solid var(--border,#D0DCF0);border-radius:14px;margin-bottom:10px;background:#fff;transition:border-color .15s,box-shadow .15s}
+.icr-opt.on{border-color:var(--primary-light,#2A5298);box-shadow:0 0 0 3px rgba(42,82,152,.08)}
+.icr-head{display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;user-select:none}
+.icr-head input{width:18px;height:18px;accent-color:var(--primary,#1B3A6B);flex-shrink:0;cursor:pointer}
+.icr-title{font-size:14px;font-weight:800;color:var(--text-main,#1B3A6B);white-space:nowrap}
+.icr-cur{font-size:12px;font-weight:600;color:var(--text-light,#9AA5BC);margin-left:auto;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.icr-body{padding:2px 14px 12px}
+.icr-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.icr-body .cpw-field{margin-bottom:10px}
+.icr-plain input,.icr-plain select{width:100%;height:44px;padding:0 14px;border:2px solid var(--border,#D0DCF0);border-radius:12px;font-family:'Nunito',sans-serif;font-size:14px;color:var(--text-main,#1B3A6B);background:#fff;outline:none}
+.icr-plain input:focus,.icr-plain select:focus,.icr-textarea:focus{border-color:var(--primary-light,#2A5298);box-shadow:0 0 0 3px rgba(42,82,152,.12)}
+.icr-textarea{width:100%;min-height:78px;padding:11px 14px;border:2px solid var(--border,#D0DCF0);border-radius:12px;font-family:'Nunito',sans-serif;font-size:14px;color:var(--text-main,#1B3A6B);resize:vertical;outline:none}
+.cpw-field.err .icr-plain input,.cpw-field.err .icr-plain select,.cpw-field.err .icr-textarea{border-color:#DC3545}
+.icr-fixed{font-size:12px;font-weight:700;color:var(--text-sub,#6B7A99);background:var(--bg,#F0F4FA);border-radius:10px;padding:9px 12px}
+.icr-btns{display:flex;gap:10px;margin-top:6px}
+.icr-btns .cpw-btn{flex:1}
+.icr-banner{border-radius:14px;padding:12px 16px;font-size:13px;font-weight:700;line-height:1.5;margin-top:14px}
+.icr-banner.pending{background:var(--yellow-bg,#FFF3CD);color:var(--yellow-text,#856404)}
+.icr-banner.rejected{background:var(--red-bg,#F8D7DA);color:var(--red-text,#721C24)}
+.icr-banner small{display:block;font-weight:600;margin-top:2px;opacity:.9}
+.icr-trigger{margin-top:14px;width:100%;height:46px;border:2px solid var(--primary-light,#2A5298);background:transparent;color:var(--primary-light,#2A5298);border-radius:12px;font-family:'Nunito',sans-serif;font-size:14px;font-weight:800;cursor:pointer}
+.icr-trigger:hover:not(:disabled){background:var(--primary-light,#2A5298);color:#fff}
+.icr-trigger:disabled{opacity:.55;cursor:not-allowed}
+@media(max-width:480px){.icr-row{grid-template-columns:1fr}.icr-cur{display:none}}
+`;
+
+CPW_ICONS.edit = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+
+const ICR_NAME_RE = /^[\p{L}][\p{L}\s.'’-]*$/u;
+
+function icrInput(id, label, type = 'text', extra = '') {
+    return `
+    <div class="cpw-field" id="${id}Field">
+        <label for="${id}">${label}</label>
+        <div class="cpw-input icr-plain"><input type="${type}" id="${id}" ${extra}></div>
+    </div>`;
+}
+
+function icrGroup(key, label, body) {
+    return `
+    <div class="icr-opt" id="icrOpt_${key}">
+        <label class="icr-head">
+            <input type="checkbox" id="icrChk_${key}">
+            <span class="icr-title">${label}</span>
+            <span class="icr-cur" id="icrCur_${key}"></span>
+        </label>
+        <div class="icr-body" id="icrBody_${key}" hidden>
+            ${body}
+            <div class="cpw-ferr" id="icrErr_${key}" role="alert"></div>
+        </div>
+    </div>`;
+}
+
+function wireInfoChangeRequest(user, userData, fullName) {
+    // Reuse shared modal styles from the change-password module, plus ours
+    if (!el('cpwStyles')) {
+        const s = document.createElement('style'); s.id = 'cpwStyles'; s.textContent = CPW_CSS; document.head.appendChild(s);
+    }
+    if (!el('icrStyles')) {
+        const s = document.createElement('style'); s.id = 'icrStyles'; s.textContent = ICR_CSS; document.head.appendChild(s);
+    }
+    if (el('icrOverlay')) return;
+
+    // ── Current values (residency field name differs between versions → detect) ──
+    const resKey = ['yearsOfResidency', 'yearsResidency', 'years_of_residency', 'residency', 'residencyYears']
+        .find(k => userData[k] !== undefined && userData[k] !== null && userData[k] !== '') || 'yearsOfResidency';
+    const cur = {
+        firstName:   userData.firstName   || '',
+        middleName:  userData.middleName  || '',
+        lastName:    userData.lastName    || '',
+        birthday:    userData.birthday    || '',
+        sex:         userData.sex         || '',
+        civilStatus: userData.civilStatus || '',
+        houseNumber: userData.houseNumber || '',
+        [resKey]:    userData[resKey] ?? ''
+    };
+    const today = new Date().toISOString().split('T')[0];
+    const prettyDate = (v) => {
+        const d = v ? new Date(v) : null;
+        return d && !isNaN(d) ? d.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Not provided';
+    };
+
+    // ── Groups: one checkbox each; `read` validates + returns the new values ──
+    const GROUPS = [
+        {
+            key: 'name', label: 'Name', keys: ['firstName', 'middleName', 'lastName'],
+            summary: () => [cur.firstName, cur.middleName, cur.lastName].filter(Boolean).join(' ') || '—',
+            read() {
+                const v = { firstName: el('icrFirst').value.trim().replace(/\s+/g, ' '), middleName: el('icrMiddle').value.trim().replace(/\s+/g, ' '), lastName: el('icrLast').value.trim().replace(/\s+/g, ' ') };
+                if (!v.firstName || !v.lastName) return { error: 'First name and last name are required.' };
+                if (!ICR_NAME_RE.test(v.firstName) || !ICR_NAME_RE.test(v.lastName) || (v.middleName && !ICR_NAME_RE.test(v.middleName)))
+                    return { error: 'Names can only contain letters, spaces, hyphens, apostrophes and periods.' };
+                return { values: v };
+            }
+        },
+        {
+            key: 'birthday', label: 'Date of Birth', keys: ['birthday'],
+            summary: () => prettyDate(cur.birthday),
+            read() {
+                const v = el('icrBirthday').value;
+                if (!v) return { error: 'Please enter your date of birth.' };
+                if (v > today || v < '1900-01-01') return { error: 'Please enter a valid date of birth.' };
+                return { values: { birthday: v } };
+            }
+        },
+        {
+            key: 'sex', label: 'Sex', keys: ['sex'],
+            summary: () => cur.sex || 'Not provided',
+            read() {
+                const v = el('icrSex').value;
+                return v ? { values: { sex: v } } : { error: 'Please select an option.' };
+            }
+        },
+        {
+            key: 'civil', label: 'Civil Status', keys: ['civilStatus'],
+            summary: () => cur.civilStatus || 'Not provided',
+            read() {
+                const v = el('icrCivil').value;
+                return v ? { values: { civilStatus: v } } : { error: 'Please select an option.' };
+            }
+        },
+        {
+            key: 'address', label: 'Home Address', keys: ['houseNumber'],
+            summary: () => cur.houseNumber || 'Not provided',
+            read() {
+                const v = el('icrHouse').value.trim().replace(/\s+/g, ' ');
+                return v.length >= 3 ? { values: { houseNumber: v } } : { error: 'Please enter your house no. / street.' };
+            }
+        },
+        {
+            key: 'residency', label: 'Years of Residency', keys: [resKey],
+            summary: () => cur[resKey] !== '' ? `${cur[resKey]} year(s)` : 'Not provided',
+            read() {
+                const raw = el('icrYears').value.trim();
+                const n = Number(raw);
+                if (raw === '' || !Number.isInteger(n) || n < 0 || n > 120) return { error: 'Enter a whole number from 0 to 120.' };
+                return { values: { [resKey]: n } };
+            }
+        }
+    ];
+
+    // ── Build modal ──
+    const wrap = document.createElement('div');
+    wrap.id = 'icrOverlay';
+    wrap.className = 'cpw-overlay';
+    wrap.hidden = true;
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.setAttribute('aria-labelledby', 'icrTitle');
+    wrap.innerHTML = `
+    <div class="cpw-modal icr-modal">
+        <button type="button" class="cpw-x" id="icrClose" aria-label="Close">${CPW_ICONS.close}</button>
+        <div class="cpw-icon" id="icrIcon"></div>
+        <h3 id="icrTitle">Request Information Change</h3>
+        <p class="cpw-sub" id="icrSub">Tick what you want to update. Barangay staff will review your request before anything is changed.</p>
+
+        <form id="icrForm" novalidate>
+            ${icrGroup('name', 'Name', `
+                <div class="icr-row">
+                    ${icrInput('icrFirst', 'First name', 'text', 'autocomplete="off"')}
+                    ${icrInput('icrLast', 'Last name', 'text', 'autocomplete="off"')}
+                </div>
+                ${icrInput('icrMiddle', 'Middle name <span style="font-weight:600;color:var(--text-light)">(optional)</span>', 'text', 'autocomplete="off"')}`)}
+            ${icrGroup('birthday', 'Date of Birth', icrInput('icrBirthday', 'New date of birth', 'date', `max="${today}"`))}
+            ${icrGroup('sex', 'Sex', `
+                <div class="cpw-field" id="icrSexField"><label for="icrSex">New value</label>
+                <div class="cpw-input icr-plain"><select id="icrSex"><option value="">Select</option><option>Male</option><option>Female</option></select></div></div>`)}
+            ${icrGroup('civil', 'Civil Status', `
+                <div class="cpw-field" id="icrCivilField"><label for="icrCivil">New value</label>
+                <div class="cpw-input icr-plain"><select id="icrCivil"><option value="">Select</option><option>Single</option><option>Married</option><option>Widowed</option></select></div></div>`)}
+            ${icrGroup('address', 'Home Address', `
+                ${icrInput('icrHouse', 'House No. / Street', 'text', 'autocomplete="off"')}
+                <div class="icr-fixed">Barangay Banicain, Olongapo City, Zambales</div>`)}
+            ${icrGroup('residency', 'Years of Residency', icrInput('icrYears', 'Years of residency', 'number', 'min="0" max="120" step="1" inputmode="numeric"'))}
+
+            <div class="cpw-field" id="icrReasonField" style="margin-top:16px" hidden>
+                <label for="icrReason">Reason for the change</label>
+                <textarea id="icrReason" class="icr-textarea" maxlength="300" placeholder="e.g. Corrected spelling of my surname, I got married, I moved to a new house…"></textarea>
+                <div class="cpw-ferr" id="icrReasonErr" role="alert"></div>
+            </div>
+
+            <div class="cpw-alert error" id="icrAlert" role="alert" hidden></div>
+            <div class="icr-btns">
+                <button type="button" class="cpw-btn ghost" id="icrCancel">Cancel</button>
+                <button type="submit" class="cpw-btn" id="icrSubmit">Submit Request</button>
+            </div>
+        </form>
+
+        <div id="icrViewDone" hidden>
+            <button type="button" class="cpw-btn" id="icrDone">Done</button>
+        </div>
+    </div>`;
+    document.body.appendChild(wrap);
+
+    // ── Refs / state ──
+    const form = el('icrForm'), viewDone = el('icrViewDone'), submitBtn = el('icrSubmit');
+    let busy = false, hasPending = false;
+
+    const setIcon = (name, ok = false) => { el('icrIcon').innerHTML = CPW_ICONS[name]; el('icrIcon').classList.toggle('ok', ok); };
+    const setErr = (key, msg) => { el('icrErr_' + key).textContent = msg || ''; };
+    const showAlert = (msg) => { const a = el('icrAlert'); a.textContent = msg || ''; a.hidden = !msg; };
+    const selectedGroups = () => GROUPS.filter(g => el('icrChk_' + g.key).checked);
+
+    function updateSubmitLabel() {
+        const n = selectedGroups().length;
+        el('icrReasonField').hidden = n === 0;
+        submitBtn.textContent = n > 1 ? `Submit Request (${n} changes)` : 'Submit Request';
+    }
+
+    function resetForm() {
+        // Pre-fill with the CURRENT values so residents only edit what's wrong
+        el('icrFirst').value = cur.firstName;  el('icrMiddle').value = cur.middleName;  el('icrLast').value = cur.lastName;
+        el('icrBirthday').value = cur.birthday ? String(cur.birthday).slice(0, 10) : '';
+        el('icrSex').value = cur.sex;  el('icrCivil').value = cur.civilStatus;
+        el('icrHouse').value = cur.houseNumber;  el('icrYears').value = cur[resKey];
+        el('icrReason').value = '';
+        GROUPS.forEach(g => {
+            el('icrChk_' + g.key).checked = false;
+            el('icrBody_' + g.key).hidden = true;
+            el('icrOpt_' + g.key).classList.remove('on');
+            el('icrCur_' + g.key).textContent = 'Current: ' + g.summary();
+            setErr(g.key, '');
+        });
+        ['icrFirst', 'icrLast', 'icrMiddle', 'icrBirthday', 'icrHouse', 'icrYears', 'icrSex', 'icrCivil'].forEach(id => el(id + 'Field')?.classList.remove('err'));
+        el('icrReasonField').classList.remove('err'); el('icrReasonErr').textContent = '';
+        showAlert('');
+        updateSubmitLabel();
+        submitBtn.disabled = false;
+        busy = false;
+    }
+
+    function openModal() {
+        if (hasPending) return;
+        resetForm();
+        setIcon('edit');
+        el('icrTitle').textContent = 'Request Information Change';
+        el('icrSub').textContent = 'Tick what you want to update. Barangay staff will review your request before anything is changed.';
+        form.hidden = false; viewDone.hidden = true;
+        wrap.hidden = false;
+    }
+    function closeModal() { if (busy) return; wrap.hidden = true; }
+
+    // ── Events ──
+    GROUPS.forEach(g => {
+        el('icrChk_' + g.key).addEventListener('change', (e) => {
+            el('icrBody_' + g.key).hidden = !e.target.checked;
+            el('icrOpt_' + g.key).classList.toggle('on', e.target.checked);
+            setErr(g.key, ''); showAlert('');
+            updateSubmitLabel();
+            if (e.target.checked) el('icrBody_' + g.key).querySelector('input,select')?.focus();
+        });
+    });
+    el('icrClose').addEventListener('click', closeModal);
+    el('icrCancel').addEventListener('click', closeModal);
+    el('icrDone').addEventListener('click', closeModal);
+    wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) closeModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !wrap.hidden) closeModal(); });
+    el('icrReason').addEventListener('input', () => { el('icrReasonField').classList.remove('err'); el('icrReasonErr').textContent = ''; });
+
+    // ── Submit: validate every ticked group, then create ONE request ──
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (busy) return;
+        showAlert('');
+        GROUPS.forEach(g => setErr(g.key, ''));
+        el('icrReasonField').classList.remove('err'); el('icrReasonErr').textContent = '';
+
+        const selected = selectedGroups();
+        if (!selected.length) return showAlert('Tick at least one item you want to change.');
+
+        const updates = {}, previous = {}, changedFields = [];
+        let firstBad = null;
+        for (const g of selected) {
+            const r = g.read();
+            if (r.error) { setErr(g.key, r.error); firstBad = firstBad || g.key; continue; }
+            const same = g.keys.every(k => String(r.values[k] ?? '').trim() === String(cur[k] ?? '').trim());
+            if (same) { setErr(g.key, 'This is the same as your current information.'); firstBad = firstBad || g.key; continue; }
+            g.keys.forEach(k => { updates[k] = r.values[k]; previous[k] = cur[k] ?? ''; });
+            changedFields.push(g.label);
+        }
+        const reason = el('icrReason').value.trim();
+        if (reason.length < 10) {
+            el('icrReasonField').classList.add('err');
+            el('icrReasonErr').textContent = 'Please tell us why (at least 10 characters).';
+            firstBad = firstBad || 'reason';
+        }
+        if (firstBad) {
+            (firstBad === 'reason' ? el('icrReason') : el('icrBody_' + firstBad).querySelector('input,select'))?.focus();
+            return;
+        }
+
+        busy = true; submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="cpw-spin"></span> Submitting…';
+        try {
+            // Guard against a second pending request (e.g. from another tab)
+            const dup = await getDocs(query(collection(db, ICR_COLLECTION), where('uid', '==', user.uid), where('status', '==', 'pending')));
+            if (!dup.empty) { hasPending = true; busy = false; closeModal(); return; }
+
+            await addDoc(collection(db, ICR_COLLECTION), {
+                uid: user.uid,
+                email: user.email,
+                residentName: fullName,
+                status: 'pending',
+                changedFields,
+                updates,
+                previous,
+                reason,
+                createdAt: serverTimestamp()
+            });
+            busy = false;
+            setIcon('check', true);
+            el('icrTitle').textContent = 'Request Submitted';
+            el('icrSub').textContent = `Your request to change ${changedFields.join(', ')} was sent to the barangay for review. You can track its status on this page.`;
+            form.hidden = true; viewDone.hidden = false;
+        } catch (err) {
+            console.error('Info change request failed:', err);
+            showAlert(err?.code === 'permission-denied'
+                ? 'You don\'t have permission to submit this request. Please contact the barangay office.'
+                : 'We couldn\'t submit your request. Please check your connection and try again.');
+        } finally {
+            busy = false;
+            submitBtn.disabled = false;
+            updateSubmitLabel();
+        }
+    });
+
+    // ── Entry point: button + live status banner on the Account page ──
+    let trigger = el('requestInfoChangeBtn');
+    let banner  = el('icrBanner');
+    if (!trigger) {
+        const host = el('infoFullName')?.closest('[class*="card"], [class*="section"]') || document.querySelector('.content, main');
+        if (host) {
+            banner = document.createElement('div'); banner.id = 'icrBanner'; banner.hidden = true;
+            trigger = document.createElement('button');
+            trigger.type = 'button'; trigger.id = 'requestInfoChangeBtn'; trigger.className = 'icr-trigger';
+            trigger.textContent = 'Request Information Change';
+            host.appendChild(banner); host.appendChild(trigger);
+        }
+    }
+    if (trigger) trigger.addEventListener('click', openModal);
+
+    // Live status of the resident's latest request
+    onSnapshot(query(collection(db, ICR_COLLECTION), where('uid', '==', user.uid)), (snap) => {
+        const reqs = snap.docs.map(d => d.data())
+            .sort((a, b) => (b.createdAt?.toMillis?.() ?? Date.now()) - (a.createdAt?.toMillis?.() ?? Date.now()));
+        const latest = reqs[0];
+        hasPending = latest?.status === 'pending';
+        if (trigger) {
+            trigger.disabled = hasPending;
+            trigger.textContent = hasPending ? 'Request Pending Review' : 'Request Information Change';
+        }
+        if (!banner) return;
+        if (latest && (latest.status === 'pending' || latest.status === 'rejected')) {
+            const what = (latest.changedFields || []).join(', ');
+            banner.hidden = false;
+            banner.className = 'icr-banner ' + latest.status;
+            banner.innerHTML = '';
+            const line = document.createElement('div');
+            line.textContent = latest.status === 'pending'
+                ? `Your request to change ${what} is waiting for staff review.`
+                : `Your request to change ${what} was not approved.`;
+            banner.appendChild(line);
+            if (latest.status === 'rejected' && latest.adminNote) {
+                const note = document.createElement('small');
+                note.textContent = 'Reason: ' + latest.adminNote;
+                banner.appendChild(note);
+            }
+        } else {
+            banner.hidden = true;
+        }
+    }, (err) => console.error('Info change status listener failed:', err));
 }
 
 /** Wire About, Terms & Conditions, Privacy Policy modal triggers */
