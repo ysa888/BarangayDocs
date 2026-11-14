@@ -367,6 +367,26 @@ async function notifyRequest(docId, status) {
         r = rs.data();
     } catch (err) { console.error('Notify: could not load request', err); return; }
 
+    // Audit trail entry for this status change
+    try {
+        const extra = status === 'rejected' ? (r.rejectReason ? 'Reason: ' + r.rejectReason : '')
+                    : status === 'ready'    ? ('Doc code ' + (r.docCode || '—') + (r.expiresAt ? ', expires ' + formatExpiry(r.expiresAt) : ''))
+                    : '';
+        await addDoc(collection(db, 'auditLogs'), {
+            action:       'request_' + status,
+            targetType:   'request',
+            targetId:     docId,
+            referenceNo:  r.referenceNo || '',
+            residentName: r.residentName || '',
+            residentUid:  r.uid || '',
+            documentType: r.documentType || '',
+            details:      extra,
+            adminUid:     auth.currentUser?.uid || '',
+            adminEmail:   auth.currentUser?.email || '',
+            createdAt:    serverTimestamp()
+        });
+    } catch (err) { console.error('Audit log failed (check Firestore rules):', err); }
+
     const message = makeMsg(r);
 
     // 1) In-app notification — this is what registers it for the resident

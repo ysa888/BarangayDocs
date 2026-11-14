@@ -66,6 +66,22 @@ function el(tag, cls, text) {
 
 // ---------- notify resident (in-app record + SMS) ----------
 async function notifyResident(r, requestId, approved, note) {
+    try {
+        await addDoc(collection(db, 'auditLogs'), {
+            action:       approved ? 'profile_approved' : 'profile_rejected',
+            targetType:   'profileChange',
+            targetId:     requestId,
+            referenceNo:  '',
+            residentName: r.residentName || '',
+            residentUid:  r.uid || '',
+            documentType: 'Information change',
+            details:      (r.changedFields || []).join(', ') + (note ? ' — Reason: ' + note : ''),
+            adminUid:     auth.currentUser?.uid || '',
+            adminEmail:   auth.currentUser?.email || '',
+            createdAt:    serverTimestamp()
+        });
+    } catch (e) { console.error('Audit log failed (check Firestore rules):', e); }
+
     const what = (r.changedFields || []).join(', ') || 'personal information';
     const message = approved
         ? `BarangayDocs: Your request to change ${what} was APPROVED and your information has been updated.`

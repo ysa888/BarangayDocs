@@ -13,7 +13,10 @@ import {
     updatePassword,
     sendPasswordResetEmail,
     EmailAuthProvider,
-    reauthenticateWithCredential
+    reauthenticateWithCredential,
+    sendSignInLinkToEmail,
+    isSignInWithEmailLink,
+    verifyBeforeUpdateEmail
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import {
     getFirestore,
@@ -26,7 +29,8 @@ import {
     orderBy,
     onSnapshot,
     serverTimestamp,
-    getDocs
+    getDocs,
+    updateDoc
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
 // =============================================
@@ -228,11 +232,17 @@ async function initHome(user, userData) {
             notifDropdown.classList.toggle('show');
         });
         document.addEventListener('click', (e) => {
-            if (!notifDropdown.contains(e.target) && e.target !== notifBtn) {
+            if (!notifDropdown.contains(e.target) && !notifBtn.contains(e.target)) {
                 notifDropdown.classList.remove('show');
             }
         });
     }
+
+    // Notifications addressed to this resident (status changes, profile change results)
+    onSnapshot(query(collection(db, 'notifications'), where('uid', '==', user.uid)), (snap) => {
+        notifState.notifs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderNotifs();
+    }, (err) => console.error('Notifications listener failed (check Firestore rules):', err));
 
     // Live stats from Firestore
     const reqRef = collection(db, 'requests');
@@ -273,59 +283,98 @@ async function initHome(user, userData) {
             const bT = b.data().createdAt?.toMillis?.() ?? 0;
             return bT - aT;
         });
-        renderNotifDropdown(sorted, pending + ready);
+        notifState.reqs = sorted;
+        renderNotifs();
     });
 }
 
-// ── Render notification dropdown items ──
-function renderNotifDropdown(docs, activeCount) {
+// ── Notification dropdown (merged: admin notifications + my requests) ──
+// notifState is filled by two listeners in initHome (requests + notifications)
+const notifState = { reqs: [], notifs: [] };
+
+function renderNotifs() {
     const listEl  = el('notifList');
     const badgeEl = el('notifBadge');
     if (!listEl) return;
 
-    // Badge
+    const ts = (v) => v?.toMillis?.() ?? (v ? new Date(v).getTime() : 0);
+    const cls = (s) => ({ approved: 'ready', released: 'released' }[s] || s || 'pending');
+    const label = {
+        pending: 'Pending', processing: 'Processing', approved: 'Approved',
+        ready: 'Ready for Pickup', rejected: 'Rejected', released: 'Released'
+    };
+
+    const items = [
+        ...notifState.notifs.map(n => ({
+            kind: 'notif', id: n.id, unread: n.read !== true,
+            title: n.title || 'Notification', sub: n.message || '', status: n.status,
+            time: n.createdAt, href: n.type === 'profile_change' ? 'barangaydocs_account.html' : 'barangaydocs_request.html'
+        })),
+        ...notifState.reqs.map(d => {
+            const r = d.data();
+            return { kind: 'req', unread: false, title: r.documentType || 'Document Request',
+                     sub: '', status: r.status || 'pending', time: r.createdAt, href: 'barangaydocs_request.html' };
+        })
+    ].sort((a, b) => ts(b.time) - ts(a.time)).slice(0, 12);
+
+    const unread = notifState.notifs.filter(n => n.read !== true).length;
     if (badgeEl) {
-        if (activeCount > 0) {
-            badgeEl.textContent = activeCount > 9 ? '9+' : activeCount;
-            badgeEl.classList.add('show');
-        } else {
-            badgeEl.classList.remove('show');
-        }
+        badgeEl.textContent = unread > 9 ? '9+' : unread;
+        badgeEl.classList.toggle('show', unread > 0);
     }
 
-    if (!docs || docs.length === 0) {
-        listEl.innerHTML = '<div class="notif-empty"><p>No requests yet</p></div>';
+    if (!items.length) {
+        listEl.innerHTML = '<div class="notif-empty"><p>No notifications yet</p></div>';
         return;
     }
 
-    const statusLabel = {
-        pending:    'Pending',
-        processing: 'Processing',
-        ready:      'Ready for Pickup',
-        rejected:   'Rejected',
-        released:   'Released'
-    };
+    listEl.innerHTML = '';
+    items.forEach(it => {
+        const row = document.createElement('div');
+        row.className = 'notif-item';
+        row.style.cursor = 'pointer';
+        if (it.unread) row.style.background = 'var(--bg)';
+        row.setAttribute('role', 'link');
+        row.tabIndex = 0;
 
-    // Show up to 10 most recent (already ordered desc from query)
-    const items = docs.slice(0, 10);
-    listEl.innerHTML = items.map(docSnap => {
-        const r      = docSnap.data();
-        const status = r.status || 'pending';
-        const label  = statusLabel[status] || 'Pending';
-        const time   = formatRelativeTime(r.createdAt);
-        const docType = r.documentType || 'Document Request';
-        return `
-            <div class="notif-item">
-                <div class="notif-dot ${status}"></div>
-                <div class="notif-item-body">
-                    <div class="notif-item-title">${docType}</div>
-                    <div class="notif-item-meta">
-                        <span class="notif-item-status ${status}">${label}</span>
-                        <span class="notif-item-time">· ${time}</span>
-                    </div>
-                </div>
-            </div>`;
-    }).join('');
+        const dot = document.createElement('div');
+        dot.className = 'notif-dot ' + cls(it.status);
+        const body = document.createElement('div');
+        body.className = 'notif-item-body';
+        const title = document.createElement('div');
+        title.className = 'notif-item-title';
+        title.textContent = it.title;
+        if (it.unread) title.style.fontWeight = '900';
+        const meta = document.createElement('div');
+        meta.className = 'notif-item-meta';
+        const st = document.createElement('span');
+        st.className = 'notif-item-status ' + cls(it.status);
+        st.textContent = label[it.status] || 'Update';
+        const tm = document.createElement('span');
+        tm.className = 'notif-item-time';
+        tm.textContent = '· ' + formatRelativeTime(it.time);
+        meta.append(st, tm);
+        body.append(title);
+        if (it.sub) {
+            const sub = document.createElement('div');
+            sub.className = 'notif-item-time';
+            sub.style.cssText = 'white-space:normal;margin-top:2px;line-height:1.4;';
+            sub.textContent = it.sub;
+            body.append(sub);
+        }
+        body.append(meta);
+        row.append(dot, body);
+
+        const go = async () => {
+            if (it.kind === 'notif' && it.unread) {
+                try { await updateDoc(doc(db, 'notifications', it.id), { read: true }); } catch (e) { console.error('Mark read failed:', e); }
+            }
+            window.location.href = it.href;
+        };
+        row.addEventListener('click', go);
+        row.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+        listEl.appendChild(row);
+    });
 }
 
 // =============================================
@@ -368,6 +417,13 @@ function initAccount(user, userData) {
         if (pstats[4]) pstats[4].textContent = released;
     });
 
+    // Keep the resident record's email in step with the login email
+    // (it changes after a verified email change)
+    if (user.email && String(userData.email || '').toLowerCase() !== user.email.toLowerCase()) {
+        userData.email = user.email;
+        updateDoc(doc(db, 'residents', user.uid), { email: user.email }).catch(e => console.error('Email sync failed:', e));
+    }
+
     // Personal info — fill by ID so adding/removing rows never breaks order
     const birthday = userData.birthday
         ? new Date(userData.birthday).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -398,6 +454,9 @@ function initAccount(user, userData) {
 
     // Request changes to name / birthday / sex / civil status / address / residency
     wireInfoChangeRequest(user, userData, fullName);
+
+    // Email / contact number: verify by email before they can be changed
+    wireSecureChange(user, userData);
 
     // Settings modals — About, Terms & Conditions, Privacy Policy
     wireSettingsModals();
@@ -1361,6 +1420,227 @@ function wireInfoChangeRequest(user, userData, fullName) {
             banner.hidden = true;
         }
     }, (err) => console.error('Info change status listener failed:', err));
+}
+
+// =============================================
+// SECURE CHANGE  (Account → Email / Contact Number)
+// These can't be edited directly. Clicking the row asks "do you really want
+// to change it?", then verifies the resident's current email first using an
+// email sign-in link (Firebase Auth "email link"), and only then lets them
+// continue:
+//   • Contact number → enter new number → saved
+//   • Email          → old email verified (link) → new email gets its own
+//                      verification link (verifyBeforeUpdateEmail); the email
+//                      only changes once that link is opened.
+// Requires: Firebase Console → Authentication → Sign-in method →
+//           Email/Password → enable "Email link (passwordless sign-in)".
+// =============================================
+const SC_KEY = 'bdSecureChange';
+const SC_MAX_AGE_MS = 30 * 60 * 1000;
+const SC_RESEND_SECONDS = 60;
+const scReturnUrl = () => location.origin + location.pathname;
+const SC_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function scNormalizePH(v) {
+    const n = String(v || '').replace(/[\s\-()]/g, '');
+    if (/^\+639\d{9}$/.test(n)) return '0' + n.slice(3);
+    if (/^639\d{9}$/.test(n))   return '0' + n.slice(2);
+    if (/^09\d{9}$/.test(n))    return n;
+    if (/^9\d{9}$/.test(n))     return '0' + n;
+    return null;
+}
+
+function wireSecureChange(user, userData) {
+    if (!el('cpwStyles')) {
+        const s = document.createElement('style'); s.id = 'cpwStyles'; s.textContent = CPW_CSS; document.head.appendChild(s);
+    }
+    if (el('scOverlay')) return;
+
+    const wrap = document.createElement('div');
+    wrap.id = 'scOverlay'; wrap.className = 'cpw-overlay'; wrap.hidden = true;
+    wrap.setAttribute('role', 'dialog'); wrap.setAttribute('aria-modal', 'true');
+    wrap.innerHTML = `
+    <div class="cpw-modal">
+        <button type="button" class="cpw-x" id="scClose" aria-label="Close">${CPW_ICONS.close}</button>
+        <div class="cpw-icon" id="scIcon"></div>
+        <h3 id="scTitle"></h3>
+        <p class="cpw-sub" id="scSub"></p>
+        <div id="scBody"></div>
+    </div>`;
+    document.body.appendChild(wrap);
+
+    let busy = false, timer = null;
+    const WHAT = { contact: 'contact number', email: 'email address' };
+
+    const close = () => { if (busy) return; clearInterval(timer); wrap.hidden = true; };
+    const setHead = (icon, title, subParts, ok = false) => {
+        el('scIcon').innerHTML = CPW_ICONS[icon] || CPW_ICONS.lock;
+        el('scIcon').classList.toggle('ok', ok);
+        el('scTitle').textContent = title;
+        const sub = el('scSub'); sub.textContent = '';
+        (Array.isArray(subParts) ? subParts : [subParts]).forEach(p => {
+            if (p && p.b) { const b = document.createElement('b'); b.textContent = p.b; sub.appendChild(b); }
+            else sub.appendChild(document.createTextNode(p));
+        });
+    };
+    const body = () => { const b = el('scBody'); b.innerHTML = ''; return b; };
+    const alertBox = (b) => { const a = document.createElement('div'); a.className = 'cpw-alert error'; a.hidden = true; b.appendChild(a); return (m) => { a.textContent = m || ''; a.hidden = !m; }; };
+    const btn = (text, cls, fn) => { const x = document.createElement('button'); x.type = 'button'; x.className = 'cpw-btn' + (cls ? ' ' + cls : ''); x.textContent = text; x.addEventListener('click', fn); return x; };
+    const gap = () => { const d = document.createElement('div'); d.style.height = '10px'; return d; };
+    const open = () => { wrap.hidden = false; };
+
+    // ── Step 1: "Do you really want to change?" ──
+    function viewConfirm(type) {
+        setHead('lock', `Change ${WHAT[type]}?`, type === 'contact'
+            ? ['Do you really want to change your contact number? For your security, we\'ll first send a verification link to your email ', { b: user.email }, '.']
+            : ['Do you really want to change your email address? We\'ll first verify your current email ', { b: user.email }, ', then send a second verification link to your new email.']);
+        const b = body(); const show = alertBox(b);
+        const send = btn('Yes, send verification link', '', async () => {
+            if (busy) return;
+            busy = true; send.disabled = true; send.textContent = 'Sending…'; show('');
+            const ok = await sendLink(type, show);
+            busy = false;
+            if (ok) viewSent(type); else { send.disabled = false; send.textContent = 'Yes, send verification link'; }
+        });
+        b.append(send, gap(), btn('Cancel', 'ghost', close));
+        open();
+    }
+
+    async function sendLink(type, show) {
+        try {
+            await sendSignInLinkToEmail(auth, user.email, { url: scReturnUrl(), handleCodeInApp: true });
+            localStorage.setItem(SC_KEY, JSON.stringify({ type, uid: user.uid, ts: Date.now() }));
+            return true;
+        } catch (err) {
+            console.error('Send verification link failed:', err);
+            show(err?.code === 'auth/too-many-requests' ? 'Too many attempts. Please wait a few minutes and try again.'
+                : err?.code === 'auth/network-request-failed' ? 'No internet connection. Please try again.'
+                : err?.code === 'auth/operation-not-allowed' ? 'Email link verification is not enabled yet. Please contact the barangay office.'
+                : 'We couldn\'t send the verification email. Please try again.');
+            return false;
+        }
+    }
+
+    // ── Step 2: "Check your email" ──
+    function viewSent(type) {
+        setHead('mail', 'Check your email', ['We sent a verification link to ', { b: user.email }, '. Open it ', { b: 'in this browser' }, ' to continue changing your ' + WHAT[type] + '.'], true);
+        const b = body(); const show = alertBox(b);
+        const resend = btn('', 'ghost', async () => {
+            resend.disabled = true; show('');
+            const ok = await sendLink(type, show);
+            if (ok) cooldown(); else resend.disabled = false;
+        });
+        const cooldown = () => {
+            let left = SC_RESEND_SECONDS; resend.disabled = true;
+            clearInterval(timer);
+            timer = setInterval(() => {
+                left--;
+                if (left <= 0) { clearInterval(timer); resend.disabled = false; resend.textContent = 'Resend link'; }
+                else resend.textContent = `Resend link in ${left}s`;
+            }, 1000);
+            resend.textContent = `Resend link in ${left}s`;
+        };
+        b.append(resend, gap(), btn('Close', '', close));
+        cooldown();
+        open();
+    }
+
+    // ── Step 3 (after the link is opened): enter the new value ──
+    function viewForm(type) {
+        const isContact = type === 'contact';
+        setHead(isContact ? 'check' : 'mail', 'Email verified',
+            isContact ? 'Enter your new contact number.' : ['Your current email is verified. Enter your ', { b: 'new email address' }, ' — we\'ll send it a verification link too.'], true);
+        const b = body();
+        const field = document.createElement('div'); field.className = 'cpw-field';
+        field.innerHTML = `<label for="scInput">${isContact ? 'New contact number' : 'New email address'}</label><div class="cpw-input"><input id="scInput" type="${isContact ? 'tel' : 'email'}" autocomplete="off" placeholder="${isContact ? '09XXXXXXXXX' : 'name@example.com'}"></div><div class="cpw-ferr" id="scErr"></div>`;
+        b.appendChild(field);
+        const save = btn(isContact ? 'Save contact number' : 'Send verification to new email', '', async () => {
+            if (busy) return;
+            const raw = el('scInput').value.trim();
+            const err = (m) => { el('scErr').textContent = m; field.classList.toggle('err', !!m); };
+            err('');
+            let value;
+            if (isContact) {
+                value = scNormalizePH(raw);
+                if (!value) return err('Enter a valid PH mobile number (e.g. 09171234567).');
+                if (value === scNormalizePH(userData.contactNumber)) return err('That is already your contact number.');
+            } else {
+                value = raw.toLowerCase();
+                if (!SC_EMAIL_RE.test(value)) return err('Enter a valid email address.');
+                if (value === String(user.email).toLowerCase()) return err('That is already your email address.');
+            }
+            busy = true; save.disabled = true; save.textContent = 'Saving…';
+            try {
+                if (isContact) {
+                    await updateDoc(doc(db, 'residents', user.uid), { contactNumber: value, updatedAt: serverTimestamp() });
+                    userData.contactNumber = value;
+                    const p = el('infoContact'); if (p) p.textContent = value;
+                    localStorage.removeItem(SC_KEY);
+                    busy = false; viewDone('Contact number updated', ['Your contact number is now ', { b: value }, '.']);
+                } else {
+                    await verifyBeforeUpdateEmail(user, value, { url: scReturnUrl() });
+                    localStorage.removeItem(SC_KEY);
+                    busy = false; viewDone('Verify your new email', ['We sent a verification link to ', { b: value }, '. Your email changes only after you open it, and you\'ll sign in with the new email afterwards. Until then your current email stays active.']);
+                }
+            } catch (e) {
+                console.error('Secure change failed:', e);
+                busy = false; save.disabled = false; save.textContent = isContact ? 'Save contact number' : 'Send verification to new email';
+                err(e?.code === 'auth/email-already-in-use' ? 'That email is already used by another account.'
+                  : e?.code === 'auth/invalid-email' ? 'Enter a valid email address.'
+                  : e?.code === 'auth/requires-recent-login' ? 'Your session expired. Please start again.'
+                  : e?.code === 'permission-denied' ? 'You don\'t have permission to do this. Please contact the barangay office.'
+                  : 'Something went wrong. Please try again.');
+            }
+        });
+        b.append(save, gap(), btn('Cancel', 'ghost', () => { localStorage.removeItem(SC_KEY); close(); }));
+        open();
+        el('scInput').focus();
+    }
+
+    function viewDone(title, sub) {
+        setHead('check', title, sub, true);
+        const b = body(); b.appendChild(btn('Done', '', close)); open();
+    }
+
+    function viewError(msg) {
+        setHead('lock', 'Verification failed', msg);
+        const b = body(); b.appendChild(btn('Close', '', close)); open();
+    }
+
+    // ── Rows → start the flow ──
+    [['infoContact', 'contact'], ['infoEmail', 'email']].forEach(([id, type]) => {
+        const row = el(id)?.closest('.info-row');
+        if (!row || row.dataset.sc) return;
+        row.dataset.sc = type;
+        row.tabIndex = 0; row.setAttribute('role', 'button');
+        row.title = 'Click to change (email verification required)';
+        const go = () => viewConfirm(type);
+        row.addEventListener('click', go);
+        row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+    });
+
+    el('scClose').addEventListener('click', close);
+    wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !wrap.hidden) close(); });
+
+    // ── Returning from the emailed link ──
+    (async () => {
+        if (!isSignInWithEmailLink(auth, location.href)) return;
+        const link = location.href;
+        history.replaceState(null, '', location.pathname);   // never leave the one-time code in the URL
+        let pending = null;
+        try { pending = JSON.parse(localStorage.getItem(SC_KEY) || 'null'); } catch (_) {}
+        if (!pending || pending.uid !== user.uid || Date.now() - pending.ts > SC_MAX_AGE_MS) {
+            return viewError('This link has expired, or it was opened in a different browser than the one you started in. Please start the change again.');
+        }
+        try {
+            await reauthenticateWithCredential(user, EmailAuthProvider.credentialWithLink(user.email, link));
+            viewForm(pending.type);
+        } catch (err) {
+            console.error('Email link verification failed:', err);
+            viewError('This verification link is invalid or has already been used. Please start the change again.');
+        }
+    })();
 }
 
 /** Wire About, Terms & Conditions, Privacy Policy modal triggers */
