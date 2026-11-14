@@ -1092,6 +1092,14 @@ function loadSidebarBadges() {
     );
 
     onSnapshot(
+        query(collection(db, 'profileChangeRequests'), where('status', '==', 'pending')),
+        (snap) => {
+            const badge = el('profile-changes-badge');
+            if (badge) badge.textContent = snap.size;
+        }
+    );
+
+    onSnapshot(
         collection(db, 'residents'),
         (snap) => {
             const pendingCount = snap.docs.filter(d => d.data().status === 'pending').length;
