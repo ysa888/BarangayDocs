@@ -1515,8 +1515,10 @@ function wireSecureChange(user, userData) {
             console.error('Send verification link failed:', err);
             show(err?.code === 'auth/too-many-requests' ? 'Too many attempts. Please wait a few minutes and try again.'
                 : err?.code === 'auth/network-request-failed' ? 'No internet connection. Please try again.'
-                : err?.code === 'auth/operation-not-allowed' ? 'Email link verification is not enabled yet. Please contact the barangay office.'
-                : 'We couldn\'t send the verification email. Please try again.');
+                : err?.code === 'auth/operation-not-allowed' ? 'Email link verification is not enabled in Firebase yet (Authentication → Sign-in method → Email/Password → Email link).'
+                : (err?.code === 'auth/unauthorized-continue-uri' || err?.code === 'auth/invalid-continue-uri' || err?.code === 'auth/missing-continue-uri')
+                    ? 'This web address (' + location.origin + ') is not allowed. Add its domain under Firebase → Authentication → Settings → Authorized domains, and open the site over http(s), not as a file.'
+                : 'We couldn\'t send the verification email. Please try again. (' + (err?.code || 'unknown error') + ')');
             return false;
         }
     }
