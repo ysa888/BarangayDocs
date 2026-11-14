@@ -14,8 +14,6 @@ import {
     sendPasswordResetEmail,
     EmailAuthProvider,
     reauthenticateWithCredential,
-    sendSignInLinkToEmail,
-    isSignInWithEmailLink,
     verifyBeforeUpdateEmail
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import {
@@ -1425,21 +1423,14 @@ function wireInfoChangeRequest(user, userData, fullName) {
 // =============================================
 // SECURE CHANGE  (Account → Email / Contact Number)
 // These can't be edited directly. Clicking the row asks "do you really want
-// to change it?", then verifies the resident's current email first using an
-// email sign-in link (Firebase Auth "email link"), and only then lets them
-// continue:
+// to change it?" and requires the resident's current PASSWORD first. Only
+// after the password is confirmed can the new value be entered:
 //   • Contact number → enter new number → saved
-//   • Email          → old email verified (link) → new email gets its own
-//                      verification link (verifyBeforeUpdateEmail); the email
-//                      only changes once that link is opened.
-// Requires: Firebase Console → Authentication → Sign-in method →
-//           Email/Password → enable "Email link (passwordless sign-in)".
+//   • Email          → enter new email → a verification link is sent to the NEW
+//                      address; the email only changes once that link is opened.
 // =============================================
-const SC_KEY = 'bdSecureChange';
-const SC_MAX_AGE_MS = 30 * 60 * 1000;
-const SC_RESEND_SECONDS = 60;
-const scReturnUrl = () => location.origin + location.pathname;
 const SC_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const scReturnUrl = () => location.origin + location.pathname;
 
 function scNormalizePH(v) {
     const n = String(v || '').replace(/[\s\-()]/g, '');
@@ -1469,10 +1460,11 @@ function wireSecureChange(user, userData) {
     </div>`;
     document.body.appendChild(wrap);
 
-    let busy = false, timer = null;
+    let busy = false;
     const WHAT = { contact: 'contact number', email: 'email address' };
 
-    const close = () => { if (busy) return; clearInterval(timer); wrap.hidden = true; };
+    const close = () => { if (!busy) wrap.hidden = true; };
+    const open  = () => { wrap.hidden = false; };
     const setHead = (icon, title, subParts, ok = false) => {
         el('scIcon').innerHTML = CPW_ICONS[icon] || CPW_ICONS.lock;
         el('scIcon').classList.toggle('ok', ok);
@@ -1484,92 +1476,68 @@ function wireSecureChange(user, userData) {
         });
     };
     const body = () => { const b = el('scBody'); b.innerHTML = ''; return b; };
-    const alertBox = (b) => { const a = document.createElement('div'); a.className = 'cpw-alert error'; a.hidden = true; b.appendChild(a); return (m) => { a.textContent = m || ''; a.hidden = !m; }; };
     const btn = (text, cls, fn) => { const x = document.createElement('button'); x.type = 'button'; x.className = 'cpw-btn' + (cls ? ' ' + cls : ''); x.textContent = text; x.addEventListener('click', fn); return x; };
     const gap = () => { const d = document.createElement('div'); d.style.height = '10px'; return d; };
-    const open = () => { wrap.hidden = false; };
+    const field = (id, label, type, placeholder) => {
+        const f = document.createElement('div'); f.className = 'cpw-field';
+        f.innerHTML = `<label for="${id}">${label}</label><div class="cpw-input"><input id="${id}" type="${type}" autocomplete="off" placeholder="${placeholder || ''}"></div><div class="cpw-ferr" id="${id}Err"></div>`;
+        return f;
+    };
+    const fieldErr = (id, msg) => { const e = el(id + 'Err'); if (e) e.textContent = msg || ''; e?.closest('.cpw-field')?.classList.toggle('err', !!msg); };
 
-    // ── Step 1: "Do you really want to change?" ──
+    // ── Step 1: "Do you really want to change?" + current password ──
     function viewConfirm(type) {
-        setHead('lock', `Change ${WHAT[type]}?`, type === 'contact'
-            ? ['Do you really want to change your contact number? For your security, we\'ll first send a verification link to your email ', { b: user.email }, '.']
-            : ['Do you really want to change your email address? We\'ll first verify your current email ', { b: user.email }, ', then send a second verification link to your new email.']);
-        const b = body(); const show = alertBox(b);
-        const send = btn('Yes, send verification link', '', async () => {
+        setHead('lock', `Change ${WHAT[type]}?`,
+            ['Do you really want to change your ' + WHAT[type] + '? For your security, enter your ', { b: 'current password' }, ' to continue.']);
+        const b = body();
+        const f = field('scPw', 'Current password', 'password', 'Enter your password');
+        f.querySelector('input').autocomplete = 'current-password';
+        b.appendChild(f);
+        const go = btn('Yes, continue', '', async () => {
             if (busy) return;
-            busy = true; send.disabled = true; send.textContent = 'Sending…'; show('');
-            const ok = await sendLink(type, show);
-            busy = false;
-            if (ok) viewSent(type); else { send.disabled = false; send.textContent = 'Yes, send verification link'; }
+            const pw = el('scPw').value;
+            fieldErr('scPw', '');
+            if (!pw) return fieldErr('scPw', 'Please enter your password.');
+            busy = true; go.disabled = true; go.textContent = 'Checking…';
+            try {
+                await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, pw));
+                busy = false; viewForm(type);
+            } catch (err) {
+                console.error('Password check failed:', err);
+                busy = false; go.disabled = false; go.textContent = 'Yes, continue';
+                fieldErr('scPw', ['auth/wrong-password', 'auth/invalid-credential', 'auth/invalid-login-credentials'].includes(err?.code) ? 'Incorrect password. Please try again.'
+                    : err?.code === 'auth/too-many-requests' ? 'Too many attempts. Please wait a few minutes and try again.'
+                    : err?.code === 'auth/network-request-failed' ? 'No internet connection. Please try again.'
+                    : 'We couldn\'t verify your password. Please try again.');
+            }
         });
-        b.append(send, gap(), btn('Cancel', 'ghost', close));
+        el('scPw').addEventListener('keydown', (e) => { if (e.key === 'Enter') go.click(); });
+        b.append(go, gap(), btn('Cancel', 'ghost', close));
         open();
+        el('scPw').focus();
     }
 
-    async function sendLink(type, show) {
-        try {
-            await sendSignInLinkToEmail(auth, user.email, { url: scReturnUrl(), handleCodeInApp: true });
-            localStorage.setItem(SC_KEY, JSON.stringify({ type, uid: user.uid, ts: Date.now() }));
-            return true;
-        } catch (err) {
-            console.error('Send verification link failed:', err);
-            show(err?.code === 'auth/too-many-requests' ? 'Too many attempts. Please wait a few minutes and try again.'
-                : err?.code === 'auth/network-request-failed' ? 'No internet connection. Please try again.'
-                : err?.code === 'auth/operation-not-allowed' ? 'Email link verification is not enabled in Firebase yet (Authentication → Sign-in method → Email/Password → Email link).'
-                : (err?.code === 'auth/unauthorized-continue-uri' || err?.code === 'auth/invalid-continue-uri' || err?.code === 'auth/missing-continue-uri')
-                    ? 'This web address (' + location.origin + ') is not allowed. Add its domain under Firebase → Authentication → Settings → Authorized domains, and open the site over http(s), not as a file.'
-                : 'We couldn\'t send the verification email. Please try again. (' + (err?.code || 'unknown error') + ')');
-            return false;
-        }
-    }
-
-    // ── Step 2: "Check your email" ──
-    function viewSent(type) {
-        setHead('mail', 'Check your email', ['We sent a verification link to ', { b: user.email }, '. Open it ', { b: 'in this browser' }, ' to continue changing your ' + WHAT[type] + '.'], true);
-        const b = body(); const show = alertBox(b);
-        const resend = btn('', 'ghost', async () => {
-            resend.disabled = true; show('');
-            const ok = await sendLink(type, show);
-            if (ok) cooldown(); else resend.disabled = false;
-        });
-        const cooldown = () => {
-            let left = SC_RESEND_SECONDS; resend.disabled = true;
-            clearInterval(timer);
-            timer = setInterval(() => {
-                left--;
-                if (left <= 0) { clearInterval(timer); resend.disabled = false; resend.textContent = 'Resend link'; }
-                else resend.textContent = `Resend link in ${left}s`;
-            }, 1000);
-            resend.textContent = `Resend link in ${left}s`;
-        };
-        b.append(resend, gap(), btn('Close', '', close));
-        cooldown();
-        open();
-    }
-
-    // ── Step 3 (after the link is opened): enter the new value ──
+    // ── Step 2: enter the new value ──
     function viewForm(type) {
         const isContact = type === 'contact';
-        setHead(isContact ? 'check' : 'mail', 'Email verified',
-            isContact ? 'Enter your new contact number.' : ['Your current email is verified. Enter your ', { b: 'new email address' }, ' — we\'ll send it a verification link too.'], true);
+        setHead('check', 'Password confirmed',
+            isContact ? 'Enter your new contact number.' : ['Enter your ', { b: 'new email address' }, '. We\'ll send it a verification link.'], true);
         const b = body();
-        const field = document.createElement('div'); field.className = 'cpw-field';
-        field.innerHTML = `<label for="scInput">${isContact ? 'New contact number' : 'New email address'}</label><div class="cpw-input"><input id="scInput" type="${isContact ? 'tel' : 'email'}" autocomplete="off" placeholder="${isContact ? '09XXXXXXXXX' : 'name@example.com'}"></div><div class="cpw-ferr" id="scErr"></div>`;
-        b.appendChild(field);
-        const save = btn(isContact ? 'Save contact number' : 'Send verification to new email', '', async () => {
+        b.appendChild(field('scInput', isContact ? 'New contact number' : 'New email address', isContact ? 'tel' : 'email', isContact ? '09XXXXXXXXX' : 'name@example.com'));
+        const label = isContact ? 'Save contact number' : 'Send verification to new email';
+        const save = btn(label, '', async () => {
             if (busy) return;
             const raw = el('scInput').value.trim();
-            const err = (m) => { el('scErr').textContent = m; field.classList.toggle('err', !!m); };
-            err('');
+            fieldErr('scInput', '');
             let value;
             if (isContact) {
                 value = scNormalizePH(raw);
-                if (!value) return err('Enter a valid PH mobile number (e.g. 09171234567).');
-                if (value === scNormalizePH(userData.contactNumber)) return err('That is already your contact number.');
+                if (!value) return fieldErr('scInput', 'Enter a valid PH mobile number (e.g. 09171234567).');
+                if (value === scNormalizePH(userData.contactNumber)) return fieldErr('scInput', 'That is already your contact number.');
             } else {
                 value = raw.toLowerCase();
-                if (!SC_EMAIL_RE.test(value)) return err('Enter a valid email address.');
-                if (value === String(user.email).toLowerCase()) return err('That is already your email address.');
+                if (!SC_EMAIL_RE.test(value)) return fieldErr('scInput', 'Enter a valid email address.');
+                if (value === String(user.email).toLowerCase()) return fieldErr('scInput', 'That is already your email address.');
             }
             busy = true; save.disabled = true; save.textContent = 'Saving…';
             try {
@@ -1577,24 +1545,25 @@ function wireSecureChange(user, userData) {
                     await updateDoc(doc(db, 'residents', user.uid), { contactNumber: value, updatedAt: serverTimestamp() });
                     userData.contactNumber = value;
                     const p = el('infoContact'); if (p) p.textContent = value;
-                    localStorage.removeItem(SC_KEY);
                     busy = false; viewDone('Contact number updated', ['Your contact number is now ', { b: value }, '.']);
                 } else {
                     await verifyBeforeUpdateEmail(user, value, { url: scReturnUrl() });
-                    localStorage.removeItem(SC_KEY);
                     busy = false; viewDone('Verify your new email', ['We sent a verification link to ', { b: value }, '. Your email changes only after you open it, and you\'ll sign in with the new email afterwards. Until then your current email stays active.']);
                 }
             } catch (e) {
                 console.error('Secure change failed:', e);
-                busy = false; save.disabled = false; save.textContent = isContact ? 'Save contact number' : 'Send verification to new email';
-                err(e?.code === 'auth/email-already-in-use' ? 'That email is already used by another account.'
+                busy = false; save.disabled = false; save.textContent = label;
+                fieldErr('scInput', e?.code === 'auth/email-already-in-use' ? 'That email is already used by another account.'
                   : e?.code === 'auth/invalid-email' ? 'Enter a valid email address.'
                   : e?.code === 'auth/requires-recent-login' ? 'Your session expired. Please start again.'
+                  : e?.code === 'auth/quota-exceeded' ? 'Too many verification emails were sent today. Please try again later.'
                   : e?.code === 'permission-denied' ? 'You don\'t have permission to do this. Please contact the barangay office.'
-                  : 'Something went wrong. Please try again.');
+                  : (e?.code === 'auth/unauthorized-continue-uri' || e?.code === 'auth/invalid-continue-uri') ? 'This web address is not authorized in Firebase (Authentication → Settings → Authorized domains).'
+                  : 'Something went wrong. Please try again. (' + (e?.code || 'error') + ')');
             }
         });
-        b.append(save, gap(), btn('Cancel', 'ghost', () => { localStorage.removeItem(SC_KEY); close(); }));
+        el('scInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') save.click(); });
+        b.append(save, gap(), btn('Cancel', 'ghost', close));
         open();
         el('scInput').focus();
     }
@@ -1604,18 +1573,13 @@ function wireSecureChange(user, userData) {
         const b = body(); b.appendChild(btn('Done', '', close)); open();
     }
 
-    function viewError(msg) {
-        setHead('lock', 'Verification failed', msg);
-        const b = body(); b.appendChild(btn('Close', '', close)); open();
-    }
-
     // ── Rows → start the flow ──
     [['infoContact', 'contact'], ['infoEmail', 'email']].forEach(([id, type]) => {
         const row = el(id)?.closest('.info-row');
         if (!row || row.dataset.sc) return;
         row.dataset.sc = type;
         row.tabIndex = 0; row.setAttribute('role', 'button');
-        row.title = 'Click to change (email verification required)';
+        row.title = 'Click to change (password required)';
         const go = () => viewConfirm(type);
         row.addEventListener('click', go);
         row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
@@ -1624,25 +1588,6 @@ function wireSecureChange(user, userData) {
     el('scClose').addEventListener('click', close);
     wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !wrap.hidden) close(); });
-
-    // ── Returning from the emailed link ──
-    (async () => {
-        if (!isSignInWithEmailLink(auth, location.href)) return;
-        const link = location.href;
-        history.replaceState(null, '', location.pathname);   // never leave the one-time code in the URL
-        let pending = null;
-        try { pending = JSON.parse(localStorage.getItem(SC_KEY) || 'null'); } catch (_) {}
-        if (!pending || pending.uid !== user.uid || Date.now() - pending.ts > SC_MAX_AGE_MS) {
-            return viewError('This link has expired, or it was opened in a different browser than the one you started in. Please start the change again.');
-        }
-        try {
-            await reauthenticateWithCredential(user, EmailAuthProvider.credentialWithLink(user.email, link));
-            viewForm(pending.type);
-        } catch (err) {
-            console.error('Email link verification failed:', err);
-            viewError('This verification link is invalid or has already been used. Please start the change again.');
-        }
-    })();
 }
 
 /** Wire About, Terms & Conditions, Privacy Policy modal triggers */
