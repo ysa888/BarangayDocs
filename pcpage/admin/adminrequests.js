@@ -17,6 +17,7 @@ import {
     doc,
     updateDoc,
     getDoc,
+    addDoc,
     serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 import { sendSMS } from './sms.js';
@@ -344,13 +345,61 @@ document.addEventListener('click', (e) => {
 window.addEventListener('scroll', closeKebabMenu, true);
 window.addEventListener('resize', closeKebabMenu);
 
-async function notifyRequest(docId, makeMsg) {
-  const rs = await getDoc(doc(db, 'requests', docId));
-  if (!rs.exists()) return;
-  const r = rs.data();
-  const res = r.uid ? await getDoc(doc(db, 'residents', r.uid)) : null;
-  const phone = res?.exists() ? res.data().contactNumber : null;
-  sendSMS(phone, makeMsg(r));
+// Messages sent to the resident for each status change
+const STATUS_MESSAGES = {
+    processing: r => `BarangayDocs: Your request ${r.referenceNo} (${r.documentType}) is now being processed.`,
+    approved:   r => `BarangayDocs: Your request ${r.referenceNo} (${r.documentType}) has been approved.`,
+    ready:      r => `BarangayDocs: Ref ${r.referenceNo} (${r.documentType}) is READY for pickup.`,
+    released:   r => `BarangayDocs: Ref ${r.referenceNo} (${r.documentType}) has been released. Thank you!`,
+    rejected:   r => `BarangayDocs: Request ${r.referenceNo} was rejected.${r.rejectReason ? ' Reason: ' + r.rejectReason : ' Check the app for details.'}`
+};
+
+// Registers an in-app notification (Firestore "notifications") AND sends an SMS.
+// Each channel is isolated so one failing never blocks the other.
+async function notifyRequest(docId, status) {
+    const makeMsg = STATUS_MESSAGES[status];
+    if (!makeMsg) return;
+
+    let r;
+    try {
+        const rs = await getDoc(doc(db, 'requests', docId));
+        if (!rs.exists()) return;
+        r = rs.data();
+    } catch (err) { console.error('Notify: could not load request', err); return; }
+
+    const message = makeMsg(r);
+
+    // 1) In-app notification — this is what registers it for the resident
+    try {
+        if (r.uid) {
+            await addDoc(collection(db, 'notifications'), {
+                uid:         r.uid,
+                requestId:   docId,
+                referenceNo: r.referenceNo || '',
+                type:        'request_status',
+                status,
+                title:       'Request ' + getBadgeLabel(status),
+                message,
+                read:        false,
+                createdAt:   serverTimestamp()
+            });
+        } else {
+            console.warn('Notify: request has no uid, in-app notification skipped');
+        }
+    } catch (err) { console.error('Notify: in-app notification failed (check Firestore rules)', err); }
+
+    // 2) SMS
+    try {
+        let phone = r.contactNumber || null;
+        if (r.uid) {
+            const res = await getDoc(doc(db, 'residents', r.uid));
+            if (res.exists()) {
+                const d = res.data();
+                phone = d.contactNumber || d.phone || d.mobile || phone;
+            }
+        }
+        await sendSMS(phone, message);
+    } catch (err) { console.error('Notify: SMS failed', err); }
 }
 
 // =============================================
@@ -365,6 +414,7 @@ async function updateRequestStatus(docId, newStatus, row, data) {
         if (newStatus === 'released') updateData.releasedAt = serverTimestamp();
 
         await updateDoc(doc(db, 'requests', docId), updateData);
+        notifyRequest(docId, newStatus);
 
         // Update row UI
         renderStatusCell(row, newStatus, data.expiresAt);
@@ -401,8 +451,8 @@ function openRejectModal(docId, row) {
             updatedAt: serverTimestamp()
         });
 
-        notifyRequest(docId, r => `BarangayDocs: Request ${r.referenceNo} was rejected. Check the app for the reason.`);
-        
+        notifyRequest(docId, 'rejected');
+
         renderStatusCell(row, 'rejected');
         const actionCol = row.querySelector('.col-action');
         if (actionCol) actionCol.innerHTML = `<div class="action-row">${getActionButtons(docId, 'rejected')}</div>`;
@@ -478,7 +528,7 @@ function openReadyModal(docId, data, row) {
                 updatedAt:  serverTimestamp()
             });
 
-            notifyRequest(docId, r => `BarangayDocs: Ref ${r.referenceNo} (${r.documentType}) is READY for pickup.`);
+            notifyRequest(docId, 'ready');
 
             renderStatusCell(row, 'ready', expiry);
             const actionCol = row.querySelector('.col-action');

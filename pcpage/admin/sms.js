@@ -3,10 +3,11 @@ const TEXTBEE_DEVICE_ID = '6aeccecd57bff70ef2eab158';
 
 function normalizePH(num) {
   if (!num) return null;
-  const n = String(num).replace(/[\s-]/g, '');
-  if (n.startsWith('+63')) return n;
-  if (n.startsWith('63'))  return '+' + n;
-  if (n.startsWith('0'))   return '+63' + n.slice(1);
+  const n = String(num).replace(/[\s\-()]/g, '');
+  if (/^\+639\d{9}$/.test(n)) return n;
+  if (/^639\d{9}$/.test(n))   return '+' + n;
+  if (/^09\d{9}$/.test(n))    return '+63' + n.slice(1);
+  if (/^9\d{9}$/.test(n))     return '+63' + n;
   return null;
 }
 
