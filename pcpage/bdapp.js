@@ -836,6 +836,21 @@ const ICR_CSS = `
 .icr-fixed{font-size:12px;font-weight:700;color:var(--text-sub,#6B7A99);background:var(--bg,#F0F4FA);border-radius:10px;padding:9px 12px}
 .icr-btns{display:flex;gap:10px;margin-top:6px}
 .icr-btns .cpw-btn{flex:1}
+.icr-hint{font-size:12px;font-weight:600;color:var(--text-sub,#6B7A99);background:var(--bg,#F0F4FA);border-radius:10px;padding:9px 12px;margin-bottom:10px;line-height:1.55}
+.icr-hint b{color:var(--text-main,#1B3A6B)}
+.icr-drop{width:100%;height:46px;border:2px dashed var(--border,#D0DCF0);border-radius:12px;background:transparent;color:var(--primary-light,#2A5298);font-family:'Nunito',sans-serif;font-size:13.5px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.icr-drop svg{width:18px;height:18px}
+.icr-drop:hover:not(:disabled){background:var(--bg,#F0F4FA);border-color:var(--primary-light,#2A5298)}
+.icr-drop:disabled{opacity:.5;cursor:not-allowed}
+.cpw-field.err .icr-drop{border-color:#DC3545}
+.icr-thumbs{display:grid;gap:8px;margin-top:10px}
+.icr-thumb{display:flex;align-items:center;gap:12px;border:2px solid var(--border,#D0DCF0);border-radius:12px;padding:8px 10px}
+.icr-thumb img{width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0;background:var(--bg,#F0F4FA)}
+.icr-thumb .tn{flex:1;min-width:0}
+.icr-thumb .tn div:first-child{font-size:13px;font-weight:800;color:var(--text-main,#1B3A6B);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.icr-thumb .tn div:last-child{font-size:11.5px;font-weight:600;color:var(--text-light,#9AA5BC)}
+.icr-thumb button{border:none;background:transparent;color:#DC3545;font-family:'Nunito',sans-serif;font-size:12.5px;font-weight:800;cursor:pointer;padding:6px 8px;border-radius:8px}
+.icr-thumb button:hover{background:var(--red-bg,#F8D7DA)}
 .icr-banner{border-radius:14px;padding:12px 16px;font-size:13px;font-weight:700;line-height:1.5;margin-top:14px}
 .icr-banner.pending{background:var(--yellow-bg,#FFF3CD);color:var(--yellow-text,#856404)}
 .icr-banner.rejected{background:var(--red-bg,#F8D7DA);color:var(--red-text,#721C24)}
@@ -847,6 +862,40 @@ const ICR_CSS = `
 `;
 
 CPW_ICONS.edit = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+
+CPW_ICONS.upload = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
+
+const ICR_MAX_PROOFS     = 2;        // photos per request
+const ICR_MAX_PROOF_CHARS = 380000;  // per compressed photo (keeps the request under Firestore's 1 MB doc limit)
+const ICR_MAX_ORIGINAL   = 10 * 1024 * 1024;
+
+/** Shrink a photo in the browser → JPEG data URL under ICR_MAX_PROOF_CHARS */
+async function icrCompress(file) {
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((res, rej) => {
+        const i = new Image();
+        i.onload = () => res(i);
+        i.onerror = () => rej(new Error('decode'));
+        i.src = url;
+    }).finally(() => URL.revokeObjectURL(url));
+
+    let maxSide = 1400, quality = 0.75;
+    for (let i = 0; i < 7; i++) {
+        const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+        const c = document.createElement('canvas');
+        c.width  = Math.max(1, Math.round(img.naturalWidth  * scale));
+        c.height = Math.max(1, Math.round(img.naturalHeight * scale));
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        const out = c.toDataURL('image/jpeg', quality);
+        if (out.length <= ICR_MAX_PROOF_CHARS) return out;
+        quality = Math.max(0.5, quality - 0.08);
+        maxSide = Math.round(maxSide * 0.8);
+    }
+    throw new Error('too_large');
+}
 
 const ICR_NAME_RE = /^[\p{L}][\p{L}\s.'’-]*$/u;
 
@@ -905,7 +954,7 @@ function wireInfoChangeRequest(user, userData, fullName) {
     // ── Groups: one checkbox each; `read` validates + returns the new values ──
     const GROUPS = [
         {
-            key: 'name', label: 'Name', keys: ['firstName', 'middleName', 'lastName'],
+            key: 'name', label: 'Name', proof: 'required', hint: 'Valid ID, birth certificate or marriage certificate', keys: ['firstName', 'middleName', 'lastName'],
             summary: () => [cur.firstName, cur.middleName, cur.lastName].filter(Boolean).join(' ') || '—',
             read() {
                 const v = { firstName: el('icrFirst').value.trim().replace(/\s+/g, ' '), middleName: el('icrMiddle').value.trim().replace(/\s+/g, ' '), lastName: el('icrLast').value.trim().replace(/\s+/g, ' ') };
@@ -916,7 +965,7 @@ function wireInfoChangeRequest(user, userData, fullName) {
             }
         },
         {
-            key: 'birthday', label: 'Date of Birth', keys: ['birthday'],
+            key: 'birthday', label: 'Date of Birth', proof: 'required', hint: 'Birth certificate or a valid ID showing your birth date', keys: ['birthday'],
             summary: () => prettyDate(cur.birthday),
             read() {
                 const v = el('icrBirthday').value;
@@ -926,7 +975,7 @@ function wireInfoChangeRequest(user, userData, fullName) {
             }
         },
         {
-            key: 'sex', label: 'Sex', keys: ['sex'],
+            key: 'sex', label: 'Sex', proof: 'required', hint: 'Birth certificate or valid ID', keys: ['sex'],
             summary: () => cur.sex || 'Not provided',
             read() {
                 const v = el('icrSex').value;
@@ -934,7 +983,7 @@ function wireInfoChangeRequest(user, userData, fullName) {
             }
         },
         {
-            key: 'civil', label: 'Civil Status', keys: ['civilStatus'],
+            key: 'civil', label: 'Civil Status', proof: 'required', hint: 'Marriage certificate (or death certificate of spouse)', keys: ['civilStatus'],
             summary: () => cur.civilStatus || 'Not provided',
             read() {
                 const v = el('icrCivil').value;
@@ -942,7 +991,7 @@ function wireInfoChangeRequest(user, userData, fullName) {
             }
         },
         {
-            key: 'address', label: 'Home Address', keys: ['houseNumber'],
+            key: 'address', label: 'Home Address', proof: 'optional', hint: 'Utility bill, lease or valid ID showing the new address', keys: ['houseNumber'],
             summary: () => cur.houseNumber || 'Not provided',
             read() {
                 const v = el('icrHouse').value.trim().replace(/\s+/g, ' ');
@@ -950,7 +999,7 @@ function wireInfoChangeRequest(user, userData, fullName) {
             }
         },
         {
-            key: 'residency', label: 'Years of Residency', keys: [resKey],
+            key: 'residency', label: 'Years of Residency', proof: 'optional', hint: 'Any document showing how long you have lived here', keys: [resKey],
             summary: () => cur[resKey] !== '' ? `${cur[resKey]} year(s)` : 'Not provided',
             read() {
                 const raw = el('icrYears').value.trim();
@@ -995,6 +1044,15 @@ function wireInfoChangeRequest(user, userData, fullName) {
                 <div class="icr-fixed">Barangay Banicain, Olongapo City, Zambales</div>`)}
             ${icrGroup('residency', 'Years of Residency', icrInput('icrYears', 'Years of residency', 'number', 'min="0" max="120" step="1" inputmode="numeric"'))}
 
+            <div class="cpw-field" id="icrProofField" style="margin-top:16px" hidden>
+                <label>Supporting document <span id="icrProofReq" style="font-weight:600;color:var(--text-light)"></span></label>
+                <div class="icr-hint" id="icrProofHint"></div>
+                <input type="file" id="icrProofFile" accept="image/*" multiple hidden>
+                <button type="button" class="icr-drop" id="icrProofBtn">${CPW_ICONS.upload}<span id="icrProofBtnTxt">Add photo of document</span></button>
+                <div class="icr-thumbs" id="icrThumbs"></div>
+                <div class="cpw-ferr" id="icrProofErr" role="alert"></div>
+            </div>
+
             <div class="cpw-field" id="icrReasonField" style="margin-top:16px" hidden>
                 <label for="icrReason">Reason for the change</label>
                 <textarea id="icrReason" class="icr-textarea" maxlength="300" placeholder="e.g. Corrected spelling of my surname, I got married, I moved to a new house…"></textarea>
@@ -1016,15 +1074,52 @@ function wireInfoChangeRequest(user, userData, fullName) {
 
     // ── Refs / state ──
     const form = el('icrForm'), viewDone = el('icrViewDone'), submitBtn = el('icrSubmit');
-    let busy = false, hasPending = false;
+    let busy = false, hasPending = false, processing = false;
+    let proofs = [];   // [{ name, size, dataUrl }]
 
     const setIcon = (name, ok = false) => { el('icrIcon').innerHTML = CPW_ICONS[name]; el('icrIcon').classList.toggle('ok', ok); };
     const setErr = (key, msg) => { el('icrErr_' + key).textContent = msg || ''; };
     const showAlert = (msg) => { const a = el('icrAlert'); a.textContent = msg || ''; a.hidden = !msg; };
     const selectedGroups = () => GROUPS.filter(g => el('icrChk_' + g.key).checked);
 
+    function renderThumbs() {
+        const box = el('icrThumbs');
+        box.innerHTML = '';
+        proofs.forEach((p, i) => {
+            const row = document.createElement('div'); row.className = 'icr-thumb';
+            const img = document.createElement('img'); img.src = p.dataUrl; img.alt = 'Document preview';
+            const tn = document.createElement('div'); tn.className = 'tn';
+            const n1 = document.createElement('div'); n1.textContent = p.name;
+            const n2 = document.createElement('div'); n2.textContent = Math.max(1, Math.round(p.size / 1024)) + ' KB';
+            tn.append(n1, n2);
+            const rm = document.createElement('button'); rm.type = 'button'; rm.textContent = 'Remove';
+            rm.addEventListener('click', () => { proofs.splice(i, 1); renderThumbs(); });
+            row.append(img, tn, rm);
+            box.appendChild(row);
+        });
+        const full = proofs.length >= ICR_MAX_PROOFS;
+        el('icrProofBtn').disabled = full;
+        el('icrProofBtnTxt').textContent = full ? `Maximum of ${ICR_MAX_PROOFS} photos added`
+            : proofs.length ? 'Add another photo' : 'Add photo of document';
+    }
+
+    function updateProofUI() {
+        const sel = selectedGroups();
+        el('icrProofField').hidden = sel.length === 0;
+        el('icrProofReq').textContent = sel.some(g => g.proof === 'required') ? '(required)' : '(optional)';
+        const hint = el('icrProofHint');
+        hint.innerHTML = '';
+        sel.forEach(g => {
+            const d = document.createElement('div');
+            const b = document.createElement('b'); b.textContent = g.label + ': ';
+            d.append(b, document.createTextNode(g.hint));
+            hint.appendChild(d);
+        });
+    }
+
     function updateSubmitLabel() {
         const n = selectedGroups().length;
+        updateProofUI();
         el('icrReasonField').hidden = n === 0;
         submitBtn.textContent = n > 1 ? `Submit Request (${n} changes)` : 'Submit Request';
     }
@@ -1036,6 +1131,8 @@ function wireInfoChangeRequest(user, userData, fullName) {
         el('icrSex').value = cur.sex;  el('icrCivil').value = cur.civilStatus;
         el('icrHouse').value = cur.houseNumber;  el('icrYears').value = cur[resKey];
         el('icrReason').value = '';
+        proofs = []; processing = false; renderThumbs();
+        el('icrProofErr').textContent = ''; el('icrProofField').classList.remove('err');
         GROUPS.forEach(g => {
             el('icrChk_' + g.key).checked = false;
             el('icrBody_' + g.key).hidden = true;
@@ -1077,13 +1174,41 @@ function wireInfoChangeRequest(user, userData, fullName) {
     el('icrDone').addEventListener('click', closeModal);
     wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) closeModal(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !wrap.hidden) closeModal(); });
+    el('icrProofBtn').addEventListener('click', () => el('icrProofFile').click());
+    el('icrProofFile').addEventListener('change', async (e) => {
+        const files = [...e.target.files];
+        e.target.value = '';
+        const perr = el('icrProofErr');
+        perr.textContent = '';
+        el('icrProofField').classList.remove('err');
+        for (const f of files) {
+            if (proofs.length >= ICR_MAX_PROOFS) { perr.textContent = `You can attach up to ${ICR_MAX_PROOFS} photos.`; break; }
+            if (!f.type.startsWith('image/'))   { perr.textContent = 'Please choose a photo (JPG or PNG).'; continue; }
+            if (f.size > ICR_MAX_ORIGINAL)      { perr.textContent = 'That photo is over 10 MB. Please choose a smaller one.'; continue; }
+            processing = true;
+            submitBtn.disabled = true;
+            el('icrProofBtnTxt').textContent = 'Preparing photo…';
+            try {
+                const dataUrl = await icrCompress(f);
+                proofs.push({ name: f.name, size: Math.round(dataUrl.length * 0.75), dataUrl });
+            } catch (err) {
+                console.error('Proof photo failed:', err);
+                perr.textContent = 'We couldn\'t read that photo. Try a JPG or PNG.';
+            }
+        }
+        processing = false;
+        submitBtn.disabled = false;
+        renderThumbs();
+    });
     el('icrReason').addEventListener('input', () => { el('icrReasonField').classList.remove('err'); el('icrReasonErr').textContent = ''; });
 
     // ── Submit: validate every ticked group, then create ONE request ──
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         if (busy) return;
+        if (processing) return showAlert('Please wait, your photo is still being prepared.');
         showAlert('');
+        el('icrProofErr').textContent = ''; el('icrProofField').classList.remove('err');
         GROUPS.forEach(g => setErr(g.key, ''));
         el('icrReasonField').classList.remove('err'); el('icrReasonErr').textContent = '';
 
@@ -1100,6 +1225,12 @@ function wireInfoChangeRequest(user, userData, fullName) {
             g.keys.forEach(k => { updates[k] = r.values[k]; previous[k] = cur[k] ?? ''; });
             changedFields.push(g.label);
         }
+        const needProof = selected.some(g => g.proof === 'required');
+        if (needProof && !proofs.length) {
+            el('icrProofField').classList.add('err');
+            el('icrProofErr').textContent = 'Please attach a photo of a supporting document.';
+            firstBad = firstBad || 'proof';
+        }
         const reason = el('icrReason').value.trim();
         if (reason.length < 10) {
             el('icrReasonField').classList.add('err');
@@ -1107,7 +1238,7 @@ function wireInfoChangeRequest(user, userData, fullName) {
             firstBad = firstBad || 'reason';
         }
         if (firstBad) {
-            (firstBad === 'reason' ? el('icrReason') : el('icrBody_' + firstBad).querySelector('input,select'))?.focus();
+            (firstBad === 'reason' ? el('icrReason') : firstBad === 'proof' ? el('icrProofBtn') : el('icrBody_' + firstBad).querySelector('input,select'))?.focus();
             return;
         }
 
@@ -1127,6 +1258,8 @@ function wireInfoChangeRequest(user, userData, fullName) {
                 updates,
                 previous,
                 reason,
+                proofRequired: needProof,
+                proof: proofs.map(p => ({ name: p.name, type: 'image/jpeg', size: p.size, dataUrl: p.dataUrl })),
                 createdAt: serverTimestamp()
             });
             busy = false;
