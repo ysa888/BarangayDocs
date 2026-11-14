@@ -11,6 +11,7 @@ import {
     onAuthStateChanged,
     signOut,
     updatePassword,
+    sendPasswordResetEmail,
     EmailAuthProvider,
     reauthenticateWithCredential
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
@@ -399,34 +400,408 @@ function initAccount(user, userData) {
     wireSettingsModals();
 }
 
-/** Change Password — looks for menu item with "Change Password" text */
+// =============================================
+// CHANGE PASSWORD  (Account → Settings → Change Password)
+// Two ways to change it:
+//   1) Know current password  → current > new > confirm  (re-auth + updatePassword)
+//   2) Forgot current password → verification link sent to the account email;
+//      once the link is opened & verified, the resident sets a new password.
+// The modal + its CSS are injected from here, so no HTML edits are needed.
+// =============================================
+const CPW_MIN_LEN        = 8;    // minimum new-password length
+const CPW_RESEND_SECONDS = 60;   // cooldown before the reset link can be resent
+
+const CPW_ICONS = {
+    lock:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+    mail:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    eye:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+    eyeOff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>',
+    close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+};
+
+const CPW_CSS = `
+.cpw-overlay{position:fixed;inset:0;background:rgba(15,28,54,.55);backdrop-filter:blur(2px);z-index:600;display:flex;align-items:center;justify-content:center;padding:16px;animation:cpwFade .18s ease}
+.cpw-overlay[hidden],.cpw-overlay [hidden]{display:none!important}
+.cpw-modal{position:relative;width:100%;max-width:440px;max-height:calc(100vh - 32px);overflow-y:auto;background:var(--card-bg,#fff);border-radius:20px;padding:32px 28px 26px;box-shadow:0 24px 60px rgba(15,28,54,.3);animation:cpwPop .22s ease;font-family:'Nunito',sans-serif}
+.cpw-x{position:absolute;top:14px;right:14px;width:34px;height:34px;border:none;border-radius:10px;background:transparent;color:var(--text-light,#9AA5BC);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.cpw-x:hover{background:var(--bg,#F0F4FA);color:var(--text-main,#1B3A6B)}
+.cpw-x svg{width:18px;height:18px}
+.cpw-icon{width:56px;height:56px;border-radius:16px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;background:var(--bg,#F0F4FA);color:var(--primary-light,#2A5298)}
+.cpw-icon svg{width:26px;height:26px}
+.cpw-icon.ok{background:var(--green-bg,#D4EDDA);color:var(--green,#28A745)}
+.cpw-modal h3{font-family:'Poppins',sans-serif;font-size:20px;font-weight:700;color:var(--text-main,#1B3A6B);text-align:center;margin-bottom:6px}
+.cpw-sub{font-size:13.5px;line-height:1.6;color:var(--text-sub,#6B7A99);text-align:center;margin-bottom:22px}
+.cpw-sub b{color:var(--text-main,#1B3A6B)}
+.cpw-field{margin-bottom:14px}
+.cpw-field label{display:block;font-size:12.5px;font-weight:800;color:var(--text-main,#1B3A6B);margin-bottom:6px}
+.cpw-input{position:relative}
+.cpw-input input{width:100%;height:46px;padding:0 44px 0 14px;border:2px solid var(--border,#D0DCF0);border-radius:12px;font-family:'Nunito',sans-serif;font-size:14px;color:var(--text-main,#1B3A6B);background:#fff;outline:none;transition:border-color .15s,box-shadow .15s}
+.cpw-input input:focus{border-color:var(--primary-light,#2A5298);box-shadow:0 0 0 3px rgba(42,82,152,.12)}
+.cpw-field.err .cpw-input input{border-color:#DC3545;box-shadow:0 0 0 3px rgba(220,53,69,.1)}
+.cpw-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:34px;height:34px;border:none;background:transparent;color:var(--text-light,#9AA5BC);cursor:pointer;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.cpw-eye:hover{color:var(--primary-light,#2A5298)}
+.cpw-eye svg{width:18px;height:18px}
+.cpw-ferr{font-size:11.5px;font-weight:700;color:#DC3545;margin-top:5px;min-height:0}
+.cpw-meter{display:flex;gap:5px;margin-top:9px}
+.cpw-meter i{flex:1;height:5px;border-radius:99px;background:var(--border,#D0DCF0);transition:background .2s}
+.cpw-meter[data-lvl="1"] i:nth-child(-n+1){background:#DC3545}
+.cpw-meter[data-lvl="2"] i:nth-child(-n+2){background:#F5A623}
+.cpw-meter[data-lvl="3"] i:nth-child(-n+3){background:#7BC043}
+.cpw-meter[data-lvl="4"] i{background:var(--green,#28A745)}
+.cpw-meter-label{font-size:11.5px;font-weight:700;color:var(--text-sub,#6B7A99);margin-top:5px}
+.cpw-rules{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}
+.cpw-rules li{font-size:12px;font-weight:600;color:var(--text-light,#9AA5BC);display:flex;align-items:center;gap:7px}
+.cpw-rules li::before{content:"";width:14px;height:14px;border-radius:50%;border:2px solid var(--border,#D0DCF0);flex-shrink:0;transition:all .15s}
+.cpw-rules li.ok{color:var(--green-text,#155724)}
+.cpw-rules li.ok::before{background:var(--green,#28A745) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") center/9px no-repeat;border-color:var(--green,#28A745)}
+.cpw-alert{border-radius:12px;padding:11px 14px;font-size:13px;font-weight:700;line-height:1.5;margin-bottom:14px}
+.cpw-alert.error{background:var(--red-bg,#F8D7DA);color:var(--red-text,#721C24)}
+.cpw-alert.info{background:#E8F1FD;color:var(--primary,#1B3A6B)}
+.cpw-btn{width:100%;height:48px;border:none;border-radius:12px;background:var(--primary,#1B3A6B);color:#fff;font-family:'Nunito',sans-serif;font-size:14.5px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .15s,opacity .15s}
+.cpw-btn:hover:not(:disabled){background:var(--primary-light,#2A5298)}
+.cpw-btn:disabled{opacity:.6;cursor:not-allowed}
+.cpw-btn.ghost{background:transparent;border:2px solid var(--border,#D0DCF0);color:var(--text-sub,#6B7A99)}
+.cpw-btn.ghost:hover:not(:disabled){background:var(--bg,#F0F4FA)}
+.cpw-link{display:block;margin:14px auto 0;background:none;border:none;font-family:'Nunito',sans-serif;font-size:13px;font-weight:800;color:var(--primary-light,#2A5298);cursor:pointer;padding:4px 8px}
+.cpw-link:hover{text-decoration:underline}
+.cpw-spin{width:16px;height:16px;border:2.5px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:cpwSpin .7s linear infinite}
+.cpw-emailbox{display:flex;align-items:center;gap:10px;background:var(--bg,#F0F4FA);border:2px solid var(--border,#D0DCF0);border-radius:12px;padding:12px 14px;margin-bottom:16px;font-weight:800;font-size:14px;color:var(--text-main,#1B3A6B);word-break:break-all}
+.cpw-emailbox svg{width:18px;height:18px;color:var(--primary-light,#2A5298);flex-shrink:0}
+.cpw-steps{list-style:none;counter-reset:s;margin:0 0 18px;padding:0;display:grid;gap:10px}
+.cpw-steps li{counter-increment:s;display:flex;gap:11px;align-items:flex-start;font-size:13px;line-height:1.5;color:var(--text-sub,#6B7A99);font-weight:600}
+.cpw-steps li::before{content:counter(s);width:22px;height:22px;border-radius:50%;background:var(--primary,#1B3A6B);color:#fff;font-size:11.5px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.cpw-hint{font-size:12px;color:var(--text-light,#9AA5BC);text-align:center;line-height:1.5;margin-top:12px}
+@keyframes cpwFade{from{opacity:0}to{opacity:1}}
+@keyframes cpwPop{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes cpwSpin{to{transform:rotate(360deg)}}
+@media(max-width:480px){.cpw-modal{padding:28px 20px 22px}}
+`;
+
+function cpwField(id, label, autocomplete) {
+    return `
+    <div class="cpw-field" id="${id}Field">
+        <label for="${id}">${label}</label>
+        <div class="cpw-input">
+            <input type="password" id="${id}" autocomplete="${autocomplete}" spellcheck="false">
+            <button type="button" class="cpw-eye" data-target="${id}" aria-label="Show password">${CPW_ICONS.eye}</button>
+        </div>
+        <div class="cpw-ferr" id="${id}Err" role="alert"></div>
+    </div>`;
+}
+
+function cpwMaskEmail(email = '') {
+    const [name, domain] = email.split('@');
+    if (!domain) return email;
+    return `${name.slice(0, 2)}${'*'.repeat(Math.max(name.length - 2, 3))}@${domain}`;
+}
+
+function cpwStrength(pw) {
+    if (!pw) return { lvl: 0, label: '' };
+    let score = 0;
+    if (pw.length >= CPW_MIN_LEN) score++;
+    if (pw.length >= 12) score++;
+    if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
+    if (/\d/.test(pw) && /[^A-Za-z0-9]/.test(pw)) score++;
+    if (pw.length < CPW_MIN_LEN) score = Math.min(score, 1);
+    const lvl = Math.max(1, Math.min(score, 4));
+    return { lvl, label: ['', 'Weak', 'Fair', 'Good', 'Strong'][lvl] };
+}
+
+function cpwErrorMessage(err) {
+    switch (err?.code) {
+        case 'auth/wrong-password':
+        case 'auth/invalid-credential':    return { field: 'cpwCurrent', msg: 'Current password is incorrect.' };
+        case 'auth/too-many-requests':     return { msg: 'Too many attempts. Please wait a few minutes, or use "Forgot your current password?".' };
+        case 'auth/weak-password':         return { field: 'cpwNew', msg: 'That password is too weak. Try a longer one.' };
+        case 'auth/requires-recent-login': return { msg: 'For your security, please sign out and sign in again, then retry.' };
+        case 'auth/network-request-failed':return { msg: 'No internet connection. Please check your network and try again.' };
+        default:                           return { msg: 'Something went wrong. Please try again.' };
+    }
+}
+
 function wireChangePassword(user) {
+    // ── Inject styles + modal once ──
+    if (!el('cpwStyles')) {
+        const style = document.createElement('style');
+        style.id = 'cpwStyles';
+        style.textContent = CPW_CSS;
+        document.head.appendChild(style);
+    }
+    if (!el('cpwOverlay')) {
+        const wrap = document.createElement('div');
+        wrap.id = 'cpwOverlay';
+        wrap.className = 'cpw-overlay';
+        wrap.hidden = true;
+        wrap.setAttribute('role', 'dialog');
+        wrap.setAttribute('aria-modal', 'true');
+        wrap.setAttribute('aria-labelledby', 'cpwTitle');
+        wrap.innerHTML = `
+        <div class="cpw-modal">
+            <button type="button" class="cpw-x" id="cpwClose" aria-label="Close">${CPW_ICONS.close}</button>
+            <div class="cpw-icon" id="cpwIcon"></div>
+            <h3 id="cpwTitle"></h3>
+            <p class="cpw-sub" id="cpwSub"></p>
+
+            <!-- VIEW 1: change with current password -->
+            <form id="cpwViewChange" novalidate>
+                ${cpwField('cpwCurrent', 'Current password', 'current-password')}
+                ${cpwField('cpwNew', 'New password', 'new-password')}
+                <div class="cpw-meter" id="cpwMeter" data-lvl="0"><i></i><i></i><i></i><i></i></div>
+                <div class="cpw-meter-label" id="cpwMeterLabel"></div>
+                <ul class="cpw-rules" id="cpwRules">
+                    <li data-rule="len">At least ${CPW_MIN_LEN} characters</li>
+                    <li data-rule="mix">Contains a letter and a number</li>
+                    <li data-rule="diff">Different from your current password</li>
+                </ul>
+                <div style="height:14px"></div>
+                ${cpwField('cpwConfirm', 'Confirm new password', 'new-password')}
+                <div class="cpw-alert error" id="cpwAlert" role="alert" hidden></div>
+                <button type="submit" class="cpw-btn" id="cpwSubmit">Update Password</button>
+                <button type="button" class="cpw-link" id="cpwGoForgot">Forgot your current password?</button>
+            </form>
+
+            <!-- VIEW 2: forgot → send verification link -->
+            <div id="cpwViewForgot">
+                <div class="cpw-emailbox">${CPW_ICONS.mail}<span id="cpwEmailMasked"></span></div>
+                <div class="cpw-alert error" id="cpwForgotAlert" role="alert" hidden></div>
+                <button type="button" class="cpw-btn" id="cpwSend">Send Verification Link</button>
+                <button type="button" class="cpw-link" id="cpwBackChange">← I remember my password</button>
+            </div>
+
+            <!-- VIEW 3: link sent -->
+            <div id="cpwViewSent">
+                <ol class="cpw-steps">
+                    <li>Open the email we just sent you.</li>
+                    <li>Click the verification link inside it.</li>
+                    <li>Set your new password on the page that opens.</li>
+                    <li>Come back here and sign in with your new password.</li>
+                </ol>
+                <button type="button" class="cpw-btn" id="cpwDone">Done</button>
+                <button type="button" class="cpw-link" id="cpwResend">Resend link</button>
+                <p class="cpw-hint">Can't find it? Check your Spam or Promotions folder. The link expires after a short time.</p>
+            </div>
+
+            <!-- VIEW 4: success -->
+            <div id="cpwViewSuccess">
+                <button type="button" class="cpw-btn" id="cpwSuccessClose">Done</button>
+            </div>
+        </div>`;
+        document.body.appendChild(wrap);
+    }
+
+    // ── Refs ──
+    const overlay   = el('cpwOverlay');
+    const views     = { change: el('cpwViewChange'), forgot: el('cpwViewForgot'), sent: el('cpwViewSent'), success: el('cpwViewSuccess') };
+    const inCurrent = el('cpwCurrent'), inNew = el('cpwNew'), inConfirm = el('cpwConfirm');
+    const submitBtn = el('cpwSubmit'), sendBtn = el('cpwSend'), resendBtn = el('cpwResend');
+    let busy = false, resendTimer = null;
+
+    const META = {
+        change:  { icon: 'lock',  title: 'Change Password',     sub: 'Enter your current password, then choose a new one.' },
+        forgot:  { icon: 'mail',  title: 'Verify It\'s You',    sub: 'We\'ll email a verification link to the address on your account. Open the link to set a new password.' },
+        sent:    { icon: 'mail',  title: 'Check Your Email',    sub: '' },
+        success: { icon: 'check', title: 'Password Updated',    sub: 'Your password was changed successfully. Use your new password the next time you sign in.' }
+    };
+
+    function setView(name) {
+        Object.entries(views).forEach(([k, v]) => { v.hidden = k !== name; });
+        const m = META[name];
+        el('cpwIcon').innerHTML = CPW_ICONS[m.icon];
+        el('cpwIcon').classList.toggle('ok', name === 'success');
+        el('cpwTitle').textContent = m.title;
+        el('cpwSub').innerHTML = name === 'sent'
+            ? `A verification link was sent to <b>${cpwMaskEmail(user.email)}</b>.`
+            : m.sub;
+    }
+
+    function setBusy(btn, on, idleText) {
+        busy = on;
+        btn.disabled = on;
+        btn.innerHTML = on ? '<span class="cpw-spin"></span> Please wait…' : idleText;
+    }
+
+    function showAlert(id, msg) { const a = el(id); a.textContent = msg; a.hidden = !msg; }
+    function setFieldError(id, msg) {
+        el(id + 'Field').classList.toggle('err', !!msg);
+        el(id + 'Err').textContent = msg || '';
+    }
+    function clearErrors() {
+        ['cpwCurrent', 'cpwNew', 'cpwConfirm'].forEach(id => setFieldError(id, ''));
+        showAlert('cpwAlert', ''); showAlert('cpwForgotAlert', '');
+    }
+
+    // Live strength meter + requirement checklist
+    function updateStrength() {
+        const pw = inNew.value;
+        const rules = {
+            len:  pw.length >= CPW_MIN_LEN,
+            mix:  /[A-Za-z]/.test(pw) && /\d/.test(pw),
+            diff: pw.length > 0 && pw !== inCurrent.value
+        };
+        el('cpwRules').querySelectorAll('li').forEach(li => li.classList.toggle('ok', rules[li.dataset.rule]));
+        const s = cpwStrength(pw);
+        el('cpwMeter').dataset.lvl = s.lvl;
+        el('cpwMeterLabel').textContent = s.label ? `Strength: ${s.label}` : '';
+        return rules;
+    }
+
+    function resetAll() {
+        clearInterval(resendTimer);
+        resendTimer = null;
+        [inCurrent, inNew, inConfirm].forEach(i => { i.value = ''; i.type = 'password'; });
+        overlay.querySelectorAll('.cpw-eye').forEach(b => { b.innerHTML = CPW_ICONS.eye; b.setAttribute('aria-label', 'Show password'); });
+        clearErrors();
+        updateStrength();
+        setBusy(submitBtn, false, 'Update Password');
+        setBusy(sendBtn, false, 'Send Verification Link');
+        resendBtn.disabled = false;
+        resendBtn.textContent = 'Resend link';
+        busy = false;
+    }
+
+    function openModal() {
+        resetAll();
+        el('cpwEmailMasked').textContent = cpwMaskEmail(user.email);
+        setView('change');
+        overlay.hidden = false;
+        setTimeout(() => inCurrent.focus(), 50);
+    }
+    function closeModal() {
+        if (busy) return;
+        overlay.hidden = true;
+        resetAll();
+    }
+
+    // ── Wire open triggers ──
+    const triggers = [];
     document.querySelectorAll('.menu-item').forEach(item => {
         const h4 = item.querySelector('h4');
-        if (h4 && h4.textContent.trim() === 'Change Password') {
-            item.style.cursor = 'pointer';
-            item.addEventListener('click', () => {
-                const current = prompt('Enter your current password:');
-                if (!current) return;
-                const newPw = prompt('Enter your new password (min. 6 characters):');
-                if (!newPw || newPw.length < 6) return alert('Password must be at least 6 characters.');
-                const confirm = prompt('Confirm new password:');
-                if (newPw !== confirm) return alert('Passwords do not match.');
+        if (h4 && h4.textContent.trim() === 'Change Password') triggers.push(item);
+    });
+    const byId = el('menuChangePassword');
+    if (byId && !triggers.includes(byId)) triggers.push(byId);
+    triggers.forEach(t => {
+        t.style.cursor = 'pointer';
+        t.addEventListener('click', openModal);
+    });
 
-                const credential = EmailAuthProvider.credential(user.email, current);
-                reauthenticateWithCredential(user, credential)
-                    .then(() => updatePassword(user, newPw))
-                    .then(() => alert('Password updated successfully!'))
-                    .catch(err => {
-                        if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-                            alert('Current password is incorrect.');
-                        } else {
-                            alert('Failed to update password: ' + err.message);
-                        }
-                    });
-            });
+    // ── Close handlers ──
+    el('cpwClose').addEventListener('click', closeModal);
+    el('cpwDone').addEventListener('click', closeModal);
+    el('cpwSuccessClose').addEventListener('click', closeModal);
+    overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) closeModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !overlay.hidden) closeModal(); });
+
+    // ── Show / hide password toggles ──
+    overlay.querySelectorAll('.cpw-eye').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const input = el(btn.dataset.target);
+            const show = input.type === 'password';
+            input.type = show ? 'text' : 'password';
+            btn.innerHTML = show ? CPW_ICONS.eyeOff : CPW_ICONS.eye;
+            btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+        });
+    });
+
+    // ── Live feedback ──
+    inCurrent.addEventListener('input', () => { setFieldError('cpwCurrent', ''); showAlert('cpwAlert', ''); updateStrength(); });
+    inNew.addEventListener('input',     () => { setFieldError('cpwNew', ''); updateStrength(); if (inConfirm.value) setFieldError('cpwConfirm', inConfirm.value === inNew.value ? '' : 'Passwords do not match.'); });
+    inConfirm.addEventListener('input', () => setFieldError('cpwConfirm', inConfirm.value && inConfirm.value !== inNew.value ? 'Passwords do not match.' : ''));
+
+    // ── Switch between flows ──
+    el('cpwGoForgot').addEventListener('click',   () => { clearErrors(); setView('forgot'); });
+    el('cpwBackChange').addEventListener('click', () => { clearErrors(); setView('change'); setTimeout(() => inCurrent.focus(), 50); });
+
+    // ── FLOW 1: current password → new password ──
+    views.change.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (busy) return;
+        clearErrors();
+
+        const current = inCurrent.value, newPw = inNew.value, confirmPw = inConfirm.value;
+        const rules = updateStrength();
+        let firstBad = null;
+
+        if (!current)                       { setFieldError('cpwCurrent', 'Please enter your current password.'); firstBad = firstBad || inCurrent; }
+        if (!rules.len)                     { setFieldError('cpwNew', `Password must be at least ${CPW_MIN_LEN} characters.`); firstBad = firstBad || inNew; }
+        else if (!rules.mix)                { setFieldError('cpwNew', 'Include at least one letter and one number.'); firstBad = firstBad || inNew; }
+        else if (newPw === current)         { setFieldError('cpwNew', 'New password must be different from your current one.'); firstBad = firstBad || inNew; }
+        if (!confirmPw)                     { setFieldError('cpwConfirm', 'Please confirm your new password.'); firstBad = firstBad || inConfirm; }
+        else if (confirmPw !== newPw)       { setFieldError('cpwConfirm', 'Passwords do not match.'); firstBad = firstBad || inConfirm; }
+        if (firstBad) { firstBad.focus(); return; }
+
+        setBusy(submitBtn, true);
+        try {
+            const credential = EmailAuthProvider.credential(user.email, current);
+            await reauthenticateWithCredential(user, credential);
+            await updatePassword(user, newPw);
+            setView('success');
+            [inCurrent, inNew, inConfirm].forEach(i => { i.value = ''; });
+        } catch (err) {
+            console.error('Change password failed:', err);
+            const { field, msg } = cpwErrorMessage(err);
+            if (field) { setFieldError(field, msg); el(field).focus(); }
+            else showAlert('cpwAlert', msg);
+        } finally {
+            setBusy(submitBtn, false, 'Update Password');
         }
     });
+
+    // ── FLOW 2: forgot → email verification link ──
+    function startResendCooldown() {
+        let left = CPW_RESEND_SECONDS;
+        resendBtn.disabled = true;
+        resendBtn.textContent = `Resend link in ${left}s`;
+        clearInterval(resendTimer);
+        resendTimer = setInterval(() => {
+            left--;
+            if (left <= 0) {
+                clearInterval(resendTimer);
+                resendBtn.disabled = false;
+                resendBtn.textContent = 'Resend link';
+            } else {
+                resendBtn.textContent = `Resend link in ${left}s`;
+            }
+        }, 1000);
+    }
+
+    async function sendResetLink(fromSentView) {
+        if (busy) return false;
+        showAlert('cpwForgotAlert', '');
+        if (!fromSentView) setBusy(sendBtn, true);
+        try {
+            try {
+                // After the reset, offer a way back to the login page
+                await sendPasswordResetEmail(auth, user.email, {
+                    url: new URL('barangaydocs_login.html', window.location.href).href
+                });
+            } catch (err) {
+                // Domain not whitelisted in Firebase → fall back to the default email
+                if (err?.code === 'auth/unauthorized-continue-uri' || err?.code === 'auth/invalid-continue-uri') {
+                    await sendPasswordResetEmail(auth, user.email);
+                } else throw err;
+            }
+            setView('sent');
+            startResendCooldown();
+            return true;
+        } catch (err) {
+            console.error('Send reset email failed:', err);
+            const msg = err?.code === 'auth/too-many-requests'
+                ? 'Too many requests. Please wait a few minutes and try again.'
+                : err?.code === 'auth/network-request-failed'
+                    ? 'No internet connection. Please check your network and try again.'
+                    : 'We couldn\'t send the email. Please try again.';
+            if (fromSentView) { setView('forgot'); }
+            showAlert('cpwForgotAlert', msg);
+            return false;
+        } finally {
+            if (!fromSentView) setBusy(sendBtn, false, 'Send Verification Link');
+        }
+    }
+
+    sendBtn.addEventListener('click',   () => sendResetLink(false));
+    resendBtn.addEventListener('click', () => sendResetLink(true));
 }
 
 /** Wire About, Terms & Conditions, Privacy Policy modal triggers */
