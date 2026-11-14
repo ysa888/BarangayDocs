@@ -853,8 +853,6 @@ const ICR_CSS = `
 .icr-thumb button:hover{background:var(--red-bg,#F8D7DA)}
 .icr-click{cursor:pointer;border-radius:10px;transition:background .15s}
 .icr-click:hover,.icr-click:focus-visible{background:rgba(42,82,152,.07);outline:none}
-.icr-click::after{content:"";display:inline-block;flex-shrink:0;width:14px;height:14px;margin-left:8px;vertical-align:middle;background:var(--primary-light,#2A5298);opacity:.4;transition:opacity .15s;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E") center/contain no-repeat}
-.icr-click:hover::after,.icr-click:focus-visible::after{opacity:1}
 @keyframes icrFlash{0%,100%{box-shadow:0 0 0 0 rgba(133,100,4,0)}40%{box-shadow:0 0 0 6px rgba(133,100,4,.28)}}
 .icr-banner.flash{animation:icrFlash 1.2s ease}
 .icr-banner{border-radius:14px;padding:12px 16px;font-size:13px;font-weight:700;line-height:1.5;margin-top:14px}
