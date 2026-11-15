@@ -22,7 +22,7 @@ import { baseValues, effectiveValues, paintDocument } from "./admin/docoverrides
 import {
     buildValues, renderTemplateHtml, makeQrDataUrl, normalizePageSettings,
     paperStyleString, baseCss, printTemplateHtml
-} from "./templateengine.js";
+} from "./admin/templateengine.js";
 
 // =============================================
 // Firebase Config & Init

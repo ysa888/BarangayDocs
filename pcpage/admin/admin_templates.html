@@ -1331,6 +1331,17 @@
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 
+  <script>
+    // If templates.js fails to start (wrong file path, import error) the list would say "Loading…" forever.
+    setTimeout(function () {
+      var g = document.getElementById('tpl-grid');
+      if (g && /Loading document types/.test(g.textContent)) {
+        g.innerHTML = '<div class="tpl-empty">The page script did not start. Press F12 → Console and look for a red error ' +
+          '(usually a 404 for templates.js or templateengine.js — both must be in the SAME folder as admin_templates.html), ' +
+          'or you may not be signed in as an admin.</div>';
+      }
+    }, 6000);
+  </script>
   <script type="module" src="templates.js"></script>
   <script type="module" src="adminnavbar.js"></script>
 </body>

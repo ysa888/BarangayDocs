@@ -49,6 +49,12 @@ const storage = getStorage(app);
 
 const el = (id) => document.getElementById(id);
 
+// Folder that holds Icons/, request.js etc. This page lives in …/admin/, so go up one level.
+const APP_ROOT = /\/admin\/[^/]*$/.test(location.pathname)
+    ? new URL('../', location.href).href
+    : new URL('./', location.href).href;
+const resolveAsset = (p) => { try { return new URL(p, APP_ROOT).href; } catch (_) { return p; } };
+
 // Firestore documents are capped at 1 MiB — keep a safety margin
 const MAX_TEMPLATE_BYTES = 900 * 1024;
 // If Storage is unavailable, small images may be embedded instead
@@ -262,7 +268,7 @@ function renderCards() {
         return `
         <div class="tpl-card">
             <div class="tpl-card-top">
-                <div class="tpl-card-icon"><img src="${escHtml(d.icon || 'Icons/barangayclearance.png')}" alt="" onerror="this.style.display='none'"></div>
+                <div class="tpl-card-icon"><img src="${escHtml(resolveAsset(d.icon || 'Icons/barangayclearance.png'))}" alt="" onerror="this.style.display='none'"></div>
                 <h4>${escHtml(d.name || '—')}</h4>
             </div>
             <p>${escHtml(d.description || 'No description provided.')}</p>
@@ -403,6 +409,7 @@ function ensureEditor() {
         statusbar: true,
         elementpath: false,
         content_css: false,          // we supply the CSS so editor = printed result
+        document_base_url: APP_ROOT, // so "Icons/…" images show inside the editor
         content_style: editorCss,
         font_family_formats: TINYMCE_FONTS,
         font_size_formats: '8pt 9pt 10pt 11pt 12pt 13pt 14pt 16pt 18pt 20pt 22pt 24pt 28pt 32pt 36pt 48pt',
@@ -736,7 +743,7 @@ async function openPreview() {
     const values = sampleValues(residentExtraFields);
     const qr = makeQrDataUrl('BRY-2026-12345', 100);
     lastPreviewHtml = renderTemplateHtml(editor.getContent(), values, {
-        qrDataUrl: qr, baseUrl: location.href
+        qrDataUrl: qr, baseUrl: APP_ROOT
     });
     const paper = el('preview-paper');
     paper.setAttribute('style', paperStyleString(pageSettings));
