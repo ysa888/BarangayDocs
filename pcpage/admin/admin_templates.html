@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BarangayDocs - Document Templates</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap"
+    rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #1B3A6B;
+      --primary-light: #2A5298;
+      --accent: #4FC3F7;
+      --bg: #F0F4FA;
+      --card-bg: #FFFFFF;
+      --border: #D0DCF0;
+      --text-main: #1B3A6B;
+      --text-sub: #6B7A99;
+      --text-light: #9AA5BC;
+      --green: #28A745;
+      --green-bg: #D4EDDA;
+      --green-text: #155724;
+      --yellow: #FFC107;
+      --yellow-bg: #FFF3CD;
+      --yellow-text: #856404;
+      --red: #DC3545;
+      --red-bg: #F8D7DA;
+      --red-text: #721C24;
+      --blue-bg: #CCE5FF;
+      --blue-text: #004085;
+      --sidebar-w: 220px;
+    }
+
+    body {
+      font-family: 'Nunito', sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── TOP NAVBAR ── */
+    .top-navbar {
+      background: var(--primary);
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 200;
+      box-shadow: 0 2px 12px rgba(27, 58, 107, 0.3);
+    }
+
+    .navbar-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .hamburger-btn {
+      width: 36px;
+      height: 36px;
+      background: rgba(255, 255, 255, 0.12);
+      border: none;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .hamburger-btn span {
+      display: block;
+      width: 18px;
+      height: 2px;
+      background: #fff;
+      border-radius: 2px;
+    }
+
+    .navbar-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo-text {
+      font-family: 'Poppins', sans-serif;
+      font-size: 18px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .logo-text span {
+      color: var(--accent);
+    }
+
+    .admin-badge {
+      background: var(--accent);
+      color: var(--primary);
+      font-size: 9px;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: 10px;
+      letter-spacing: 0.5px;
+    }
+
+    .navbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .notif-btn {
+      width: 36px;
+      height: 36px;
+      background: rgba(255, 255, 255, 0.12);
+      border: none;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .notif-btn svg {
+      width: 18px;
+      height: 18px;
+      stroke: #fff;
+    }
+
+    .notif-dot {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--red);
+      border: 2px solid var(--primary);
+    }
+
+    .admin-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .admin-avatar .av-ph {
+      font-size: 14px;
+      color: #fff;
+      font-weight: 800;
+    }
+
+    /* ── LAYOUT ── */
+    .layout {
+      display: flex;
+      margin-top: 60px;
+      min-height: calc(100vh - 60px);
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      background: var(--card-bg);
+      border-right: 1.5px solid var(--border);
+      position: fixed;
+      top: 60px;
+      left: 0;
+      bottom: 0;
+      overflow-y: auto;
+      transition: transform 0.25s;
+      z-index: 100;
+    }
+
+    .sidebar.collapsed {
+      transform: translateX(calc(-1 * var(--sidebar-w)));
+    }
+
+    .sidebar-section {
+      padding: 16px 12px 8px;
+    }
+
+    .sidebar-section-label {
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--text-light);
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      padding: 0 8px;
+    }
+
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s;
+      margin-bottom: 2px;
+    }
+
+    .sidebar-item svg {
+      width: 18px;
+      height: 18px;
+      stroke: var(--text-sub);
+      flex-shrink: 0;
+    }
+
+    .sidebar-item span {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-sub);
+    }
+
+    .sidebar-item:hover {
+      background: var(--bg);
+    }
+
+    .sidebar-item:hover svg {
+      stroke: var(--primary);
+    }
+
+    .sidebar-item:hover span {
+      color: var(--primary);
+    }
+
+    .sidebar-item.active {
+      background: #EBF0FB;
+    }
+
+    .sidebar-item.active svg {
+      stroke: var(--primary);
+    }
+
+    .sidebar-item.active span {
+      color: var(--primary);
+    }
+
+    .sidebar-badge {
+      margin-left: auto;
+      background: var(--red);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: 10px;
+      min-width: 20px;
+      text-align: center;
+    }
+
+    .sidebar-badge.yellow {
+      background: var(--yellow);
+      color: #000000;
+    }
+
+    .sidebar-badge.red {
+      background: var(--red);
+      color: #000000;
+    }
+
+    .sidebar-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 4px 12px;
+    }
+
+    /* ── MAIN ── */
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      padding: 24px;
+      transition: margin-left 0.25s;
+    }
+
+    .main.expanded {
+      margin-left: 0;
+    }
+
+    .page-header {
+      margin-bottom: 20px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .page-header-text h1 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .page-header-text p {
+      font-size: 13px;
+      color: var(--text-sub);
+      margin-top: 3px;
+    }
+
+    .btn-add-doc {
+      height: 42px;
+      padding: 0 18px;
+      background: var(--primary);
+      border: none;
+      border-radius: 10px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 13px;
+      font-weight: 800;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-add-doc:hover {
+      background: var(--primary-light);
+    }
+
+    .btn-add-doc svg {
+      width: 16px;
+      height: 16px;
+      stroke: #fff;
+      flex-shrink: 0;
+    }
+
+    /* ── FILTER BAR ── */
+    .filter-bar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+
+    .search-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .search-wrap input {
+      width: 100%;
+      height: 42px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      background: var(--card-bg);
+      padding: 0 14px 0 40px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 13px;
+      color: var(--text-main);
+      outline: none;
+    }
+
+    .search-wrap input::placeholder {
+      color: var(--text-light);
+    }
+
+    .search-wrap input:focus {
+      border-color: var(--primary-light);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px;
+      height: 16px;
+      opacity: 0.4;
+    }
+
+    .filter-select {
+      height: 42px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      background: var(--card-bg);
+      padding: 0 32px 0 12px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 13px;
+      color: var(--text-main);
+      outline: none;
+      appearance: none;
+      cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239AA5BC' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+    }
+
+    /* ── TABLE ── */
+    .table-card {
+      background: var(--card-bg);
+      border: 1.5px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .table-head-row {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1.5px solid var(--border);
+      background: var(--bg);
+    }
+
+    .table-head-row span {
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--text-light);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .table-row {
+      display: flex;
+      align-items: center;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border);
+      gap: 10px;
+      transition: background 0.15s;
+    }
+
+    .table-row:last-child {
+      border-bottom: none;
+    }
+
+    .table-row:hover {
+      background: var(--bg);
+    }
+
+    /* Columns */
+    .col-icon-sm {
+      width: 38px;
+      flex-shrink: 0;
+    }
+
+    .doc-icon-sm {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .doc-icon-sm img {
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+    }
+
+    .col-doc-name {
+      flex: 2;
+      min-width: 0;
+    }
+
+    .col-doc-name h4 {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--text-main);
+    }
+
+    .col-doc-name p {
+      font-size: 11px;
+      color: var(--text-sub);
+      margin-top: 2px;
+    }
+
+    .col-added {
+      width: 130px;
+      flex-shrink: 0;
+    }
+
+    .col-added span {
+      font-size: 12px;
+      color: var(--text-sub);
+    }
+
+    .col-requests {
+      width: 100px;
+      flex-shrink: 0;
+      text-align: center;
+    }
+
+    .col-requests span {
+      font-size: 12px;
+      color: var(--text-sub);
+      font-weight: 700;
+    }
+
+    .col-status {
+      width: 100px;
+      flex-shrink: 0;
+    }
+
+    .col-action {
+      width: 180px;
+      flex-shrink: 0;
+      text-align: right;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .badge.active {
+      background: var(--green-bg);
+      color: var(--green-text);
+    }
+
+    .badge.inactive {
+      background: var(--red-bg);
+      color: var(--red-text);
+    }
+
+    /* Action buttons */
+    .action-row {
+      display: flex;
+      gap: 6px;
+      justify-content: flex-end;
+    }
+
+    .btn-toggle {
+      padding: 5px 10px;
+      background: var(--yellow-bg);
+      color: var(--yellow-text);
+      border: 1.5px solid #FFE69C;
+      border-radius: 7px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .btn-toggle.enable {
+      background: var(--green-bg);
+      color: var(--green-text);
+      border-color: #C3E6CB;
+    }
+
+    .btn-delete {
+      padding: 5px 10px;
+      background: var(--red-bg);
+      color: var(--red-text);
+      border: 1.5px solid #F5C6CB;
+      border-radius: 7px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    /* Empty state */
+    .empty-row {
+      padding: 48px 32px;
+      text-align: center;
+      color: var(--text-light);
+      font-size: 13px;
+    }
+
+    /* ── ADD DOCUMENT MODAL ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 20, 50, 0.55);
+      backdrop-filter: blur(3px);
+      z-index: 999;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal-box {
+      background: #fff;
+      border-radius: 20px;
+      width: 100%;
+      max-width: 500px;
+      box-shadow: 0 24px 60px rgba(27, 58, 107, 0.18);
+      overflow: hidden;
+      animation: modalIn 0.25s ease;
+    }
+
+    @keyframes modalIn {
+      from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.98);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .modal-top {
+      background: var(--primary);
+      padding: 24px 28px;
+    }
+
+    .modal-top h3 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 17px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .modal-top p {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.6);
+      margin-top: 3px;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 24px 0;
+    }
+
+    .modal-header h4 {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .modal-close {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: 1.5px solid var(--border);
+      background: var(--bg);
+      font-size: 16px;
+      color: var(--text-sub);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-close:hover {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    .modal-body {
+      padding: 16px 24px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .form-group label {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 13px;
+      color: var(--text-main);
+      background: var(--bg);
+      outline: none;
+      transition: border-color 0.2s;
+      resize: none;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      border-color: var(--primary-light);
+      background: #fff;
+    }
+
+    .form-group input::placeholder,
+    .form-group textarea::placeholder {
+      color: var(--text-light);
+    }
+
+    .modal-footer {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      padding: 0 24px 24px;
+    }
+
+    .btn-cancel-modal {
+      height: 42px;
+      padding: 0 18px;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--text-sub);
+      cursor: pointer;
+    }
+
+    .btn-save {
+      height: 42px;
+      padding: 0 22px;
+      background: var(--primary);
+      border: none;
+      border-radius: 10px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 13px;
+      font-weight: 800;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+
+    .btn-save:hover:not(:disabled) {
+      background: var(--primary-light);
+    }
+
+    .btn-save:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2.5px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.65s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ── DELETE CONFIRM MODAL ── */
+    .confirm-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 20, 50, 0.55);
+      backdrop-filter: blur(3px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .confirm-overlay.open {
+      display: flex;
+    }
+
+    .confirm-box {
+      background: #fff;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 380px;
+      padding: 28px 24px;
+      box-shadow: 0 24px 60px rgba(27, 58, 107, 0.18);
+      text-align: center;
+      animation: modalIn 0.25s ease;
+    }
+
+    .confirm-box h3 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 10px;
+    }
+
+    .confirm-box p {
+      font-size: 13px;
+      color: var(--text-sub);
+      line-height: 1.6;
+      margin-bottom: 22px;
+    }
+
+    .confirm-box strong {
+      color: var(--red);
+    }
+
+    .confirm-btns {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .btn-no {
+      height: 40px;
+      padding: 0 20px;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--text-sub);
+      cursor: pointer;
+    }
+
+    .btn-yes {
+      height: 40px;
+      padding: 0 20px;
+      background: var(--red);
+      border: none;
+      border-radius: 10px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 13px;
+      font-weight: 800;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* ── TOAST ── */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e1e2e;
+      color: #fff;
+      border-radius: 12px;
+      padding: 12px 20px;
+      font-size: 13px;
+      font-weight: 700;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      z-index: 999;
+      white-space: nowrap;
+    }
+
+    .toast.show {
+      opacity: 1;
+    }
+
+    @media (max-width: 900px) {
+
+      .col-added,
+      .col-requests {
+        display: none;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .sidebar {
+        transform: translateX(calc(-1 * var(--sidebar-w)));
+      }
+
+      .sidebar.open {
+        transform: translateX(0);
+      }
+
+      .main {
+        margin-left: 0;
+      }
+    }
+    /* ═══════════════════════════════════════════
+       DOCUMENT TEMPLATES — page-specific styles
+       ═══════════════════════════════════════════ */
+    .hidden { display: none !important; }
+
+    /* ── Template cards ── */
+    .tpl-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .tpl-card {
+      background: var(--card-bg);
+      border: 1.5px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: box-shadow .2s, border-color .2s;
+    }
+    .tpl-card:hover { border-color: var(--primary-light); box-shadow: 0 8px 24px rgba(27,58,107,.10); }
+    .tpl-card-top { display: flex; gap: 12px; align-items: center; }
+    .tpl-card-icon {
+      width: 44px; height: 44px; border-radius: 10px; background: var(--bg);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;
+    }
+    .tpl-card-icon img { width: 30px; height: 30px; object-fit: contain; }
+    .tpl-card h4 { font-family: 'Poppins', sans-serif; font-size: 14px; color: var(--text-main); line-height: 1.25; }
+    .tpl-card p { font-size: 12px; color: var(--text-sub); line-height: 1.45; min-height: 34px; }
+    .tpl-card-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .badge.custom  { background: var(--blue-bg);   color: var(--blue-text); }
+    .badge.default { background: var(--yellow-bg); color: var(--yellow-text); }
+    .tpl-updated { font-size: 11px; color: var(--text-light); }
+    .btn-primary-sm {
+      height: 38px; border: none; border-radius: 10px; background: var(--primary); color: #fff;
+      font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800; cursor: pointer; transition: background .2s;
+    }
+    .btn-primary-sm:hover { background: var(--primary-light); }
+    .tpl-empty { grid-column: 1 / -1; text-align: center; padding: 40px 0; color: var(--text-light); font-size: 13px; }
+
+    /* ── Editor view ── */
+    .editor-head {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
+    }
+    .editor-head h1 { font-family: 'Poppins', sans-serif; font-size: 20px; color: var(--text-main); }
+    .btn-ghost {
+      height: 38px; padding: 0 14px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--card-bg);
+      color: var(--text-main); font-family: 'Nunito', sans-serif; font-size: 12.5px; font-weight: 800; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px; transition: background .15s, border-color .15s;
+    }
+    .btn-ghost:hover { background: var(--bg); border-color: var(--primary-light); }
+    .btn-ghost.danger { color: var(--red); }
+    .btn-ghost.danger:hover { background: var(--red-bg); border-color: var(--red); }
+    .editor-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .dirty-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--yellow); display: none; }
+    .dirty-dot.show { display: inline-block; }
+
+    .editor-layout { display: flex; gap: 14px; align-items: flex-start; }
+    .editor-main { flex: 1; min-width: 0; background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 14px; overflow: hidden; }
+    .editor-loading { padding: 60px 0; text-align: center; color: var(--text-light); font-size: 13px; }
+    .editor-side {
+      width: 290px; flex-shrink: 0; background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 14px;
+      display: flex; flex-direction: column; position: sticky; top: 84px; max-height: calc(100vh - 110px);
+    }
+    .side-tabs { display: flex; border-bottom: 1.5px solid var(--border); }
+    .side-tab {
+      flex: 1; padding: 11px 0; text-align: center; font-size: 12.5px; font-weight: 800; color: var(--text-sub);
+      cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1.5px;
+    }
+    .side-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .side-pane { padding: 14px; overflow-y: auto; flex: 1; }
+    .side-note { font-size: 11.5px; color: var(--text-sub); line-height: 1.5; margin-bottom: 10px; }
+    .field-search {
+      width: 100%; height: 36px; border: 1.5px solid var(--border); border-radius: 9px; padding: 0 10px;
+      font-family: 'Nunito', sans-serif; font-size: 12.5px; outline: none; background: var(--bg); margin-bottom: 10px;
+    }
+    .field-search:focus { border-color: var(--primary-light); background: #fff; }
+    .field-group-label {
+      font-size: 10px; font-weight: 800; color: var(--text-light); letter-spacing: .08em; text-transform: uppercase; margin: 12px 0 6px;
+    }
+    .field-chip {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
+      padding: 7px 10px; margin-bottom: 5px; border: 1.5px dashed #d4a017; background: #fff8e1; border-radius: 8px;
+      cursor: pointer; text-align: left; font-family: 'Nunito', sans-serif; transition: background .15s;
+    }
+    .field-chip:hover { background: #ffefb8; }
+    .field-chip code { font-size: 11.5px; font-weight: 800; color: #7a5b00; }
+    .field-chip span { font-size: 11px; color: var(--text-sub); text-align: right; }
+    .ps-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .ps-grid .form-group.full { grid-column: 1 / -1; }
+    .ps-title { font-size: 11px; font-weight: 800; color: var(--text-light); letter-spacing: .08em; text-transform: uppercase; margin: 14px 0 8px; }
+    .ps-title:first-child { margin-top: 0; }
+    .ps-grid input[type=color] { padding: 2px; height: 38px; cursor: pointer; }
+
+    /* ── Preview modal ── */
+    .preview-box {
+      background: #e9ecf3; border-radius: 16px; width: 96vw; max-width: 1100px; max-height: 94vh;
+      display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 30px 80px rgba(10,20,50,.3);
+    }
+    .preview-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; background: var(--primary); gap: 10px; }
+    .preview-bar h4 { font-family: 'Poppins', sans-serif; font-size: 14px; color: #fff; }
+    .preview-bar .pv-btn {
+      padding: 7px 14px; border-radius: 8px; border: none; font-family: 'Nunito', sans-serif; font-size: 12.5px; font-weight: 800; cursor: pointer;
+    }
+    .pv-btn.light { background: #fff; color: var(--primary); }
+    .pv-btn.ghost { background: rgba(255,255,255,.15); color: #fff; }
+    .preview-scroll { overflow: auto; padding: 22px; flex: 1; }
+    .preview-note { font-size: 11.5px; color: var(--text-sub); text-align: center; padding: 8px 0 0; }
+
+    .confirm-box.wide { max-width: 440px; }
+
+    @media (max-width: 1100px) {
+      .editor-layout { flex-direction: column; }
+      .editor-side { width: 100%; position: static; max-height: none; }
+    }
+    @media (max-width: 760px) {
+      .main { padding: 14px; }
+      .editor-actions { margin-left: 0; width: 100%; }
+    }
+
+  </style>
+</head>
+
+<body>
+
+  <!-- ── TOP NAVBAR ── -->
+  <nav class="top-navbar">
+    <div class="navbar-left">
+      <button class="hamburger-btn" onclick="toggleSidebar()"><span></span><span></span><span></span></button>
+      <div class="navbar-logo">
+        <span class="logo-text">BARANGAY<span>DOCS</span></span>
+        <span class="admin-badge">ADMIN</span>
+      </div>
+    </div>
+    <div class="navbar-right">
+      <button class="notif-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+        <div class="notif-dot"></div>
+      </button>
+      <div class="admin-avatar"><span class="av-ph">A</span></div>
+    </div>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Overview</div>
+        <div class="sidebar-item" onclick="window.location.href='admin_dashboard.html'">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
+          <span>Dashboard</span>
+        </div>
+      </div>
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Requests</div>
+        <div class="sidebar-item" onclick="window.location.href='admin_pending_requests.html'">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+          </svg>
+          <span>Pending Requests</span>
+          <span class="sidebar-badge yellow" id="pending-requests-badge">—</span>
+        </div>
+        <div class="sidebar-item" onclick="window.location.href='admin_all_requests.html'">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+            <path
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z" />
+          </svg>
+          <span>All Requests</span>
+        </div>
+      </div>
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Users</div>
+        <div class="sidebar-item" onclick="window.location.href='admin_pending_users.html'">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <line x1="19" y1="8" x2="19" y2="14" />
+            <line x1="22" y1="11" x2="16" y2="11" />
+          </svg>
+          <span>Pending Users</span>
+          <span class="sidebar-badge red" id="pending-users-badge">—</span>
+        </div>
+        <div class="sidebar-item" onclick="window.location.href='admin_all_users.html'">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+          <span>All Users</span>
+        </div>
+      </div>
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Tools</div>
+        <div class="sidebar-item" onclick="window.location.href='admin_scanqr.html'">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="2" />
+            <rect x="14" y="3" width="7" height="7" rx="2" />
+            <rect x="3" y="14" width="7" height="7" rx="2" />
+            <path d="M14 14h.01M14 17h3M17 14v7" />
+          </svg>
+          <span>Scan QR</span>
+        </div>
+        <div class="sidebar-item" onclick="window.location.href='admin_documents.html'">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="12" y1="18" x2="12" y2="12" />
+            <line x1="9" y1="15" x2="15" y2="15" />
+          </svg>
+          <span>Documents</span>
+        </div>
+        <div class="sidebar-item active" onclick="window.location.href='admin_templates.html'">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <line x1="3" y1="9" x2="21" y2="9" />
+            <line x1="9" y1="21" x2="9" y2="9" />
+          </svg>
+          <span>Document Templates</span>
+        </div>
+      </div>
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Audit Logs</div>
+        <div class="sidebar-item" onclick="window.location.href='admin_history.html'">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+          <span>History</span>
+        </div>
+      </div>
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section">
+        <div class="sidebar-item" id="sign-out-btn" style="cursor:pointer;">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke="#DC3545">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          <span style="color:#DC3545;">Sign Out</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── MAIN CONTENT ── -->
+    <main class="main" id="mainContent">
+
+      <!-- ═════════ VIEW 1: choose a document type ═════════ -->
+      <section id="view-list">
+        <div class="page-header">
+          <div class="page-header-text">
+            <h1>Document Templates</h1>
+            <p>Choose a document type to customize how its certificate looks. Changes apply to future requests of that type only.</p>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <div class="search-wrap">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="#1B3A6B" stroke-width="2.5">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+            <input id="tpl-search" type="text" placeholder="Search document types…">
+          </div>
+        </div>
+
+        <div class="tpl-grid" id="tpl-grid">
+          <div class="tpl-empty">Loading document types…</div>
+        </div>
+      </section>
+
+      <!-- ═════════ VIEW 2: template editor ═════════ -->
+      <section id="view-editor" class="hidden">
+        <div class="editor-head">
+          <button class="btn-ghost" id="btn-back">← Back</button>
+          <h1 id="editor-title">Template</h1>
+          <span class="badge default" id="editor-badge">Default layout</span>
+          <span class="dirty-dot" id="dirty-dot" title="Unsaved changes"></span>
+
+          <div class="editor-actions">
+            <input type="file" id="docx-file" accept=".docx" class="hidden">
+            <button class="btn-ghost" id="btn-import" title="Replace the editor content with a Word (.docx) file">⬆ Import .docx</button>
+            <button class="btn-ghost" id="btn-export" title="Download this template as a Word (.docx) file">⬇ Export .docx</button>
+            <button class="btn-ghost" id="btn-preview">👁 Preview</button>
+            <button class="btn-ghost" id="btn-reset" title="Load the standard certificate layout into the editor">↺ Standard layout</button>
+            <button class="btn-ghost danger" id="btn-remove" title="Delete the saved custom template">Remove custom</button>
+            <button class="btn-save" id="btn-save"><span id="save-tpl-label">Save Template</span></button>
+          </div>
+        </div>
+
+        <div class="editor-layout">
+          <div class="editor-main">
+            <div class="editor-loading" id="editor-loading">Loading editor…</div>
+            <textarea id="tpl-editor" style="visibility:hidden"></textarea>
+          </div>
+
+          <aside class="editor-side">
+            <div class="side-tabs">
+              <div class="side-tab active" data-pane="pane-fields">Fields</div>
+              <div class="side-tab" data-pane="pane-page">Page</div>
+            </div>
+
+            <div class="side-pane" id="pane-fields">
+              <p class="side-note">Click a field to insert it where your cursor is. It is highlighted while editing and replaced with the resident's real data when the document is generated.</p>
+              <input class="field-search" id="field-search" type="text" placeholder="Search fields…">
+              <div id="field-list"></div>
+            </div>
+
+            <div class="side-pane hidden" id="pane-page">
+              <div class="ps-title">Paper</div>
+              <div class="ps-grid">
+                <div class="form-group">
+                  <label>Size</label>
+                  <select id="ps-size"></select>
+                </div>
+                <div class="form-group">
+                  <label>Orientation</label>
+                  <select id="ps-orient">
+                    <option value="portrait">Portrait</option>
+                    <option value="landscape">Landscape</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="ps-title">Margins (mm)</div>
+              <div class="ps-grid">
+                <div class="form-group"><label>Top</label><input id="ps-mt" type="number" min="0" max="60" step="1"></div>
+                <div class="form-group"><label>Bottom</label><input id="ps-mb" type="number" min="0" max="60" step="1"></div>
+                <div class="form-group"><label>Left</label><input id="ps-ml" type="number" min="0" max="60" step="1"></div>
+                <div class="form-group"><label>Right</label><input id="ps-mr" type="number" min="0" max="60" step="1"></div>
+              </div>
+
+              <div class="ps-title">Page border</div>
+              <div class="ps-grid">
+                <div class="form-group">
+                  <label>Style</label>
+                  <select id="ps-bstyle">
+                    <option value="none">None</option>
+                    <option value="solid">Solid</option>
+                    <option value="double">Double</option>
+                    <option value="dashed">Dashed</option>
+                    <option value="dotted">Dotted</option>
+                  </select>
+                </div>
+                <div class="form-group"><label>Width (px)</label><input id="ps-bwidth" type="number" min="0" max="12" step="1"></div>
+                <div class="form-group full"><label>Color</label><input id="ps-bcolor" type="color"></div>
+              </div>
+
+              <p class="side-note" style="margin-top:14px">Table borders (for layouts like the header and footer) are set with <b>Table ▸ Table properties</b> in the editor menu.</p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ── PREVIEW MODAL ── -->
+  <div class="modal-overlay" id="preview-modal">
+    <div class="preview-box">
+      <div class="preview-bar">
+        <h4>Template Preview (sample data)</h4>
+        <div style="display:flex;gap:8px;">
+          <button class="pv-btn light" id="pv-print">🖨 Print test</button>
+          <button class="pv-btn ghost" id="pv-close">✕ Close</button>
+        </div>
+      </div>
+      <div class="preview-scroll">
+        <div id="preview-paper" class="tpl-paper"></div>
+        <div class="preview-note">Placeholders are filled with sample values here. Real requests use the resident's actual data.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CONFIRM MODAL (reused) ── -->
+  <div class="confirm-overlay" id="confirm-modal">
+    <div class="confirm-box wide">
+      <h3 id="confirm-title">Are you sure?</h3>
+      <p id="confirm-text"></p>
+      <div class="confirm-btns">
+        <button class="btn-no" id="confirm-no">Cancel</button>
+        <button class="btn-yes" id="confirm-yes"><span id="confirm-yes-label">Confirm</span></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- Third-party libraries (classic scripts; loaded before the module) -->
+  <script src="https://cdn.jsdelivr.net/npm/tinymce@6.8.3/tinymce.min.js" referrerpolicy="origin"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html-docx-js@0.3.1/dist/html-docx.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+
+  <script type="module" src="templates.js"></script>
+  <script type="module" src="adminnavbar.js"></script>
+</body>
+
+</html>
