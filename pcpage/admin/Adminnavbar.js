@@ -54,7 +54,7 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// ---------- Markup (replaces the static bell + avatar in the navbar) ----------
+// ---------- Markup (replaces the static bell + avatar in the navbar) ------------
 const navRight = document.querySelector('.navbar-right');
 if (navRight) {
     navRight.innerHTML = `
