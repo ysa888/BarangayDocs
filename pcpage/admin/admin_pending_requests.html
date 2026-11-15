@@ -402,8 +402,10 @@
             <span class="bry-field" id="dp-name">(RESIDENT FULL NAME)</span>,
             <span class="bry-field" id="dp-age">(AGE)</span> years old,
             <span class="bry-field" id="dp-occupation">(OCCUPATION)</span>
-            and a resident of Barangay Banicain, Olongapo City, Zambales.
+            and a resident of <span id="dp-address">Barangay Banicain, Olongapo City, Zambales</span>.
           </p>
+          <p id="dp-extra-line" style="display:none;margin-top:8px;"></p>
+          <p id="dp-remarks" style="display:none;margin-top:8px;white-space:pre-line;"></p>
           <br>
           <p>
             Issued this <span class="bry-field" id="dp-day">(DAY)</span> day of
@@ -639,6 +641,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 <script type="module" src="adminrequests.js"></script>
+<script type="module" src="docedit.js"></script>
 <script type="module" src="adminnotif.js"></script>
 <script type="module" src="adminnavbar.js"></script>
 </body>

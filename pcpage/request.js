@@ -18,6 +18,7 @@ import {
     getDocs,
     serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+import { baseValues, effectiveValues, paintDocument } from "./docoverrides.js";
 
 // =============================================
 // Firebase Config & Init
@@ -462,6 +463,10 @@ async function openDocumentPreview(requestId, cachedData) {
     setText('dp-issued-in',   issuedInDate);
     setText('dp-expiration',  formatExpiryDate(r.expiresAt));
     setText('dp-issued-in-2', issuedInDate);
+
+    // Apply admin corrections stored on the request (docOverrides).
+    // These live on the request only — the resident profile is never changed.
+    paintDocument(effectiveValues(baseValues(r, residentData), r.docOverrides));
 
     // Generate QR
     const qrWrap = el('dp-qr-wrap');
