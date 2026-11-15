@@ -21,6 +21,7 @@ import {
     serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 import { sendSMS } from './sms.js';
+import { baseValues, effectiveValues, paintDocument } from '../docoverrides.js';
 // =============================================
 // Firebase Config & Init
 // =============================================
@@ -266,13 +267,13 @@ function getActionButtons(docId, status) {
     const kebab = `<button class="kebab-btn" data-id="${docId}" data-action="kebab" title="More actions">&#8942;</button>`;
 
     if (status === 'pending') {
-        return `<button class="btn-process" data-id="${docId}" data-action="processing">Process</button>${kebab}`;
+        return `<button class="btn-process" data-id="${docId}" data-action="processing">Process</button><button class="btn-view-doc" data-id="${docId}" data-action="viewdocument">Preview</button>${kebab}`;
     }
     if (status === 'processing') {
-        return `<button class="btn-approve" data-id="${docId}" data-action="approved">Approve</button>${kebab}`;
+        return `<button class="btn-approve" data-id="${docId}" data-action="approved">Approve</button><button class="btn-view-doc" data-id="${docId}" data-action="viewdocument">Preview</button>${kebab}`;
     }
     if (status === 'approved') {
-        return `<button class="btn-approve" data-id="${docId}" data-action="ready">Mark Ready + QR</button>${kebab}`;
+        return `<button class="btn-approve" data-id="${docId}" data-action="ready">Mark Ready + QR</button><button class="btn-view-doc" data-id="${docId}" data-action="viewdocument">Preview</button>${kebab}`;
     }
     if (status === 'ready') {
         return `
@@ -500,9 +501,11 @@ function openReadyModal(docId, data, row) {
     // Generate unique doc code: BRY-DOC-YYYY-XXXXX
     const docCode = `BRY-DOC-${new Date().getFullYear()}-${String(Math.floor(10000 + Math.random() * 90000))}`;
 
+    const resName = data.docOverrides?.residentName || data.residentName;
+
     document.getElementById('modal-doc-code').textContent = docCode;
     document.getElementById('modal-ref-no').textContent   = data.referenceNo;
-    document.getElementById('modal-resident').textContent = data.residentName;
+    document.getElementById('modal-resident').textContent = resName;
     document.getElementById('modal-doc-type').textContent = data.documentType;
 
     // Show expiry picker, hide expiry display row
@@ -517,7 +520,7 @@ function openReadyModal(docId, data, row) {
     overlay.classList.add('show');
 
     // Generate QR after modal is visible (no expiry in QR yet — updated on confirm)
-    const tempQr = `REF:${data.referenceNo}|CODE:${docCode}|RES:${data.residentName}|DOC:${data.documentType}`;
+    const tempQr = `REF:${data.referenceNo}|CODE:${docCode}|RES:${resName}|DOC:${data.documentType}`;
     setTimeout(() => generateQRCode('qr-canvas', tempQr), 100);
 
     // Reset confirm button
@@ -530,7 +533,7 @@ function openReadyModal(docId, data, row) {
         if (!expiry) return; // validation failed — error shown inline
 
         // Rebuild QR content with expiry
-        const qrContent = `REF:${data.referenceNo}|CODE:${docCode}|RES:${data.residentName}|DOC:${data.documentType}|EXP:${expiry.toISOString().split('T')[0]}`;
+        const qrContent = `REF:${data.referenceNo}|CODE:${docCode}|RES:${resName}|DOC:${data.documentType}|EXP:${expiry.toISOString().split('T')[0]}`;
 
         // Regenerate QR with expiry baked in
         generateQRCode('qr-canvas', qrContent);
@@ -627,10 +630,10 @@ async function openDocumentModal(docId, data) {
         if (resSnap.exists()) residentData = resSnap.data();
     }
 
-    populateAndShowDocModal(r, residentData);
+    populateAndShowDocModal(r, residentData, docId);
 }
 
-function populateAndShowDocModal(r, residentData) {
+function populateAndShowDocModal(r, residentData, docId) {
     const overlay = document.getElementById('doc-preview-modal');
     if (!overlay) return;
 
@@ -671,6 +674,12 @@ function populateAndShowDocModal(r, residentData) {
     setText('dp-issued-in',    issuedInDate);
     setText('dp-expiration',   formatExpiry(r.expiresAt));
     setText('dp-issued-in-2',  issuedInDate);
+
+    // Apply admin corrections saved on the request (docOverrides) — resident profile is untouched
+    paintDocument(effectiveValues(baseValues(r, residentData), r.docOverrides));
+
+    // Tell the document editor which request is being previewed
+    window.BarangayDocEditor?.attach(docId, r);
 
     // QR code
     const qrWrap = document.getElementById('dp-qr-wrap');
