@@ -136,3 +136,4 @@ export function paintDocument(values) {
         rem.style.display = values.remarks ? '' : 'none';
     }
 }
+//njklg

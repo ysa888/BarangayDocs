@@ -21,7 +21,7 @@ import {
     serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 import { sendSMS } from './sms.js';
-import { baseValues, effectiveValues, paintDocument } from '../docoverrides.js';
+import { baseValues, effectiveValues, paintDocument } from './docoverrides.js';
 // =============================================
 // Firebase Config & Init
 // =============================================

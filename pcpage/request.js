@@ -18,7 +18,7 @@ import {
     getDocs,
     serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
-import { baseValues, effectiveValues, paintDocument } from "./docoverrides.js";
+import { baseValues, effectiveValues, paintDocument } from "./admin/docoverrides.js";
 
 // =============================================
 // Firebase Config & Init
