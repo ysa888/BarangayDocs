@@ -1333,13 +1333,24 @@
 
   <script>
     // If templates.js fails to start (wrong file path, import error) the list would say "Loading…" forever.
+    // After 6s this checks each file and tells you exactly which one is missing (404).
     setTimeout(function () {
       var g = document.getElementById('tpl-grid');
-      if (g && /Loading document types/.test(g.textContent)) {
-        g.innerHTML = '<div class="tpl-empty">The page script did not start. Press F12 → Console and look for a red error ' +
-          '(usually a 404 for templates.js or templateengine.js — both must be in the SAME folder as admin_templates.html), ' +
-          'or you may not be signed in as an admin.</div>';
-      }
+      if (!g || !/Loading document types/.test(g.textContent)) return;
+      var files = ['templates.js', 'templateengine.js', 'adminnavbar.js'];
+      g.innerHTML = '<div class="tpl-empty">The page script did not start. Checking files…</div>';
+      Promise.all(files.map(function (f) {
+        return fetch(f, { cache: 'no-store' })
+          .then(function (r) { return (r.ok ? '✓ ' : '✗ ') + f + ' — HTTP ' + r.status; })
+          .catch(function () { return '✗ ' + f + ' — could not be fetched'; });
+      })).then(function (lines) {
+        var base = location.href.replace(/[^/]*$/, '');
+        g.innerHTML = '<div class="tpl-empty" style="text-align:left;max-width:640px;margin:0 auto;line-height:1.8">' +
+          '<b>The page script did not start.</b><br>Looked in: ' + base + '<br>' + lines.join('<br>') +
+          '<br><br>Any ✗ must be uploaded into that same folder. (If only adminnavbar.js fails, ' +
+          'it is unrelated to templates — your other admin pages load it too.) ' +
+          'If all three are ✓, open F12 → Console and send me the first red error.</div>';
+      });
     }, 6000);
   </script>
   <script type="module" src="templates.js"></script>
