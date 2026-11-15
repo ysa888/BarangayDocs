@@ -194,7 +194,7 @@ async function collectEvents() {
 
             // Rejected
             if (d.status === 'rejected' && d.updatedAt) {
-                const reason = d.rejectReason ? ` — "${d.rejectReason}"` : '';
+                const reason = d.rejectReason ? ` — "${escapeHtml(d.rejectReason)}"` : '';
                 events.push(makeEvent(
                     `req-rejected-${rid}`,
                     tsToDate(d.updatedAt),
@@ -513,4 +513,9 @@ function loadSidebarBadges() {
             if (badge) badge.textContent = pendingCount;
         }
     );
+}
+
+// Reasons can now contain admin-typed text ("Other"), so escape before innerHTML
+function escapeHtml(v) {
+    return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }

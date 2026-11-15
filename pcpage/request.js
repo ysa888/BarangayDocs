@@ -279,7 +279,7 @@ function buildRequestCard(id, r) {
                 ${r.status === 'rejected' && r.rejectReason ? `
                 <div>
                     <div class="d-label">Reason</div>
-                    <div class="d-val" style="color:var(--red);">${r.rejectReason}</div>
+                    <div class="d-val" style="color:var(--red);">${escapeHtml(r.rejectReason)}</div>
                 </div>` : ''}
             </div>
             <button class="track-btn" data-id="${id}">Track Progress</button>
@@ -908,4 +908,9 @@ function docIcon(name) {
         'Working Permit': 'Icons/workingpermit.png'
     };
     return fallback[name] || 'Icons/barangayclearance.png';
+}
+
+// Reasons can contain admin-typed text ("Other"), so escape before innerHTML
+function escapeHtml(v) {
+    return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }

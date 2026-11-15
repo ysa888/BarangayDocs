@@ -5,6 +5,7 @@
 // =============================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
+import { mountRejectReasonPicker } from "./rejectreasons.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import {
     getFirestore,
@@ -460,15 +461,18 @@ async function updateRequestStatus(docId, newStatus, row, data) {
 function openRejectModal(docId, row) {
     const overlay = document.getElementById('reject-modal');
     if (!overlay) return;
+    const picker = mountRejectReasonPicker(document.getElementById('reject-reason'));
+    picker.reset();
     overlay.classList.add('show');
 
     document.getElementById('confirm-reject').onclick = async () => {
-        const reason = document.getElementById('reject-reason').value.trim();
-        if (!reason) return alert('Please enter a rejection reason.');
+        const { ok, reason, code, error } = picker.getResult();
+        if (!ok) return alert(error);
 
         await updateDoc(doc(db, 'requests', docId), {
             status: 'rejected',
-            rejectReason: reason,
+            rejectReason: reason,        // text residents see (fixed label or the "Other" text)
+            rejectReasonCode: code,      // e.g. 'incomplete_info' or 'other'
             updatedAt: serverTimestamp()
         });
 
@@ -479,13 +483,13 @@ function openRejectModal(docId, row) {
         if (actionCol) actionCol.innerHTML = `<div class="action-row">${getActionButtons(docId, 'rejected')}</div>`;
 
         overlay.classList.remove('show');
-        document.getElementById('reject-reason').value = '';
+        picker.reset();
         showToast('Request rejected.');
     };
 
     document.getElementById('cancel-reject').onclick = () => {
         overlay.classList.remove('show');
-        document.getElementById('reject-reason').value = '';
+        picker.reset();
     };
     // bottom "Cancel" button now works too
     document.getElementById('cancel-reject-btn').onclick = document.getElementById('cancel-reject').onclick;

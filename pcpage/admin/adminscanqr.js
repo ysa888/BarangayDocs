@@ -4,6 +4,7 @@
 // ============================================================
 
 import { initializeApp }   from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
+import { mountRejectReasonPicker, renderRejectReasonBox } from "./rejectreasons.js";
 import { getAuth, onAuthStateChanged, signOut }
                            from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import {
@@ -444,6 +445,9 @@ function showResult(data, refNo) {
         badge.textContent      = `${b.icon}  ${b.text}`;
     }
 
+    // Rejection reason (shown under the badge when rejected)
+    renderRejectReasonBox(badge, data);
+
     // Info fields
     const setText = (id, val) => { const e = el(id); if (e) e.textContent = val || '—'; };
 
@@ -577,6 +581,10 @@ function updateAdminActionButtons(status) {
 
 let pendingNewStatus = null;
 
+function getRejectPicker() {
+    return mountRejectReasonPicker(el('rejectNote'));
+}
+
 function openConfirmModal(newStatus) {
     if (!currentDocId) return;
 
@@ -592,7 +600,7 @@ function openConfirmModal(newStatus) {
         processing: 'This will mark the request as currently being processed.',
         ready:      'This will mark the document as ready for pickup and set the issue date.',
         released:   'This will mark the document as released to the resident.',
-        rejected:   'This will reject the request. You may add an optional reason below.',
+        rejected:   'This will reject the request. Please select a reason below.',
     };
 
     const titleEl  = el('confirmTitle');
@@ -602,7 +610,13 @@ function openConfirmModal(newStatus) {
 
     if (titleEl)  titleEl.textContent  = titleMap[newStatus]  || 'Confirm Action';
     if (bodyEl)   bodyEl.textContent   = bodyMap[newStatus]   || 'Are you sure?';
-    if (noteArea) noteArea.style.display = newStatus === 'rejected' ? '' : 'none';
+    const picker = getRejectPicker();
+    if (picker) {
+        picker.reset();
+        picker.setVisible(newStatus === 'rejected');   // dropdown (+ textarea when "Other")
+    } else if (noteArea) {
+        noteArea.style.display = newStatus === 'rejected' ? '' : 'none';
+    }
     if (modal)    modal.classList.add('show');
 }
 
@@ -611,10 +625,18 @@ function closeConfirmModal() {
     pendingNewStatus = null;
     const noteArea = el('rejectNote');
     if (noteArea) noteArea.value = '';
+    noteArea?._rejectPicker?.reset();
 }
 
 async function handleConfirm() {
     if (!currentDocId || !pendingNewStatus) return;
+
+    // Rejection needs a reason — validate before touching the button / Firestore
+    let rejectData = null;
+    if (pendingNewStatus === 'rejected') {
+        rejectData = getRejectPicker()?.getResult() || null;
+        if (rejectData && !rejectData.ok) { showToast(rejectData.error); return; }
+    }
 
     const btn = el('confirmOk');
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
@@ -629,9 +651,9 @@ async function handleConfirm() {
         if (pendingNewStatus === 'processing') updateData.processedAt = serverTimestamp();
         if (pendingNewStatus === 'ready')      updateData.readyAt     = serverTimestamp();
         if (pendingNewStatus === 'released')   updateData.releasedAt  = serverTimestamp();
-        if (pendingNewStatus === 'rejected') {
-            const reason = el('rejectNote')?.value.trim();
-            if (reason) updateData.rejectReason = reason;
+        if (pendingNewStatus === 'rejected' && rejectData) {
+            updateData.rejectReason     = rejectData.reason;
+            updateData.rejectReasonCode = rejectData.code;
         }
 
         await updateDoc(doc(db, 'requests', currentDocId), updateData);

@@ -1736,7 +1736,7 @@ function buildRequestCard(id, r, fullName) {
                 ${r.status === 'rejected' && r.rejectReason ? `
                 <div>
                     <div class="d-label">Reason</div>
-                    <div class="d-val">${r.rejectReason}</div>
+                    <div class="d-val">${escapeHtml(r.rejectReason)}</div>
                 </div>` : ''}
             </div>
             <button class="track-btn" onclick="toggleTrack(this)">Track Progress</button>
@@ -2004,6 +2004,20 @@ function showVerifyResult(data, refNo) {
             }
         }
 
+        // Rejection reason (under the badge)
+        let rejBox = el('resultRejectReason');
+        if (!rejBox && badge) {
+            rejBox = document.createElement('div');
+            rejBox.id = 'resultRejectReason';
+            rejBox.style.cssText = 'margin-top:10px;padding:10px 14px;border-radius:10px;background:var(--red-bg);color:var(--red-text);font-size:13px;font-weight:700;line-height:1.4;';
+            badge.insertAdjacentElement('afterend', rejBox);
+        }
+        if (rejBox) {
+            const showReason = data.status === 'rejected' && data.rejectReason;
+            rejBox.textContent   = showReason ? 'Reason: ' + data.rejectReason : '';
+            rejBox.style.display = showReason ? '' : 'none';
+        }
+
         // Fields
         const rName    = el('rName');
         const rType    = el('rType');
@@ -2061,4 +2075,9 @@ function validUntil(val) {
     const d = val?.toDate ? val.toDate() : new Date(val);
     d.setFullYear(d.getFullYear() + 1);
     return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+// Reasons can contain admin-typed text ("Other"), so escape before innerHTML
+function escapeHtml(v) {
+    return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }

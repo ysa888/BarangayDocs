@@ -5,6 +5,7 @@
 // =============================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
+import { mountRejectReasonPicker } from "./rejectreasons.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import {
     getFirestore,
@@ -372,17 +373,26 @@ function openRejectModal(docId, row) {
         return;
     }
 
+    const picker = mountRejectReasonPicker(document.getElementById('rejectReason'));
+    picker?.reset();
     overlay.classList.add('show');
 
     document.getElementById('confirmRejectBtn').onclick = async () => {
-        const reason = document.getElementById('rejectReason')?.value.trim() || '';
+        let reason = '', code = '';
+        if (picker) {
+            const res = picker.getResult();
+            if (!res.ok) { showToast(res.error); return; }   // keep modal open
+            reason = res.reason; code = res.code;
+        }
         overlay.classList.remove('show');
         try {
             await updateDoc(doc(db, 'requests', docId), {
-                status:     'rejected',
-                rejectNote: reason,
-                updatedAt:  serverTimestamp()
+                status:           'rejected',
+                rejectReason:     reason,   // was "rejectNote" — residents read rejectReason
+                rejectReasonCode: code,
+                updatedAt:        serverTimestamp()
             });
+            picker?.reset();
             const badge = row.querySelector('.badge');
             if (badge) { badge.className = 'badge rejected'; badge.textContent = 'Rejected'; }
             const actionCol = row.querySelector('.col-action');
@@ -395,7 +405,7 @@ function openRejectModal(docId, row) {
         }
     };
 
-    document.getElementById('cancelRejectBtn').onclick = () => overlay.classList.remove('show');
+    document.getElementById('cancelRejectBtn').onclick = () => { overlay.classList.remove('show'); picker?.reset(); };
 }
 
 // =============================================
