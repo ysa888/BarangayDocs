@@ -821,7 +821,7 @@ export function editorCss(settings, opts = {}) {
     const s = g.s;
     const m = s.margins;
     const mtPx = (m.top * MM_PX).toFixed(1);
-    const guide = 'rgba(220,80,80,.55)';
+    const guide = 'rgba(220,60,60,.9)';
     const url = safeCssUrl(s.background.src, opts.baseUrl);
     return [
         `html{background:#e6e6e6;padding:0}`,
@@ -830,8 +830,10 @@ export function editorCss(settings, opts = {}) {
             `width:${g.innerW}mm;min-height:${g.innerH}mm;margin:16px auto;` +
             `padding:${m.top}mm ${m.right}mm ${m.bottom}mm ${m.left}mm;` +
             `border:${pageBorderCss(s)};background-color:#ffffff;` +
-            `background-image:linear-gradient(to bottom,transparent calc(100% - 2px),${guide} calc(100% - 2px));` +
-            `background-size:100% ${g.bodyH.toFixed(1)}px;background-position:0 ${mtPx}px;background-repeat:repeat-y;` +
+            `background-image:linear-gradient(to bottom,transparent calc(100% - 3px),${guide} calc(100% - 3px)),` +
+            `linear-gradient(to bottom,transparent 50%,rgba(27,58,107,.045) 50%);` +
+            `background-size:100% ${g.bodyH.toFixed(1)}px,100% ${(g.bodyH * 2).toFixed(1)}px;` +
+            `background-position:0 ${mtPx}px,0 ${mtPx}px;background-repeat:repeat-y;` +
             `box-shadow:0 1px 8px rgba(0,0,0,.28);overflow-wrap:break-word}`,
         url ? `body::before{content:'';position:absolute;left:0;top:0;right:0;bottom:0;z-index:-1;pointer-events:none;` +
               `background-image:${url};${bgFitCss(s.background.fit)};opacity:${s.background.opacity}}` : '',

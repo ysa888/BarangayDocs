@@ -1202,6 +1202,7 @@
           <h1 id="editor-title">Template</h1>
           <span class="badge default" id="editor-badge">Default layout</span>
           <span class="dirty-dot" id="dirty-dot" title="Unsaved changes"></span>
+          <span class="badge custom" id="page-count" title="Estimated page count. Red lines in the editor mark where each page ends.">1 page</span>
 
           <div class="editor-actions">
             <input type="file" id="docx-file" accept=".docx" class="hidden">
@@ -1347,6 +1348,22 @@
     }, 6000);
   </script>
   <script>
+
+    // Live page counter: the editor is one continuous sheet, final output is split into real pages.
+    setInterval(function () {
+      var badge = document.getElementById('page-count');
+      var ed = window.tinymce && tinymce.activeEditor;
+      if (!badge || !ed || !ed.getBody || !ed.initialized) return;
+      try {
+        var b = ed.getBody(), cs = ed.getWin().getComputedStyle(b);
+        var pt = parseFloat(cs.paddingTop) || 0, pb = parseFloat(cs.paddingBottom) || 0;
+        var bodyH = (parseFloat(cs.minHeight) || 0) - pt - pb;
+        if (bodyH < 50) return;
+        var n = Math.max(1, Math.ceil((b.offsetHeight - pt - pb) / bodyH - 0.02));
+        badge.textContent = n + (n === 1 ? ' page' : ' pages');
+      } catch (e) {}
+    }, 800);
+
     // Show / hide parts of the editor screen (remembered between visits)
     (function () {
       var $ = function (id) { return document.getElementById(id); };
