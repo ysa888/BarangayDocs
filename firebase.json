@@ -15,5 +15,51 @@
         "npm --prefix \"$RESOURCE_DIR\" run lint"
       ]
     }
-  ]
+  ],
+  "hosting": {
+    "public": "pcpage",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "**/*.pdf"
+    ],
+    "redirects": [
+      {
+        "source": "/pages/barangaydocs_login.html",
+        "destination": "/barangaydocs_login.html",
+        "type": 301
+      },
+      {
+        "source": "/pages/barangaydocs_register.html",
+        "destination": "/barangaydocs_register.html",
+        "type": 301
+      },
+      {
+        "source": "/pages/registerold.html",
+        "destination": "/barangaydocs_register.html",
+        "type": 301
+      },
+      {
+        "source": "/pages/barangaydocs_mobile.html",
+        "destination": "/barangaydocs_home.html",
+        "type": 301
+      },
+      {
+        "source": "/pages/barangaydocs_account.html",
+        "destination": "/barangaydocs_account.html",
+        "type": 301
+      },
+      {
+        "source": "/pages/barangaydocs_request.html",
+        "destination": "/barangaydocs_request.html",
+        "type": 301
+      },
+      {
+        "source": "/pages/barangaydocs_scanqr.html",
+        "destination": "/barangaydocs_scanqr.html",
+        "type": 301
+      }
+    ]
+  }
 }

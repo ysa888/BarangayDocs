@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=1920, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BarangayDocs Admin — Audit History</title>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
   <style>
@@ -60,7 +60,7 @@
     .sidebar-divider { height: 1px; background: var(--border); margin: 4px 12px; }
 
     /* ── MAIN ── */
-    .main { margin-left: var(--sidebar-w); flex: 1; padding: 24px; transition: margin-left 0.25s; }
+    .main { margin-left: var(--sidebar-w); flex: 1; min-width: 0; padding: 24px; transition: margin-left 0.25s; }
     .main.expanded { margin-left: 0; }
 
     /* ── PAGE HEADER ── */
@@ -172,6 +172,7 @@
       .header-stats { display: none; }
     }
   </style>
+  <link rel="stylesheet" href="adminresponsive.css">
 </head>
 <body>
 
@@ -192,7 +193,7 @@
       <div class="notif-dot"></div>
     </button>
     <div class="admin-avatar">
-      <img src="admin_avatar.png" alt="" onerror="this.outerHTML='<span class=\'av-ph\' id=\'navAvatar\'>A</span>'">
+      <span class="av-ph">A</span>
     </div>
   </div>
 </nav>

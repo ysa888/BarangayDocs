@@ -292,6 +292,7 @@
     .main {
       margin-left: var(--sidebar-w);
       flex: 1;
+      min-width: 0;
       padding: 24px;
       transition: margin-left 0.25s;
     }
@@ -321,7 +322,7 @@
       background: var(--card-bg);
       border: 1.5px solid var(--border);
       border-radius: 16px;
-      overflow: hidden;
+      overflow-x: auto;
     }
 
     .table-head-row {
@@ -678,6 +679,7 @@
       }
     }
   </style>
+  <link rel="stylesheet" href="adminresponsive.css">
 </head>
 
 <body>
@@ -698,8 +700,7 @@
         </svg>
         <div class="notif-dot"></div>
       </button>
-      <div class="admin-avatar"><img src="admin_avatar.png" alt=""
-          onerror="this.outerHTML='<span class=\'av-ph\'>A</span>'"></div>
+      <div class="admin-avatar"><span class="av-ph">A</span></div>
     </div>
   </nav>
 

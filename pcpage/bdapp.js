@@ -161,7 +161,7 @@ onAuthStateChanged(auth, async (user) => {
 
     // Admin redirect safety: admins should not use resident pages
     if (userData.role === 'admin') {
-        window.location.href = 'barangaydocs_admin.html';
+        window.location.href = 'admin/admin_dashboard.html';
         return;
     }
 

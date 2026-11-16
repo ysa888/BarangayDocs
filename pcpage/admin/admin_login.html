@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=1920, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BarangayDocs - Admin Login</title>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
   <style>
@@ -305,7 +305,16 @@
       margin-top: 32px; text-align: center;
       font-size: 12px; color: var(--text-light);
     }
+    @media (max-width: 900px) {
+      .left-panel { display: none; }
+      .right-panel { width: 100%; min-height: 100vh; padding: 48px 24px; }
+    }
+    @media (max-width: 380px) {
+      .right-panel { padding-right: 16px; padding-left: 16px; }
+      .form-header h1 { font-size: 26px; }
+    }
   </style>
+  <link rel="stylesheet" href="adminresponsive.css">
 </head>
 <body>
 
@@ -442,7 +451,7 @@
       </div>
 
       <div class="back-row">
-        Go back to <a href="/pcpage/barangaydocs_login.html">Resident Sign In</a>
+        Go back to <a href="../barangaydocs_login.html">Resident Sign In</a>
       </div>
 
       <div class="footer-note">

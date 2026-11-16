@@ -103,19 +103,9 @@ if (navRight) {
             </div>
         </div>`;
 
-    // Avatar: image if available, otherwise initials
+    // The admin profile does not currently store an avatar image.
     const avatar = document.getElementById('adminAvatar');
-    const img = document.createElement('img');
-    img.src = 'admin_avatar.png';
-    img.alt = '';
-    img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
-    img.addEventListener('error', () => {
-        const ph = document.createElement('span');
-        ph.className = 'av-ph';
-        ph.textContent = 'A';
-        img.replaceWith(ph);
-    });
-    avatar.appendChild(img);
+    avatar.innerHTML = '<span class="av-ph">A</span>';
 }
 
 // ---------- Helpers ----------

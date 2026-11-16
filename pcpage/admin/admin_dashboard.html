@@ -135,6 +135,7 @@
     .avail-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
     .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1e1e2e; color: #fff; border-radius: 12px; padding: 12px 20px; font-size: 13px; font-weight: 700; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 999; white-space: nowrap; }
     .toast.show { opacity: 1; }
+<<<<<<< HEAD
     @media (max-width: 900px) { .stats-grid { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 640px) { .sidebar { transform: translateX(calc(-1 * var(--sidebar-w))); } .sidebar.open { transform: translateX(0); } .main { margin-left: 0; } .stats-grid { grid-template-columns: 1fr 1fr; } }
     /* Mobile fit: keep the table inside the screen (swipe sideways for extra columns) */
@@ -146,14 +147,63 @@
       .main { padding: 16px; max-width: 100%; }
       .stats-grid { gap: 10px; }
       .stat-card { padding: 12px; min-width: 0; }
+=======
+    .sidebar-backdrop { display: none; }
+    @media (max-width: 900px) {
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .table-card { background: transparent; border: 0; overflow: visible; }
+      .table-head-row { display: none; }
+      .table-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 12px; padding: 14px; margin-bottom: 10px; background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 14px; }
+      .table-row:last-child { border-bottom: 1.5px solid var(--border); }
+      .table-row:hover { background: var(--card-bg); }
+      .col-icon { display: none; }
+      .col-name { grid-column: 1 / -1; }
+      .col-name h4 { white-space: normal; }
+      .col-user { grid-column: 1 / -1; }
+      .col-user::before, .col-date::before, .col-status::before { display: block; margin-bottom: 3px; color: var(--text-light); font-size: 9px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; }
+      .col-user::before { content: "Resident"; }
+      .col-date, .col-status { width: auto; }
+      .col-date::before { content: "Date"; }
+      .col-status::before { content: "Status"; }
+      .col-action { grid-column: 1 / -1; width: auto; text-align: left; }
+      .action-row { justify-content: flex-start; flex-wrap: wrap; }
+      .action-row button { min-height: 36px; }
+    }
+    @media (max-width: 640px) {
+      .top-navbar { padding: 0 14px; }
+      .navbar-left { gap: 9px; }
+      .logo-text { font-size: 16px; }
+      .navbar-right { gap: 8px; }
+      .sidebar { transform: translateX(-100%); box-shadow: 12px 0 30px rgba(27,58,107,0.18); }
+      .sidebar.open { transform: translateX(0); }
+      .sidebar-backdrop { display: block; position: fixed; inset: 60px 0 0; background: rgba(15,32,58,0.42); opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 90; }
+      .sidebar-backdrop.show { opacity: 1; pointer-events: auto; }
+      .main { margin-left: 0; padding: 18px 14px 28px; min-width: 0; }
+      .main.expanded { margin-left: 0; }
+      .page-header h1 { font-size: 20px; }
+      .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+      .stat-card { padding: 13px 12px; min-width: 0; }
+      .stat-card .stat-label { min-height: 28px; font-size: 10px; }
+      .stat-card .stat-num { font-size: 23px; }
+      .stat-card .stat-sub { font-size: 10px; }
+      .sidebar-badge.red { color: #fff; }
+    }
+    @media (max-width: 380px) {
+      .top-navbar { padding: 0 10px; }
+      .logo-text { font-size: 14px; }
+      .admin-badge { display: none; }
+      .main { padding-right: 10px; padding-left: 10px; }
+      .page-header p { font-size: 12px; }
+>>>>>>> e1bbbdf16eb92066afd9f00e414b23245f130bd2
     }
   </style>
+  <link rel="stylesheet" href="adminresponsive.css">
 </head>
 <body>
 
 <nav class="top-navbar">
   <div class="navbar-left">
-    <button class="hamburger-btn" onclick="toggleSidebar()">
+    <button class="hamburger-btn" type="button" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="true" onclick="toggleSidebar()">
       <span></span><span></span><span></span>
     </button>
     <div class="navbar-logo">
@@ -166,9 +216,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
       <div class="notif-dot"></div>
     </button>
-    <div class="admin-avatar">
-      <img src="admin_avatar.png" alt="" onerror="this.outerHTML='<span class=\'av-ph\'>A</span>'">
-    </div>
+    <div class="admin-avatar"><span class="av-ph">A</span></div>
   </div>
 </nav>
 
@@ -244,6 +292,7 @@
       </div>
     </div>
   </aside>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
 
   <main class="main" id="mainContent">
     <div class="page-header">
