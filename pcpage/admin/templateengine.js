@@ -21,6 +21,8 @@ export const PAPER_INSET_MM = 8;
 
 /** CSS pixels per millimetre. */
 const MM_PX = 96 / 25.4;
+/** Grey gap (px) the editor draws between sheets. The overlay-image mapping below must use the same value. */
+export const EDITOR_PAGE_GAP_PX = 22;
 
 export const PAGE_SIZES = {
     A4:     { w: 210,   h: 297,   label: 'A4 (210 × 297 mm)' },
@@ -737,15 +739,15 @@ async function paginateHtml(html, g) {
 
         // pin "behind text" / "in front" images to the page their position falls on
         const overlays = [];
-        const pitch = g.bodyH;
-        const mt = g.s.margins.top * MM_PX;
-        const hh = g.hh * MM_PX;
+        // Editor sheets are drawn P px apart (sheet height + gap), so an image's editor `top`
+        // tells us its page (k) and its position on that page (top - k*P).
+        const P = g.s.margins.top * MM_PX + g.bodyH + g.s.margins.bottom * MM_PX + EDITOR_PAGE_GAP_PX;
         overlayImgs.forEach(img => {
             const top = parseFloat(img.style.top);
             let k = 0, t = top;
             if (Number.isFinite(top)) {
-                k = Math.min(pages.length - 1, Math.max(0, Math.floor((top - mt) / pitch)));
-                t = top - k * pitch + hh;
+                k = Math.min(pages.length - 1, Math.max(0, Math.floor(top / P)));
+                t = top - k * P;
             }
             img.style.position = 'absolute';
             if (!img.style.zIndex) img.style.zIndex = (img.getAttribute('data-layout') === 'front' || img.classList.contains('img-front')) ? '5' : '-1';

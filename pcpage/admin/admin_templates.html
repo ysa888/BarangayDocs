@@ -1068,6 +1068,11 @@
     @media (max-width: 1100px) {
       #view-editor .editor-side { width: 100%; position: static; height: auto; max-height: 50vh; }
     }
+
+    .field-chip.sel { border-style: solid; border-color: var(--primary-light); background: #EBF0FB; }
+    .img-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+    .img-btns .btn-ghost { height: 30px; padding: 0 10px; font-size: 12px; }
+    .btn-ghost:disabled { opacity: .45; cursor: not-allowed; }
   </style>
   <link rel="stylesheet" href="adminresponsive.css">
 </head>
@@ -1229,6 +1234,7 @@
             <div class="side-tabs">
               <div class="side-tab active" data-pane="pane-fields">Fields</div>
               <div class="side-tab" data-pane="pane-page">Page</div>
+              <div class="side-tab" data-pane="pane-images">Images</div>
             </div>
 
             <div class="side-pane" id="pane-fields">
@@ -1278,6 +1284,40 @@
               </div>
 
               <p class="side-note" style="margin-top:14px">Table borders (for layouts like the header and footer) are set with <b>Table ▸ Table properties</b> in the editor menu.</p>
+            </div>
+
+            <div class="side-pane hidden" id="pane-images">
+              <p class="side-note">Pick an image, then choose <b>Behind text</b> or <b>In front</b> to place it anywhere on the page — including the margins (good for a letterhead / header). Use <b>Drag on page</b> or type exact positions.</p>
+              <div id="img-list"></div>
+              <div id="img-props" class="hidden">
+                <div class="ps-title">Layout</div>
+                <div class="ps-grid">
+                  <div class="form-group full">
+                    <select id="img-layout">
+                      <option value="inline">In line with text</option>
+                      <option value="left">Wrap text — image left</option>
+                      <option value="right">Wrap text — image right</option>
+                      <option value="center">Centered</option>
+                      <option value="behind">Behind text (free)</option>
+                      <option value="front">In front of text (free)</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="ps-title">Position &amp; size (mm)</div>
+                <div class="ps-grid">
+                  <div class="form-group"><label>Page</label><input id="img-page" type="number" min="1" step="1"></div>
+                  <div class="form-group"><label>Width</label><input id="img-w" type="number" min="5" step="1"></div>
+                  <div class="form-group"><label>X (from left)</label><input id="img-x" type="number" step="1"></div>
+                  <div class="form-group"><label>Y (from top)</label><input id="img-y" type="number" step="1"></div>
+                  <div class="form-group full"><label>Opacity (%)</label><input id="img-opacity" type="number" min="5" max="100" step="5"></div>
+                </div>
+                <div class="img-btns">
+                  <button type="button" class="btn-ghost" id="btn-img-drag">Drag on page</button>
+                  <button type="button" class="btn-ghost" id="btn-img-full">Full width</button>
+                  <button type="button" class="btn-ghost danger" id="btn-img-del">Delete</button>
+                </div>
+                <p class="side-note" style="margin-top:10px">X / Y are measured from the page's top-left corner, so <b>0, 0</b> sits at the very corner of the paper and negative numbers go past it.</p>
+              </div>
             </div>
           </aside>
         </div>

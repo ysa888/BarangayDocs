@@ -26,7 +26,8 @@ import {
     PAGE_SIZES, DEFAULT_PAGE_SETTINGS, FIELD_GROUPS,
     normalizePageSettings, paperStyleObject, paperStyleString, baseCss,
     discoverResidentFields, sampleValues, renderTemplateHtml, sanitizeHtml,
-    defaultTemplateHtml, makeQrDataUrl, printTemplateHtml, pageGeometry
+    defaultTemplateHtml, makeQrDataUrl, printTemplateHtml, pageGeometry,
+    applyImageLayout, EDITOR_PAGE_GAP_PX
 } from "./templateengine.js";
 
 // =============================================
@@ -196,12 +197,13 @@ function initPage(user, adminData) {
     document.querySelectorAll('.side-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             document.querySelectorAll('.side-tab').forEach(t => t.classList.toggle('active', t === tab));
-            ['pane-fields', 'pane-page'].forEach(id => el(id)?.classList.toggle('hidden', id !== tab.dataset.pane));
+            ['pane-fields', 'pane-page', 'pane-images'].forEach(id => el(id)?.classList.toggle('hidden', id !== tab.dataset.pane));
         });
     });
     el('field-search')?.addEventListener('input', renderFieldPanel);
     renderFieldPanel();
     initPageSettingsUI();
+    initImagePanel();
 
     window.addEventListener('beforeunload', (e) => {
         if (dirty) { e.preventDefault(); e.returnValue = ''; }
@@ -389,6 +391,9 @@ function ensureEditor() {
         baseCss('body'),
         'html{background:#ffffff;padding:0 0 24px}',
         'body{box-shadow:none}',
+        // "Drag on page" mode: only the behind/in-front images can be grabbed
+        'body.tpl-move *{pointer-events:none !important}',
+        'body.tpl-move img[data-layout="behind"],body.tpl-move img[data-layout="front"]{pointer-events:auto !important;cursor:move;outline:2px dashed #2a5298}',
         // placeholder chips: visible only while editing
         '.ph{background:#fff3cd;border:1px dashed #d4a017;border-radius:3px;padding:0 3px;color:#7a5b00}'
     ].join('\n');
@@ -401,7 +406,7 @@ function ensureEditor() {
         toolbar:
             'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | forecolor backcolor | ' +
             'alignleft aligncenter alignright alignjustify | lineheight | bullist numlist outdent indent | ' +
-            'table image hr pagebreak | casebtn placeholders | removeformat',
+            'table image imglayout hr pagebreak | casebtn placeholders | removeformat',
         toolbar_mode: 'wrap',
         branding: false,
         promotion: false,
@@ -478,6 +483,64 @@ function ensureEditor() {
                 ed.getBody().addEventListener('load', schedulePaginate, true);   // images finishing loading
                 setTimeout(schedulePaginate, 600);
             });
+
+            // Image layout (inline / wrap / behind text / in front) — menu on the toolbar and on the image itself
+            const LAYOUTS = [
+                ['inline', 'In line with text'], ['left', 'Wrap text — image left'], ['right', 'Wrap text — image right'],
+                ['center', 'Centered'], ['behind', 'Behind text (free position)'], ['front', 'In front of text (free position)']
+            ];
+            ed.ui.registry.addMenuButton('imglayout', {
+                text: 'Image layout',
+                tooltip: 'Behind text, in front, wrap…',
+                fetch: (cb) => cb(LAYOUTS.map(([mode, label]) => ({
+                    type: 'menuitem', text: label,
+                    onAction: () => {
+                        const n = ed.selection.getNode();
+                        if (n && n.nodeName === 'IMG') setImageLayout(n, mode);
+                        else showToast('Click an image first, then choose its layout.', 3000);
+                    }
+                })))
+            });
+            ed.ui.registry.addContextToolbar('imgctx', {
+                predicate: (n) => n.nodeName === 'IMG',
+                items: 'imglayout',
+                position: 'node',
+                scope: 'node'
+            });
+
+            // drag behind / in-front images (only while "Drag on page" is on)
+            ed.on('init', () => {
+                const b = ed.getBody(), d = ed.getDoc();
+                b.addEventListener('mousedown', (e) => {
+                    if (!b.classList.contains('tpl-move')) return;
+                    const img = e.target.closest ? e.target.closest('img') : null;
+                    if (!img || !isOverlayImg(img)) return;
+                    e.preventDefault(); e.stopPropagation();
+                    selImg = img;
+                    const sx = e.clientX, sy = e.clientY;
+                    const ox = parseFloat(img.style.left) || 0, oy = parseFloat(img.style.top) || 0;
+                    const mv = (ev) => {
+                        img.style.left = (ox + ev.clientX - sx).toFixed(1) + 'px';
+                        img.style.top = (oy + ev.clientY - sy).toFixed(1) + 'px';
+                    };
+                    const up = () => {
+                        d.removeEventListener('mousemove', mv, true);
+                        d.removeEventListener('mouseup', up, true);
+                        ed.undoManager.add();
+                        setDirty(true);
+                        syncImageProps();
+                        schedulePaginate();
+                    };
+                    d.addEventListener('mousemove', mv, true);
+                    d.addEventListener('mouseup', up, true);
+                }, true);
+                refreshImagePanel();
+            });
+            ed.on('NodeChange', (e) => {
+                if (e.element && e.element.nodeName === 'IMG') selImg = e.element;
+                scheduleImageRefresh();
+            });
+            ed.on('SetContent input change ExecCommand undo redo', scheduleImageRefresh);
 
             const markDirty = () => { if (!loadingContent) setDirty(true); };
             ed.on('input change undo redo SetContent ExecCommand', (e) => {
@@ -642,6 +705,8 @@ function applyPageToEditor() {
     if (!body) return;
     Object.entries(paperStyleObject(pageSettings)).forEach(([k, v]) => body.style.setProperty(k, v));
     body.style.setProperty('margin', '16px auto');
+    body.style.setProperty('position', 'relative');
+    body.style.setProperty('isolation', 'isolate');
     paginateEditor();
 }
 
@@ -651,7 +716,8 @@ function applyPageToEditor() {
 // margin (rules live in an injected <style>; the data-pg marker is removed in GetContent,
 // so nothing extra is ever saved, previewed, printed or exported).
 // ---------------------------------------------
-const PAGE_GAP_PX = 22;
+const PAGE_GAP_PX = EDITOR_PAGE_GAP_PX;
+const MM_PX = 96 / 25.4;
 let paginateTimer = null;
 
 function schedulePaginate() {
@@ -758,6 +824,149 @@ function paginateEditor() {
         `linear-gradient(to bottom,${edge} 0,${edge} ${pageH}px,transparent ${pageH}px) 0 0/1px ${P}px repeat-y,` +
         `linear-gradient(to bottom,${edge} 0,${edge} ${pageH}px,transparent ${pageH}px) 100% 0/1px ${P}px repeat-y,` +
         `#ffffff`);
+}
+
+// ---------------------------------------------
+// Images: layout (behind / in front / wrap), exact position, drag, size, opacity
+// Positions are stored on the image itself (style + data-layout), so they are saved with the
+// template and drawn on the matching page in Preview / Print — including inside the margins.
+// ---------------------------------------------
+let selImg = null;
+let imgRefreshTimer = null;
+const isOverlayImg = (img) => ['behind', 'front'].includes(img.getAttribute('data-layout'));
+const LAYOUT_LABEL = { inline: 'In line', left: 'Wrap left', right: 'Wrap right', center: 'Centered', behind: 'Behind text', front: 'In front' };
+
+function sheetPitch() {
+    const body = editor.getBody();
+    const cs = editor.getWin().getComputedStyle(body);
+    const pt = parseFloat(cs.paddingTop) || 0, pb = parseFloat(cs.paddingBottom) || 0;
+    return pt + pageGeometry(pageSettings).bodyH + pb + PAGE_GAP_PX;
+}
+
+function scheduleImageRefresh() {
+    clearTimeout(imgRefreshTimer);
+    imgRefreshTimer = setTimeout(refreshImagePanel, 200);
+}
+
+function afterImageChange() {
+    editor.undoManager.add();
+    setDirty(true);
+    schedulePaginate();
+    refreshImagePanel();
+}
+
+function setImageLayout(img, mode, pos = {}) {
+    if (!img || !editor) return;
+    editor.undoManager.transact(() => applyImageLayout(img, mode, pos));
+    selImg = img;
+    afterImageChange();
+}
+
+function refreshImagePanel() {
+    const host = el('img-list');
+    if (!host || !editor || !editor.getBody) return;
+    const body = editor.getBody();
+    if (!body) return;
+    const imgs = [...body.querySelectorAll('img')];
+    if (selImg && !body.contains(selImg)) selImg = null;
+    host.innerHTML = '';
+    if (!imgs.length) {
+        const n = document.createElement('p');
+        n.className = 'side-note';
+        n.textContent = 'No images yet. Use Insert ▸ Image (or import a .docx), then choose how it sits here.';
+        host.appendChild(n);
+    }
+    imgs.forEach((img, i) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'field-chip' + (img === selImg ? ' sel' : '');
+        const c = document.createElement('code');
+        c.textContent = 'Image ' + (i + 1);
+        const s = document.createElement('span');
+        s.textContent = LAYOUT_LABEL[img.getAttribute('data-layout') || 'inline'] || 'In line';
+        b.append(c, s);
+        b.addEventListener('click', () => {
+            selImg = img;
+            editor.selection.select(img);
+            editor.focus();
+            try { img.scrollIntoView({ block: 'center' }); } catch (_) { /* ignore */ }
+            refreshImagePanel();
+        });
+        host.appendChild(b);
+    });
+    syncImageProps();
+}
+
+function syncImageProps() {
+    const box = el('img-props');
+    if (!box) return;
+    if (!selImg || !editor || !editor.getBody().contains(selImg)) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    const mode = selImg.getAttribute('data-layout') || 'inline';
+    const free = mode === 'behind' || mode === 'front';
+    const set = (id, v) => { const n = el(id); if (n) n.value = v; };
+    set('img-layout', mode);
+    const P = sheetPitch();
+    const left = parseFloat(selImg.style.left), top = parseFloat(selImg.style.top);
+    const k = Number.isFinite(top) ? Math.max(0, Math.floor(top / P)) : 0;
+    set('img-page', k + 1);
+    set('img-x', Number.isFinite(left) ? (left / MM_PX).toFixed(1) : '0');
+    set('img-y', Number.isFinite(top) ? ((top - k * P) / MM_PX).toFixed(1) : '0');
+    set('img-w', (selImg.getBoundingClientRect().width / MM_PX).toFixed(1));
+    set('img-opacity', Math.round((parseFloat(selImg.style.opacity) || 1) * 100));
+    ['img-page', 'img-x', 'img-y', 'img-opacity', 'btn-img-drag', 'btn-img-full'].forEach(id => { const n = el(id); if (n) n.disabled = !free; });
+}
+
+function readImageProps() {
+    if (!selImg || !editor) return;
+    const mode = el('img-layout')?.value || 'inline';
+    const free = mode === 'behind' || mode === 'front';
+    const num = (id, d) => { const v = parseFloat(el(id)?.value); return Number.isFinite(v) ? v : d; };
+    const pos = {};
+    const w = num('img-w', 0);
+    if (w > 5) pos.width = w * MM_PX;
+    if (free) {
+        const P = sheetPitch();
+        const page = Math.max(1, Math.round(num('img-page', 1)));
+        pos.x = num('img-x', 0) * MM_PX;
+        pos.y = (page - 1) * P + num('img-y', 0) * MM_PX;
+        pos.opacity = Math.min(100, Math.max(5, num('img-opacity', 100))) / 100;
+    }
+    setImageLayout(selImg, mode, pos);
+}
+
+function initImagePanel() {
+    ['img-layout', 'img-page', 'img-x', 'img-y', 'img-w', 'img-opacity']
+        .forEach(id => el(id)?.addEventListener('change', readImageProps));
+
+    el('btn-img-drag')?.addEventListener('click', () => {
+        if (!editor) return;
+        const b = editor.getBody();
+        const on = !b.classList.contains('tpl-move');
+        b.classList.toggle('tpl-move', on);
+        el('btn-img-drag').classList.toggle('on', on);
+        el('btn-img-drag').textContent = on ? 'Done moving' : 'Drag on page';
+        if (on) showToast('Drag the highlighted image anywhere — even into the margins. Click "Done moving" when finished.', 4500);
+    });
+
+    el('btn-img-full')?.addEventListener('click', () => {
+        if (!selImg || !editor) return;
+        const mode = selImg.getAttribute('data-layout') || 'inline';
+        const P = sheetPitch();
+        const top = parseFloat(selImg.style.top) || 0;
+        const k = Math.max(0, Math.floor(top / P));
+        const innerW = pageGeometry(pageSettings).innerW * MM_PX;
+        setImageLayout(selImg, mode, { x: 0, y: top, width: innerW });
+        syncImageProps();
+        void k;
+    });
+
+    el('btn-img-del')?.addEventListener('click', () => {
+        if (!selImg || !editor) return;
+        editor.undoManager.transact(() => selImg.remove());
+        selImg = null;
+        afterImageChange();
+    });
 }
 
 // ---------------------------------------------
