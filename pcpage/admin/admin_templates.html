@@ -1042,6 +1042,32 @@
       .editor-actions { margin-left: 0; width: 100%; }
     }
 
+
+    /* ═══════════════════════════════════════════
+       EDITOR — compact header + maximized editing area
+       ═══════════════════════════════════════════ */
+    .main:has(#view-editor:not(.hidden)) { padding: 10px 12px; }
+    #view-editor { --ed-h: max(520px, calc(100vh - 60px - 20px - 50px)); }
+
+    #view-editor .editor-head { gap: 6px 8px; margin-bottom: 8px; flex-wrap: wrap; }
+    #view-editor .editor-head h1 { font-size: 17px; white-space: nowrap; }
+    #view-editor .editor-actions { margin-left: auto; gap: 5px; flex-wrap: wrap; }
+    #view-editor .editor-actions .sep { width: 1px; height: 20px; background: var(--border); margin: 0 3px; }
+    #view-editor .btn-ghost,
+    #view-editor .btn-save { height: 32px; padding: 0 10px; font-size: 12px; border-radius: 8px; gap: 5px; white-space: nowrap; }
+    #view-editor .btn-ghost.on { background: #EBF0FB; border-color: var(--primary-light); color: var(--primary); }
+
+    #view-editor .editor-layout { gap: 10px; }
+    #view-editor .editor-main { height: var(--ed-h); display: flex; flex-direction: column; }
+    #view-editor .editor-main > .tox-tinymce { flex: 1 1 auto; height: auto !important; min-height: 0; border: 0 !important; border-radius: 0 !important; }
+    #view-editor .editor-main.no-toolbar .tox-editor-header { display: none !important; }
+
+    #view-editor .editor-side { width: 250px; top: 70px; height: var(--ed-h); max-height: none; }
+    #view-editor .editor-layout.side-hidden .editor-side { display: none; }
+
+    @media (max-width: 1100px) {
+      #view-editor .editor-side { width: 100%; position: static; height: auto; max-height: 50vh; }
+    }
   </style>
   <link rel="stylesheet" href="adminresponsive.css">
 </head>
@@ -1179,11 +1205,15 @@
 
           <div class="editor-actions">
             <input type="file" id="docx-file" accept=".docx" class="hidden">
-            <button class="btn-ghost" id="btn-import" title="Replace the editor content with a Word (.docx) file">⬆ Import .docx</button>
-            <button class="btn-ghost" id="btn-export" title="Download this template as a Word (.docx) file">⬇ Export .docx</button>
+            <button class="btn-ghost" id="btn-toggle-side" title="Show / hide the Fields & Page panel">Hide panel</button>
+            <button class="btn-ghost" id="btn-toggle-toolbar" title="Show / hide the editor menu & toolbar">Hide toolbar</button>
+            <button class="btn-ghost" id="btn-focus" title="Hide the left menu for a bigger editor">Focus</button>
+            <span class="sep"></span>
+            <button class="btn-ghost" id="btn-import" title="Replace the editor content with a Word (.docx) file">⬆ Import</button>
+            <button class="btn-ghost" id="btn-export" title="Download this template as a Word (.docx) file">⬇ Export</button>
             <button class="btn-ghost" id="btn-preview">👁 Preview</button>
-            <button class="btn-ghost" id="btn-reset" title="Load the standard certificate layout into the editor">↺ Standard layout</button>
-            <button class="btn-ghost danger" id="btn-remove" title="Delete the saved custom template">Remove custom</button>
+            <button class="btn-ghost" id="btn-reset" title="Load the standard certificate layout into the editor">↺ Standard</button>
+            <button class="btn-ghost danger" id="btn-remove" title="Delete the saved custom template">Remove</button>
             <button class="btn-save" id="btn-save"><span id="save-tpl-label">Save Template</span></button>
           </div>
         </div>
@@ -1315,6 +1345,34 @@
           ///waa
       });
     }, 6000);
+  </script>
+  <script>
+    // Show / hide parts of the editor screen (remembered between visits)
+    (function () {
+      var $ = function (id) { return document.getElementById(id); };
+      var layout = document.querySelector('#view-editor .editor-layout');
+      var main = document.querySelector('#view-editor .editor-main');
+      function get(k) { try { return localStorage.getItem('tplui:' + k) === '1'; } catch (e) { return false; } }
+      function put(k, v) { try { localStorage.setItem('tplui:' + k, v ? '1' : '0'); } catch (e) {} }
+      function bind(btnId, key, labels, apply) {
+        var b = $(btnId); if (!b) return;
+        function set(v) {
+          apply(v); put(key, v);
+          b.textContent = v ? labels[1] : labels[0];
+          b.classList.toggle('on', v);
+          b.setAttribute('aria-pressed', String(v));
+        }
+        set(get(key));
+        b.addEventListener('click', function () { set(!get(key)); });
+      }
+      bind('btn-toggle-side', 'side', ['Hide panel', 'Show panel'], function (v) { layout.classList.toggle('side-hidden', v); });
+      bind('btn-toggle-toolbar', 'toolbar', ['Hide toolbar', 'Show toolbar'], function (v) { main.classList.toggle('no-toolbar', v); });
+      bind('btn-focus', 'focus', ['Focus', 'Exit focus'], function (v) {
+        var sb = $('sidebar'), mc = $('mainContent');
+        if (sb) sb.classList.toggle('collapsed', v);
+        if (mc) mc.classList.toggle('expanded', v);
+      });
+    })();
   </script>
   <script type="module" src="templates.js"></script>
   <script type="module" src="adminnavbar.js"></script>
