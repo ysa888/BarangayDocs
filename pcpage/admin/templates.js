@@ -390,7 +390,7 @@ function ensureEditor() {
 
     const editorCss = [
         baseCss('body'),
-        'html{background:#e6e6e6;padding:0 0 24px}',
+        'html{background:#e6e6e6;padding:0 0 96px;position:relative}',
         'body{box-shadow:none}',
         // "Drag on page" mode: only the behind/in-front images can be grabbed
         'body.tpl-move *{pointer-events:none !important}',
@@ -496,6 +496,7 @@ function ensureEditor() {
                 }
             });
             ed.on('input change keyup SetContent ExecCommand undo redo ObjectResized TableModified', schedulePaginate);
+            ed.on('ResizeWindow ResizeEditor', schedulePaginate);
             ed.on('init', () => {
                 ed.getBody().addEventListener('load', schedulePaginate, true);   // images finishing loading
                 setTimeout(schedulePaginate, 600);
@@ -768,6 +769,7 @@ function applyPageToEditor() {
     body.style.setProperty('margin', '16px auto');
     body.style.setProperty('position', 'relative');
     body.style.setProperty('isolation', 'isolate');
+    body.style.setProperty('z-index', '1');
     paginateEditor();
 }
 
@@ -905,21 +907,35 @@ function paginateEditor() {
 }
 
 // One white sheet per page with its own border and shadow; the grey gap between sheets is the page break.
+// The sheets live in a wrapper that is a sibling of <body> (child of <html>), NOT inside the body:
+// non-editable blocks inside the body make TinyMCE draw its black "fake caret" line next to them,
+// which showed up as a big black line that appeared and disappeared while typing / moving the cursor.
 function drawSheets(body, doc2, pages, P, pageH, bw) {
-    body.querySelectorAll('.tpl-sheet').forEach(n => n.remove());
+    body.querySelectorAll('.tpl-sheet, #tpl-sheets').forEach(n => n.remove());   // clean up older versions
+    const html = doc2.documentElement;
+    let wrap = doc2.getElementById('tpl-sheets');
+    if (!wrap) {
+        wrap = doc2.createElement('div');
+        wrap.id = 'tpl-sheets';
+        wrap.setAttribute('data-mce-bogus', 'all');
+        wrap.setAttribute('aria-hidden', 'true');
+        wrap.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;pointer-events:none;user-select:none';
+        html.insertBefore(wrap, body);          // before <body> so it paints underneath the text
+    }
     const b = pageSettings.border;
     const border = (b.style !== 'none' && b.width > 0) ? `${b.width}px ${b.style} ${b.color}` : 'none';
+    const win = doc2.defaultView;
+    const br = body.getBoundingClientRect();
+    const x0 = br.left + (win.scrollX || 0);     // body border-box, in document coordinates
+    const y0 = br.top + (win.scrollY || 0);
     const w = body.clientWidth;
+    let out = '';
     for (let i = 0; i < pages; i++) {
-        const d = doc2.createElement('div');
-        d.className = 'tpl-sheet';
-        d.setAttribute('data-mce-bogus', 'all');
-        d.setAttribute('contenteditable', 'false');
-        d.style.cssText = `position:absolute;z-index:-2;pointer-events:none;box-sizing:border-box;background:#fff;` +
-            `box-shadow:0 1px 8px rgba(0,0,0,.28);left:${-bw}px;top:${(i * P - bw).toFixed(1)}px;` +
-            `width:${w + 2 * bw}px;height:${(pageH + 2 * bw).toFixed(1)}px;border:${border}`;
-        body.insertBefore(d, body.firstChild);
+        out += `<div class="tpl-sheet" style="position:absolute;pointer-events:none;box-sizing:border-box;background:#fff;` +
+            `box-shadow:0 1px 8px rgba(0,0,0,.28);left:${x0.toFixed(1)}px;top:${(y0 + i * P).toFixed(1)}px;` +
+            `width:${w + 2 * bw}px;height:${(pageH + 2 * bw).toFixed(1)}px;border:${border}"></div>`;
     }
+    wrap.innerHTML = out;
 }
 
 // ---------------------------------------------
