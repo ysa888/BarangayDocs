@@ -911,25 +911,6 @@ export function setupPanelToggle(panel, button, opts = {}) {
     return { apply };
 }
 
-// ─────────────────────────────────────────────
-// QR + print
-// ─────────────────────────────────────────────
-/** Returns a PNG data URL, or '' if QRious isn't loaded. */
-export function makeQrDataUrl(value, size = 100) {
-    try {
-        const Q = globalThis.QRious;
-        if (!Q) return '';
-        const canvas = document.createElement('canvas');
-        new Q({
-            element: canvas, value: String(value || 'NO-QR'), size,
-            backgroundAlpha: 1, foreground: '#1B3A6B', background: '#ffffff', level: 'H'
-        });
-        return canvas.toDataURL('image/png');
-    } catch (_) {
-        return '';
-    }
-}
-
 /**
  * Opens a clean window containing ONLY the fixed-size pages (header/footer/background
  * included), with exact page size/margins, and prints.
