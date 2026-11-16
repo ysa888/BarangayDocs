@@ -168,6 +168,13 @@
     .active-text { color: var(--green); }
     .status-info p:last-child { font-size: 12px; color: var(--text-sub); margin-top: 3px; }
     .status-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px rgba(40,167,69,0.2); }
+    .status-info { min-width: 0; }
+    .status-note { font-size: 11px; color: var(--text-sub); margin-top: 6px; line-height: 1.45; }
+    .status-note b { color: var(--text-main); }
+    .status-card.offline { border-color: #F1AEB5; }
+    .status-card.offline .active-text { color: #DC3545; }
+    .status-card.offline .status-dot { background: #DC3545; box-shadow: 0 0 0 4px rgba(220,53,69,0.2); }
+    .status-dot { flex-shrink: 0; margin-left: 12px; }
 
     /* ABOUT */
     .about-card { background: var(--card-bg); border: 2px solid var(--border); border-radius: 16px; padding: 18px; flex: 1; }
@@ -468,10 +475,11 @@
           </div>
 
           <!-- STATUS -->
-          <div class="status-card">
+          <div class="status-card" id="statusCard">
             <div class="status-info">
-              <p>Barangay Status: <span class="active-text">Active</span></p>
-              <p>Mon &ndash; Fri &bull; 9:00 AM &ndash; 5:00 PM</p>
+              <p>Barangay Status: <span class="active-text" id="statusText">Active</span></p>
+              <p id="statusSub">Mon &ndash; Fri &bull; 9:00 AM &ndash; 5:00 PM</p>
+              <div class="status-note" id="statusNote" hidden></div>
             </div>
             <div class="status-dot"></div>
           </div>
@@ -540,6 +548,40 @@
         card.style.display = label.includes(q) ? '' : 'none';
       });
     });
+  </script>
+  <script type="module">
+    import { watchStatus, computeStatus, formatReopen } from './barangaystatus.js';
+
+    const card = document.getElementById('statusCard');
+    const text = document.getElementById('statusText');
+    const sub  = document.getElementById('statusSub');
+    const note = document.getElementById('statusNote');
+    const HOURS = 'Mon \u2013 Fri \u2022 9:00 AM \u2013 5:00 PM';
+    let data = null;
+
+    function render() {
+      const s = computeStatus(data);
+      card.classList.toggle('offline', !s.open);
+      text.textContent = s.open ? 'Active' : 'Offline';
+      if (s.open) {
+        sub.textContent = s.source === 'manual' ? 'Opened by admin \u2022 until ' + formatReopen(s.closeAt).replace(/^today /, '') : HOURS;
+        note.hidden = true;
+        return;
+      }
+      sub.textContent = 'Reopens ' + formatReopen(s.reopenAt);
+      note.replaceChildren();
+      if (s.source === 'manual' && s.reason) {
+        const b = document.createElement('b');
+        b.textContent = 'Reason: ' + s.reason + (s.note ? ' \u2014 ' + s.note : '');
+        note.append(b, document.createElement('br'));
+      }
+      note.append('You can still submit requests. They will be processed when the barangay reopens.');
+      note.hidden = false;
+    }
+
+    watchStatus(d => { data = d; render(); });
+    setInterval(render, 30000);   // flips at 9 AM / 5 PM without a refresh
+    render();
   </script>
   <script type="module" src="bdapp.js"></script>
 </body>

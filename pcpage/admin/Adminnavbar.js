@@ -1,6 +1,8 @@
 // =============================================
 // adminnavbar.js  (shared by every admin page)
-// - Notification bell: new pending document requests + new pending users
+// - Hamburger: window.toggleSidebar() (collapsed on desktop, open on mobile)
+// - Notification bell: pending document requests, profile changes + new users
+// - Sidebar badges: Pending Requests / Pending Users / Profile Changes
 //   (opens on hover AND click, items link to their pages)
 // - Admin avatar hover/click card: full name + email
 // Usage: <script type="module" src="adminnavbar.js"></script>
@@ -23,6 +25,28 @@ const app  = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
+// ---------- Hamburger / sidebar toggle ----------
+// Pages call this from an inline onclick, and module scripts don't create
+// globals, so it has to live on window.
+window.toggleSidebar = function () {
+    const sidebar = document.getElementById('sidebar');
+    const main    = document.getElementById('mainContent');
+    if (!sidebar) return;
+    if (window.matchMedia('(max-width: 640px)').matches) {
+        sidebar.classList.toggle('open');            // mobile: slides in over the page
+    } else {
+        sidebar.classList.toggle('collapsed');       // desktop: collapses, page widens
+        if (main) main.classList.toggle('expanded');
+    }
+};
+// On mobile, tapping outside the open sidebar closes it
+document.addEventListener('click', (e) => {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar || !sidebar.classList.contains('open')) return;
+    if (sidebar.contains(e.target) || e.target.closest('.hamburger-btn')) return;
+    sidebar.classList.remove('open');
+});
+
 // ---------- Styles ----------
 const style = document.createElement('style');
 style.textContent = `
@@ -42,6 +66,7 @@ style.textContent = `
 .notif-ico { width: 32px; height: 32px; flex-shrink: 0; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
 .notif-ico.req { background: #FFF3CD; }
 .notif-ico.usr { background: #CCE5FF; }
+.notif-ico.prof { background: #E2D9F3; }
 .notif-item h5 { font-size: 12px; font-weight: 800; color: #1B3A6B; }
 .notif-item p { font-size: 11px; color: #6B7A99; margin-top: 2px; }
 .notif-item time { font-size: 10px; color: #9AA5BC; display: block; margin-top: 2px; }
@@ -161,12 +186,13 @@ function initBell() {
     const loadSeen = () => { try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || '[]')); } catch { return new Set(); } };
     const saveSeen = (s) => { try { localStorage.setItem(SEEN_KEY, JSON.stringify([...s])); } catch {} };
 
-    let requests = [], users = [];
+    let requests = [], users = [], profiles = [];
 
     function markAllSeen() {
         const seen = loadSeen();
         requests.forEach(r => seen.add('req_' + r.id));
         users.forEach(u    => seen.add('usr_' + u.id));
+        profiles.forEach(p => seen.add('prof_' + p.id));
         saveSeen(seen);
     }
 
@@ -174,7 +200,8 @@ function initBell() {
         const seen  = loadSeen();
         const items = [
             ...requests.map(r => ({ key: 'req_' + r.id, type: 'req', time: r.createdAt, data: r })),
-            ...users.map(u    => ({ key: 'usr_' + u.id, type: 'usr', time: u.createdAt, data: u }))
+            ...users.map(u    => ({ key: 'usr_' + u.id, type: 'usr', time: u.createdAt, data: u })),
+            ...profiles.map(p => ({ key: 'prof_' + p.id, type: 'prof', time: p.createdAt, data: p }))
         ].sort((a, b) => (b.time?.toMillis?.() || 0) - (a.time?.toMillis?.() || 0));
 
         // Keep the dot hidden while the panel is open
@@ -189,17 +216,24 @@ function initBell() {
         }
 
         list.innerHTML = items.map(i => {
-            const isReq = i.type === 'req';
-            const d     = i.data;
-            const name  = isReq
-                ? (d.residentName || 'A resident')
-                : ([d.firstName, d.lastName].filter(Boolean).join(' ') || d.fullName || d.email || 'A resident');
-            const sub   = isReq ? `${esc(d.documentType || 'Document')} — ${esc(name)}` : esc(name);
+            const d = i.data;
+            let href, ico, title, sub;
+            if (i.type === 'req') {
+                href = 'admin_pending_requests.html'; ico = '📄'; title = 'New document request';
+                sub = `${esc(d.documentType || 'Document')} — ${esc(d.residentName || 'A resident')}`;
+            } else if (i.type === 'prof') {
+                href = 'admin_profile_changes.html'; ico = '✏️'; title = 'Profile change request';
+                const fields = Array.isArray(d.changedFields) && d.changedFields.length ? ` — ${esc(d.changedFields.join(', '))}` : '';
+                sub = `${esc(d.residentName || 'A resident')}${fields}`;
+            } else {
+                href = 'admin_pending_users.html'; ico = '👤'; title = 'New user awaiting approval';
+                sub = esc([d.firstName, d.lastName].filter(Boolean).join(' ') || d.fullName || d.email || 'A resident');
+            }
             return `
-                <div class="notif-item ${seen.has(i.key) ? '' : 'unseen'}" data-href="${isReq ? 'admin_pending_requests.html' : 'admin_pending_users.html'}">
-                    <div class="notif-ico ${isReq ? 'req' : 'usr'}">${isReq ? '📄' : '👤'}</div>
+                <div class="notif-item ${seen.has(i.key) ? '' : 'unseen'}" data-href="${href}">
+                    <div class="notif-ico ${i.type}">${ico}</div>
                     <div>
-                        <h5>${isReq ? 'New document request' : 'New user awaiting approval'}</h5>
+                        <h5>${title}</h5>
                         <p>${sub}</p>
                         <time>${timeAgo(i.time)}</time>
                     </div>
@@ -214,14 +248,24 @@ function initBell() {
         });
     }
 
+    // Sidebar badges (same counts on every admin page)
+    const setBadge = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n; };
+
     onSnapshot(query(collection(db, 'requests'), where('status', '==', 'pending')), (snap) => {
         requests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setBadge('pending-requests-badge', snap.size);
         render();
     });
     onSnapshot(query(collection(db, 'residents'), where('status', '==', 'pending')), (snap) => {
         users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setBadge('pending-users-badge', snap.size);
         render();
     });
+    onSnapshot(query(collection(db, 'profileChangeRequests'), where('status', '==', 'pending')), (snap) => {
+        profiles = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setBadge('profile-changes-badge', snap.size);
+        render();
+    }, (err) => console.error('Profile changes listener failed:', err));
 
     hoverClick(
         wrap, panel,

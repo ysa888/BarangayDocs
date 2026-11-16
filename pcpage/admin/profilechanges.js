@@ -29,7 +29,7 @@ const $    = (id) => document.getElementById(id);
 const FIELD_LABELS = {
     firstName: 'First name', middleName: 'Middle name', lastName: 'Last name',
     birthday: 'Date of birth', sex: 'Sex', civilStatus: 'Civil status',
-    houseNumber: 'House no. / street'
+    houseNumber: 'House no. / street', faceUrl: 'Profile picture'
 };
 const labelOf = (k) => FIELD_LABELS[k] || (/resid/i.test(k) ? 'Years of residency' : k);
 
@@ -56,6 +56,20 @@ function fmtVal(k, v) {
     }
     if (/resid/i.test(k)) return `${v} year(s)`;
     return String(v);
+}
+// Profile pictures are shown as images, not text. Only https URLs or data:image/ are allowed.
+function photoCell(cls, v) {
+    const cell = el('div', cls);
+    const s = String(v || '');
+    if (!/^(https:\/\/|data:image\/)/.test(s)) { cell.textContent = '(no photo)'; return cell; }
+    cell.style.textDecoration = 'none';
+    cell.style.textAlign = 'center';
+    const img = document.createElement('img');
+    img.src = s; img.alt = 'Profile picture';
+    img.style.cssText = 'width:96px;height:96px;object-fit:cover;border-radius:50%;cursor:zoom-in;border:2px solid #fff;box-shadow:0 0 0 1px #D0DCF0';
+    img.addEventListener('click', () => { $('pc-lightbox').querySelector('img').src = s; $('pc-lightbox').classList.add('show'); });
+    cell.appendChild(img);
+    return cell;
 }
 function el(tag, cls, text) {
     const e = document.createElement(tag);
@@ -148,9 +162,9 @@ function openReview(r) {
     Object.keys(r.updates || {}).forEach(k => {
         diff.append(
             el('div', 'lbl', labelOf(k)),
-            el('div', 'pc-old', fmtVal(k, r.previous?.[k])),
+            k === 'faceUrl' ? photoCell('pc-old', r.previous?.[k]) : el('div', 'pc-old', fmtVal(k, r.previous?.[k])),
             el('div', 'pc-arrow', '→'),
-            el('div', 'pc-new', fmtVal(k, r.updates[k]))
+            k === 'faceUrl' ? photoCell('pc-new', r.updates[k]) : el('div', 'pc-new', fmtVal(k, r.updates[k]))
         );
     });
 

@@ -91,6 +91,31 @@ function getInitials(name) {
     return (parts[0][0] + (parts[parts.length - 1][0] || '')).toUpperCase();
 }
 
+/** Cloudinary URL -> small face-cropped thumbnail (falls back to original URL) */
+function faceThumb(url) {
+    if (!url || !url.includes('/upload/')) return url;
+    return url.replace('/upload/', '/upload/c_fill,g_face,w_160,h_160,f_auto,q_auto/');
+}
+
+// Make avatar circles clip the photo on every resident page
+(function injectAvatarCss() {
+    const st = document.createElement('style');
+    st.textContent =
+        '.user-avatar, .profile-avatar { overflow: hidden; }' +
+        '.user-avatar img, .profile-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }';
+    document.head.appendChild(st);
+})();
+
+/** Show the resident's face photo in an avatar element; initials if missing or broken */
+function setAvatar(av, faceUrl, initials) {
+    av.textContent = initials;
+    if (!faceUrl) return;
+    const img = new Image();
+    img.alt = '';
+    img.onload = () => av.replaceChildren(img);
+    img.src = faceThumb(faceUrl);
+}
+
 // =============================================
 // PAGE DETECTION
 // =============================================
@@ -157,7 +182,7 @@ function populateSidebar(userData) {
 
     // Avatar initials
     document.querySelectorAll('.user-avatar').forEach(av => {
-        av.textContent = getInitials(fullName);
+        setAvatar(av, userData.faceUrl, getInitials(fullName));
     });
 
     // Name & role
@@ -388,7 +413,7 @@ function initAccount(user, userData) {
     const profileName   = document.querySelector('.profile-info h2');
     const profileSub    = document.querySelector('.profile-info p');
 
-    if (profileAvatar) profileAvatar.textContent = getInitials(fullName);
+    if (profileAvatar) setAvatar(profileAvatar, userData.faceUrl, getInitials(fullName));
     if (profileName)   profileName.textContent   = fullName;
     if (profileSub)    profileSub.textContent     = `${userData.barangay || 'Barangay Banicain'} • ${userData.city || 'Olongapo City'}`;
 
@@ -455,6 +480,9 @@ function initAccount(user, userData) {
 
     // Email / contact number: verify by email before they can be changed
     wireSecureChange(user, userData);
+
+    // Profile picture: password first, then an admin-reviewed request
+    wirePhotoChange(user, userData, fullName);
 
     // Settings modals — About, Terms & Conditions, Privacy Policy
     wireSettingsModals();
@@ -1586,6 +1614,272 @@ function wireSecureChange(user, userData) {
     });
 
     el('scClose').addEventListener('click', close);
+    wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !wrap.hidden) close(); });
+}
+
+/**
+ * PROFILE PICTURE CHANGE  (Account → Personal Information → Profile Picture,
+ * or the ✏️ badge on the avatar)
+ * Same security as email / contact number: the resident confirms their current
+ * PASSWORD first. The new photo is NOT applied directly — it goes into
+ * `profileChangeRequests` (updates.faceUrl) and replaces `faceUrl` only after
+ * the admin approves it on the Profile Changes page.
+ */
+const PC_SIDE      = 400;      // saved photo is a square of at most 400 x 400
+const PC_MAX_CHARS = 150000;   // keeps the data URL small (it is stored in Firestore)
+const PC_MAX_ORIGINAL = 10 * 1024 * 1024;
+
+CPW_ICONS.camera = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>';
+
+const PC_CSS = `
+.pc-preview{width:132px;height:132px;border-radius:50%;margin:0 auto 14px;background:var(--bg,#F0F4FA);border:3px solid var(--border,#D0DCF0);display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--text-light,#9AA5BC)}
+.pc-preview img{width:100%;height:100%;object-fit:cover;display:block}
+.pc-preview svg{width:44px;height:44px}
+.pc-tip{font-size:12px;font-weight:600;color:var(--text-sub,#6B7A99);background:var(--bg,#F0F4FA);border-radius:10px;padding:9px 12px;margin-bottom:12px;line-height:1.55;text-align:left}
+.edit-badge.pc-live{cursor:pointer}
+.edit-badge.pc-live:hover{filter:brightness(1.08)}
+`;
+
+/** Centre-crop to a square (biased upward so faces aren't cut off) → small JPEG data URL */
+async function pcSquareJpeg(file) {
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((res, rej) => {
+        const i = new Image();
+        i.onload = () => res(i);
+        i.onerror = () => rej(new Error('decode'));
+        i.src = url;
+    }).finally(() => URL.revokeObjectURL(url));
+
+    const w = img.naturalWidth, h = img.naturalHeight, s = Math.min(w, h);
+    const sx = (w - s) / 2;
+    const sy = h > w ? (h - s) * 0.25 : 0;
+    const out = Math.min(PC_SIDE, s);
+    const c = document.createElement('canvas');
+    c.width = c.height = out;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, out, out);
+    ctx.drawImage(img, sx, sy, s, s, 0, 0, out, out);
+
+    let q = 0.85;
+    for (let i = 0; i < 6; i++) {
+        const data = c.toDataURL('image/jpeg', q);
+        if (data.length <= PC_MAX_CHARS) return data;
+        q -= 0.1;
+    }
+    throw new Error('too_large');
+}
+
+function wirePhotoChange(user, userData, fullName) {
+    if (!el('cpwStyles')) {
+        const s = document.createElement('style'); s.id = 'cpwStyles'; s.textContent = CPW_CSS; document.head.appendChild(s);
+    }
+    if (!el('pcStyles')) {
+        const s = document.createElement('style'); s.id = 'pcStyles'; s.textContent = PC_CSS; document.head.appendChild(s);
+    }
+    if (el('pcOverlay')) return;
+
+    const wrap = document.createElement('div');
+    wrap.id = 'pcOverlay'; wrap.className = 'cpw-overlay'; wrap.hidden = true;
+    wrap.setAttribute('role', 'dialog'); wrap.setAttribute('aria-modal', 'true');
+    wrap.innerHTML = `
+    <div class="cpw-modal">
+        <button type="button" class="cpw-x" id="pcClose" aria-label="Close">${CPW_ICONS.close}</button>
+        <div class="cpw-icon" id="pcIcon"></div>
+        <h3 id="pcTitle"></h3>
+        <p class="cpw-sub" id="pcSub"></p>
+        <div id="pcBody"></div>
+    </div>`;
+    document.body.appendChild(wrap);
+
+    let busy = false;
+    const close = () => { if (!busy) wrap.hidden = true; };
+    const open  = () => { wrap.hidden = false; };
+    const setHead = (icon, title, subParts, ok = false) => {
+        el('pcIcon').innerHTML = CPW_ICONS[icon] || CPW_ICONS.lock;
+        el('pcIcon').classList.toggle('ok', ok);
+        el('pcTitle').textContent = title;
+        const sub = el('pcSub'); sub.textContent = '';
+        (Array.isArray(subParts) ? subParts : [subParts]).forEach(p => {
+            if (p && p.b) { const b = document.createElement('b'); b.textContent = p.b; sub.appendChild(b); }
+            else sub.appendChild(document.createTextNode(p));
+        });
+    };
+    const body = () => { const b = el('pcBody'); b.innerHTML = ''; return b; };
+    const btn = (text, cls, fn) => { const x = document.createElement('button'); x.type = 'button'; x.className = 'cpw-btn' + (cls ? ' ' + cls : ''); x.textContent = text; x.addEventListener('click', fn); return x; };
+    const gap = () => { const d = document.createElement('div'); d.style.height = '10px'; return d; };
+    const fieldErr = (id, msg) => { const e = el(id + 'Err'); if (e) e.textContent = msg || ''; e?.closest('.cpw-field')?.classList.toggle('err', !!msg); };
+    const hasPendingRequest = async () => {
+        const snap = await getDocs(query(collection(db, ICR_COLLECTION), where('uid', '==', user.uid), where('status', '==', 'pending')));
+        return !snap.empty;
+    };
+
+    function viewDone(title, sub, ok = true) {
+        setHead(ok ? 'check' : 'lock', title, sub, ok);
+        const b = body(); b.appendChild(btn('Done', '', close)); open();
+    }
+
+    // ── Step 1: confirm with current password ──
+    async function viewConfirm() {
+        // one open request at a time (shared with the Information Change request)
+        try {
+            if (await hasPendingRequest()) {
+                return viewDone('Request already pending',
+                    'You already have a change request waiting for barangay review. You can send another once it has been reviewed.', false);
+            }
+        } catch (e) { console.error('Pending check failed:', e); }
+
+        setHead('lock', 'Change profile picture?',
+            ['Do you really want to change your profile picture? For your security, enter your ', { b: 'current password' }, ' to continue.']);
+        const b = body();
+        const f = document.createElement('div'); f.className = 'cpw-field';
+        f.innerHTML = `<label for="pcPw">Current password</label><div class="cpw-input"><input id="pcPw" type="password" autocomplete="current-password" placeholder="Enter your password"></div><div class="cpw-ferr" id="pcPwErr"></div>`;
+        b.appendChild(f);
+        const go = btn('Yes, continue', '', async () => {
+            if (busy) return;
+            const pw = el('pcPw').value;
+            fieldErr('pcPw', '');
+            if (!pw) return fieldErr('pcPw', 'Please enter your password.');
+            busy = true; go.disabled = true; go.textContent = 'Checking…';
+            try {
+                await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, pw));
+                busy = false; viewPick();
+            } catch (err) {
+                console.error('Password check failed:', err);
+                busy = false; go.disabled = false; go.textContent = 'Yes, continue';
+                fieldErr('pcPw', ['auth/wrong-password', 'auth/invalid-credential', 'auth/invalid-login-credentials'].includes(err?.code) ? 'Incorrect password. Please try again.'
+                    : err?.code === 'auth/too-many-requests' ? 'Too many attempts. Please wait a few minutes and try again.'
+                    : err?.code === 'auth/network-request-failed' ? 'No internet connection. Please try again.'
+                    : 'We couldn\'t verify your password. Please try again.');
+            }
+        });
+        el('pcPw').addEventListener('keydown', (e) => { if (e.key === 'Enter') go.click(); });
+        b.append(go, gap(), btn('Cancel', 'ghost', close));
+        open();
+        el('pcPw').focus();
+    }
+
+    // ── Step 2: choose the new photo + submit ──
+    function viewPick() {
+        setHead('camera', 'Choose your new photo',
+            'Barangay staff will review it. Your current picture stays until it is approved.', true);
+        const b = body();
+        let dataUrl = null, processing = false;
+
+        const prev = document.createElement('div'); prev.className = 'pc-preview';
+        const showCurrent = () => {
+            prev.replaceChildren();
+            if (userData.faceUrl) {
+                const i = new Image(); i.alt = '';
+                i.onload = () => prev.replaceChildren(i);
+                i.src = faceThumb(userData.faceUrl);
+            }
+            if (!prev.firstChild) prev.innerHTML = CPW_ICONS.camera;
+        };
+        showCurrent();
+
+        const tip = document.createElement('div'); tip.className = 'pc-tip';
+        tip.textContent = 'Use a clear, recent photo of your face, looking at the camera, in good light. No sunglasses, filters or group photos.';
+
+        const file = document.createElement('input');
+        file.type = 'file'; file.accept = 'image/jpeg,image/png,image/webp'; file.hidden = true;
+
+        const fld = document.createElement('div'); fld.className = 'cpw-field';
+        fld.innerHTML = '<div class="cpw-ferr" id="pcFileErr" style="text-align:center"></div>';
+
+        const pick = btn('Choose photo', 'ghost', () => file.click());
+        const submit = btn('Submit for review', '', async () => {
+            if (busy || processing) return;
+            fieldErr('pcFile', '');
+            if (!dataUrl) return fieldErr('pcFile', 'Please choose a photo first.');
+            busy = true; submit.disabled = true; submit.textContent = 'Submitting…';
+            try {
+                if (await hasPendingRequest()) { busy = false; return viewDone('Request already pending', 'You already have a change request waiting for barangay review.', false); }
+                await addDoc(collection(db, ICR_COLLECTION), {
+                    uid: user.uid,
+                    email: user.email,
+                    residentName: fullName,
+                    status: 'pending',
+                    changedFields: ['Profile Picture'],
+                    updates:  { faceUrl: dataUrl },
+                    previous: { faceUrl: userData.faceUrl || '' },
+                    reason: 'Profile picture update',
+                    proofRequired: false,
+                    proof: [],
+                    createdAt: serverTimestamp()
+                });
+                busy = false;
+                viewDone('Request submitted', 'Your new profile picture was sent to the barangay for review. We\'ll notify you once it is approved.');
+            } catch (err) {
+                console.error('Photo change request failed:', err);
+                busy = false; submit.disabled = false; submit.textContent = 'Submit for review';
+                fieldErr('pcFile', err?.code === 'permission-denied'
+                    ? 'You don\'t have permission to submit this request. Please contact the barangay office.'
+                    : 'We couldn\'t submit your request. Please check your connection and try again.');
+            }
+        });
+        submit.disabled = true;
+
+        file.addEventListener('change', async () => {
+            const f = file.files[0];
+            file.value = '';
+            fieldErr('pcFile', '');
+            if (!f) return;
+            if (!/^image\/(jpeg|png|webp)$/.test(f.type)) return fieldErr('pcFile', 'Please choose a JPG, PNG or WEBP photo.');
+            if (f.size > PC_MAX_ORIGINAL) return fieldErr('pcFile', 'That photo is over 10 MB. Please choose a smaller one.');
+            processing = true; submit.disabled = true; pick.textContent = 'Preparing photo…';
+            try {
+                dataUrl = await pcSquareJpeg(f);
+                const i = new Image(); i.alt = ''; i.src = dataUrl;
+                prev.replaceChildren(i);
+                submit.disabled = false;
+            } catch (err) {
+                console.error('Photo prepare failed:', err);
+                dataUrl = null; submit.disabled = true; showCurrent();
+                fieldErr('pcFile', 'We couldn\'t read that photo. Try a different JPG or PNG.');
+            }
+            processing = false; pick.textContent = 'Choose a different photo';
+        });
+
+        b.append(prev, tip, file, fld, pick, gap(), submit, gap(), btn('Cancel', 'ghost', close));
+        open();
+    }
+
+    // ── Entry points: the row, and a ✏️ badge on the avatar ──
+    const row = el('infoPhoto')?.closest('.info-row');
+    if (row && !row.dataset.pc) {
+        row.dataset.pc = '1';
+        row.tabIndex = 0; row.setAttribute('role', 'button');
+        row.title = 'Click to change (password required)';
+        row.addEventListener('click', viewConfirm);
+        row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); viewConfirm(); } });
+
+        // show the current photo in the row's icon
+        const icon = el('infoPhotoIcon');
+        if (icon && userData.faceUrl) {
+            const i = new Image(); i.alt = '';
+            i.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:10px';
+            i.onload = () => icon.replaceChildren(i);
+            i.src = faceThumb(userData.faceUrl);
+        }
+    }
+
+    // setAvatar() rewrites the avatar's children (also when the photo finishes
+    // loading), so keep the badge attached with an observer.
+    const av = document.querySelector('.profile-avatar');
+    if (av) {
+        const badge = document.createElement('div');
+        badge.className = 'edit-badge pc-live'; badge.textContent = '✏️';
+        badge.title = 'Change profile picture'; badge.setAttribute('role', 'button'); badge.tabIndex = 0;
+        badge.addEventListener('click', viewConfirm);
+        badge.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); viewConfirm(); } });
+        const ensure = () => { if (badge.parentNode !== av) av.appendChild(badge); };
+        new MutationObserver(ensure).observe(av, { childList: true });
+        ensure();
+    }
+
+    el('pcClose').addEventListener('click', close);
     wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !wrap.hidden) close(); });
 }

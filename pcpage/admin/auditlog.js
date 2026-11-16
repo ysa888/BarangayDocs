@@ -1,6 +1,7 @@
 // =============================================
 // auditlog.js — Handles: admin_audit_log.html
-// Shows the history of every request: who did what and when.
+// Combined audit log + history: who did what and when, across requests,
+// profile changes, accounts, and documents.
 // Sources: `auditLogs` (admin actions) + the original submission of each
 // document request / profile change request.
 // =============================================
@@ -27,7 +28,9 @@ const LABELS = {
     request_ready: 'Ready + QR issued', request_released: 'Released', request_rejected: 'Rejected',
     profile_approved: 'Change approved', profile_rejected: 'Change rejected'
 };
-const pillClass = (a) => a.replace(/^(request|profile)_/, '');
+const pillClass = (a) => a.replace(/^(request|profile|account|document|doc|user)_/, '');
+const prettify = (a) => { const t = String(a || '').replace(/_/g, ' ').trim(); return t.charAt(0).toUpperCase() + t.slice(1); };
+const labelOf = (a) => LABELS[a] || prettify(a);
 
 const state = { logs: [], reqs: [], profs: [] };
 let focusId = null;   // filter to one request's trail
@@ -39,6 +42,16 @@ const fmt = (v) => {
     return d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
            d.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
 };
+function inRange(v, range) {
+    if (range === 'all') return true;
+    const t = ms(v); if (!t) return false;
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (range === 'today') return t >= start.getTime();
+    if (range === 'week')  { start.setDate(start.getDate() - start.getDay()); return t >= start.getTime(); }
+    if (range === 'month') return t >= new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    return true;
+}
 function cell(text, small) {
     const d = document.createElement('div');
     d.textContent = text || '—';
@@ -66,11 +79,13 @@ function render() {
     const list = $('al-list'); list.innerHTML = '';
     const q = $('al-search').value.trim().toLowerCase();
     const type = $('al-type').value;
+    const range = $('al-date').value;
 
     const rows = events().filter(e =>
         (type === 'all' || e.targetType === type) &&
         (!focusId || e.targetId === focusId) &&
-        (!q || [e.referenceNo, e.residentName, e.adminEmail, e.documentType, e.details, LABELS[e.action]]
+        inRange(e.createdAt, range) &&
+        (!q || [e.referenceNo, e.residentName, e.adminEmail, e.documentType, e.details, labelOf(e.action)]
                 .join(' ').toLowerCase().includes(q)));
 
     const chipWrap = $('al-chip-wrap'); chipWrap.innerHTML = '';
@@ -81,6 +96,7 @@ function render() {
         chipWrap.appendChild(chip);
     }
 
+    $('al-count').textContent = rows.length + (rows.length === 1 ? ' event' : ' events');
     if (!rows.length) { const e = document.createElement('div'); e.className = 'al-empty'; e.textContent = 'No activity found.'; list.appendChild(e); return; }
 
     rows.forEach(e => {
@@ -88,12 +104,12 @@ function render() {
         const ev = document.createElement('div');
         const pill = document.createElement('span');
         pill.className = 'al-pill ' + pillClass(e.action);
-        pill.textContent = LABELS[e.action] || e.action;
+        pill.textContent = labelOf(e.action);
         ev.appendChild(pill);
 
         const ref = document.createElement('div');
         const link = document.createElement('span'); link.className = 'al-ref';
-        link.textContent = e.referenceNo || (e.targetType === 'profileChange' ? 'Info change' : '—');
+        link.textContent = e.referenceNo || (e.targetType === 'profileChange' ? 'Info change' : (e.targetName || '—'));
         link.title = 'Show the full trail of this request';
         link.addEventListener('click', () => { focusId = e.targetId; render(); });
         ref.appendChild(link);
@@ -135,3 +151,4 @@ onAuthStateChanged(auth, async (user) => {
 
 $('al-search').addEventListener('input', render);
 $('al-type').addEventListener('change', render);
+$('al-date').addEventListener('change', render);

@@ -95,6 +95,29 @@ function getInitials(firstName, lastName) {
     return ((firstName?.[0] || '') + (lastName?.[0] || '')).toUpperCase();
 }
 
+/** Cloudinary URL -> small face-cropped thumbnail (falls back to the original URL) */
+function faceThumb(url) {
+    if (!url || !url.includes('/upload/')) return url;
+    return url.replace('/upload/', '/upload/c_fill,g_face,w_160,h_160,f_auto,q_auto/');
+}
+
+/** HTML for inside an avatar circle: face photo, or initials if none / fails to load */
+function avatarInner(faceUrl, firstName, lastName) {
+    const ini = getInitials(firstName, lastName);
+    if (!faceUrl) return ini;
+    return `<img src="${encodeURI(faceThumb(faceUrl))}" alt="" data-i="${ini}" onerror="this.parentNode.textContent=this.dataset.i">`;
+}
+
+/** Set an existing avatar element to the face photo, falling back to initials */
+function setAvatar(el, faceUrl, firstName, lastName) {
+    el.textContent = getInitials(firstName, lastName);
+    if (!faceUrl) return;
+    const img = new Image();
+    img.alt = '';
+    img.onload = () => el.replaceChildren(img);
+    img.src = faceThumb(faceUrl);
+}
+
 function formatDate(isoString) {
     if (!isoString) return '—';
     return new Date(isoString).toLocaleDateString('en-PH', {
@@ -146,7 +169,7 @@ function buildRow(uid, data) {
 
     row.innerHTML = `
         <div style="width:38px;flex-shrink:0;">
-            <div class="user-avatar-sm">${getInitials(data.firstName, data.lastName)}</div>
+            <div class="user-avatar-sm">${avatarInner(data.faceUrl, data.firstName, data.lastName)}</div>
         </div>
         <div class="col-uname">
             <div>
@@ -274,7 +297,7 @@ function viewUser(uid, data) {
     document.getElementById('modal-joined').textContent   = formatDate(data.createdAt);
     document.getElementById('modal-status').textContent   = getBadgeLabel(data.status);
     document.getElementById('modal-status').className     = `badge ${getBadgeClass(data.status)}`;
-    document.getElementById('modal-initials').textContent = getInitials(data.firstName, data.lastName);
+    setAvatar(document.getElementById('modal-initials'), data.faceUrl, data.firstName, data.lastName);
 
     // Valid ID image + Face photo (shown side by side for comparison)
     renderVerifyImage('modal-valid-id-wrap', 'modal-open-id-btn', data.validIdUrl, 'Valid ID', 'No ID uploaded');

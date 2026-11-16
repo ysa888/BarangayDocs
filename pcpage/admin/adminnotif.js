@@ -1,3 +1,4 @@
+// YO THIS CODE DONT WORK USE ADMINNAVBAR.JS AS THE NOTIFICATION ARE IN THERE NOW
 // =============================================
 // adminnotif.js — makes the admin top-bar bell work on every admin page.
 // Shows what needs attention (new document requests, profile change
@@ -59,6 +60,12 @@ if (btn) {
     document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) drop.classList.remove('show'); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') drop.classList.remove('show'); });
 
+    // ---- sidebar badge (so Profile Changes shows its count on every admin page) ----
+    function setSidebarBadge(id, n) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = n;
+    }
+
     // ---- data ----
     const state = { req: [], prof: [], user: [] };
     const ts = (v) => v?.toMillis?.() ?? 0;
@@ -104,10 +111,16 @@ if (btn) {
             const a = await getDoc(doc(db, 'admins', user.uid));
             if (!a.exists()) return;
         } catch (_) { return; }
-        const sub = (q, key) => onSnapshot(q, (snap) => { state[key] = snap.docs.map(d => d.data()); render(); },
+        const sub = (q, key) => onSnapshot(q, (snap) => {
+                                               state[key] = snap.docs.map(d => d.data());
+                                               if (key === 'prof') setSidebarBadge('profile-changes-badge', snap.size);
+                                               render();
+                                           },
                                            (err) => console.error('Bell listener failed:', key, err));
         sub(query(collection(db, 'requests'), where('status', '==', 'pending')), 'req');
         sub(query(collection(db, 'profileChangeRequests'), where('status', '==', 'pending')), 'prof');
         sub(query(collection(db, 'residents'), where('status', '==', 'pending')), 'user');
     });
 }
+
+// YO THIS CODE DONT WORK USE ADMINNAVBAR.JS AS THE NOTIFICATION ARE IN THERE NOW
