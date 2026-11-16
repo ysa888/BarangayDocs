@@ -405,6 +405,9 @@ function ensureEditor() {
         '#tpl-ovl .tpl-grip.mv{left:-2px;top:-24px;cursor:move}',
         '#tpl-ovl .tpl-grip.rz{right:-8px;bottom:-8px;width:14px;height:14px;border-radius:3px;cursor:nwse-resize}',
         // placeholder chips: visible only while editing
+        '.tpl-pagebreak{display:block;height:0;margin:0;padding:0;border:0;position:relative;clear:both}',
+        '.tpl-pagebreak::after{content:"Page break";position:absolute;left:0;top:-8px;font:700 10px/16px sans-serif;color:#fff;background:#2a5298;padding:0 6px;border-radius:3px;pointer-events:none}',
+        '.tpl-pagebreak[data-pagebreak="blank"]::after{content:"Blank page";background:#7a5b00}',
         '.ph{background:#fff3cd;border:1px dashed #d4a017;border-radius:3px;padding:0 3px;color:#7a5b00}'
     ].join('\n');
 
@@ -412,11 +415,11 @@ function ensureEditor() {
         target: el('tpl-editor'),
         height: Math.max(560, window.innerHeight - 190),
         menubar: 'edit insert format table',
-        plugins: 'advlist lists table image link charmap searchreplace pagebreak code',
+        plugins: 'advlist lists table image link charmap searchreplace code',
         toolbar:
             'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | forecolor backcolor | ' +
             'alignleft aligncenter alignright alignjustify | lineheight | bullist numlist outdent indent | ' +
-            'table image imglayout hr pagebreak | casebtn placeholders | removeformat',
+            'table image imglayout hr | newpage blankpage | casebtn placeholders | removeformat',
         toolbar_mode: 'wrap',
         branding: false,
         promotion: false,
@@ -458,6 +461,9 @@ function ensureEditor() {
                 el('editor-loading')?.classList.add('hidden');
                 applyPageToEditor();
             });
+
+            ed.ui.registry.addButton('newpage',   { text: 'New page',    tooltip: 'Start the following content on a new page', onAction: () => insertPageBreak(false) });
+            ed.ui.registry.addButton('blankpage', { text: '+ Blank page', tooltip: 'Insert an empty page here',                onAction: () => insertPageBreak(true) });
 
             ed.ui.registry.addMenuButton('casebtn', {
                 text: 'Aa',
@@ -698,6 +704,14 @@ function insertField(key) {
     setDirty(true);
 }
 
+function insertPageBreak(blank) {
+    if (!editor) return;
+    editor.focus();
+    editor.insertContent(`<div class="tpl-pagebreak" data-pagebreak="${blank ? 'blank' : '1'}" contenteditable="false"></div>`);
+    setDirty(true);
+    schedulePaginate();
+}
+
 // ---------------------------------------------
 // Page settings (size / orientation / margins / border)
 // ---------------------------------------------
@@ -808,6 +822,10 @@ function paginateEditor() {
     for (const child of body.children) {
         const tag = child.tagName;
         if (tag === 'STYLE' || tag === 'SCRIPT') continue;
+        if (child.hasAttribute('data-pagebreak')) {
+            units.push({ mode: 'break', blank: child.getAttribute('data-pagebreak') === 'blank', h: 0 });
+            continue;
+        }
         if (!flows(child)) continue;
         const cr = child.getBoundingClientRect();
         if (tag === 'TABLE') {
@@ -835,11 +853,35 @@ function paginateEditor() {
         prevBottom = rectY(cr) + cr.height;
     }
 
-    // 2) walk top→bottom, pushing anything that crosses a page end onto the next sheet
-    let shift = 0, k = 0, lastBottomY = 0;
+    // 2) walk top→bottom, pushing anything that crosses a page end (or follows a page break) onto the next sheet
+    let shift = 0, k = 0, lastBottomY = 0, pending = 0, basePage = 0;
     const rules = [];
+    const pushUnit = (u, d) => {
+        k++;
+        u.a.setAttribute('data-pg', String(k));
+        if (u.mode === 'row') {
+            [...u.a.children].forEach((cell, i) => {
+                const p0 = parseFloat(win.getComputedStyle(cell).paddingTop) || 0;
+                rules.push(`[data-pg="${k}"]>:nth-child(${i + 1}){padding-top:${(p0 + d).toFixed(1)}px !important}`);
+            });
+        } else {
+            rules.push(`[data-pg="${k}"]{margin-top:${((u.gap0 || 0) + d).toFixed(1)}px !important}`);
+        }
+        shift += d;
+    };
     for (const u of units) {
+        if (u.mode === 'break') {
+            if (!pending) basePage = Math.max(0, Math.floor((lastBottomY - 0.5) / P));
+            const inc = u.blank ? 2 : 1;
+            pending += lastBottomY > 0 ? inc : inc - 1;
+            continue;
+        }
         if (u.h < 1) continue;
+        if (pending) {
+            const d0 = (basePage + pending) * P - (u.top + shift);
+            pending = 0;
+            if (d0 > 0.5) pushUnit(u, d0);
+        }
         const top = u.top + shift;
         const bottom = u.bottom + shift;
         const page = Math.floor(top / P);
@@ -848,22 +890,11 @@ function paginateEditor() {
         const crosses = bottom > contentEnd + 0.5 && u.h <= bodyH;
         if (inMargin || crosses) {
             const d = (page + 1) * P - top;
-            if (d > 0.5) {
-                k++;
-                u.a.setAttribute('data-pg', String(k));
-                if (u.mode === 'row') {
-                    [...u.a.children].forEach((cell, i) => {
-                        const p0 = parseFloat(win.getComputedStyle(cell).paddingTop) || 0;
-                        rules.push(`[data-pg="${k}"]>:nth-child(${i + 1}){padding-top:${(p0 + d).toFixed(1)}px !important}`);
-                    });
-                } else {
-                    rules.push(`[data-pg="${k}"]{margin-top:${((u.gap0 || 0) + d).toFixed(1)}px !important}`);
-                }
-                shift += d;
-            }
+            if (d > 0.5) pushUnit(u, d);
         }
         lastBottomY = u.bottom + shift;
     }
+    if (pending > 1) lastBottomY = (basePage + pending - 1) * P + 1;   // blank page at the very end
     st.textContent = rules.join('\n');
 
     // 3) draw the sheets: white page, thin edge lines, grey gap in between

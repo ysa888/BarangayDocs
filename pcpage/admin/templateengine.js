@@ -463,6 +463,32 @@ function fillChip(chip, key, value) {
     }
 }
 
+function stripUnderline(node) {
+    if (!node || node.nodeType !== 1) return;
+    const st = node.getAttribute('style');
+    if (st && /underline/i.test(st)) {
+        const n = st.replace(/text-decoration(?:-line)?\s*:[^;]*;?/gi, '').trim();
+        if (n) node.setAttribute('style', n); else node.removeAttribute('style');
+    }
+}
+function unwrap(el) {
+    while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
+    el.remove();
+}
+function removeFieldUnderline(chip, root) {
+    stripUnderline(chip);
+    chip.querySelectorAll('u').forEach(unwrap);
+    chip.querySelectorAll('[style]').forEach(stripUnderline);
+    // wrappers such as <u><span class="ph">…</span></u> or <span style="text-decoration:underline">
+    let p = chip.parentElement;
+    const txt = chip.textContent.trim();
+    while (p && p !== root && (p.tagName === 'U' || p.tagName === 'SPAN') && p.textContent.trim() === txt) {
+        const next = p.parentElement;
+        if (p.tagName === 'U') unwrap(p); else stripUnderline(p);
+        p = next;
+    }
+}
+
 /**
  * Turn saved template HTML into final HTML for ONE resident.
  *  - <span class="ph" data-field="key">  → replaced with the value (formatting kept)
@@ -513,6 +539,7 @@ export function renderTemplateHtml(html, values, opts = {}) {
             return;
         }
         fillChip(chip, key, valueFor(key));
+        removeFieldUnderline(chip, root);
         chip.classList.remove('ph');
         chip.removeAttribute('data-field');
         if (!chip.getAttribute('class')) chip.removeAttribute('class');
@@ -734,6 +761,12 @@ async function paginateHtml(html, g) {
             const node = queue.shift();
             if (node.nodeType === 8) continue;
             if (node.nodeType === 3 && !node.nodeValue.trim() && !cur.firstChild) continue;
+            if (node.nodeType === 1 && node.hasAttribute('data-pagebreak')) {
+                const blank = node.getAttribute('data-pagebreak') === 'blank';
+                if (cur.firstChild) flush();
+                if (blank) pages.push('');
+                continue;
+            }
             const rem = fill(cur, node);
             if (rem === null) continue;
             if (rem === node) {
@@ -1002,7 +1035,7 @@ ${pageAtRule(s)}
 export function defaultTemplateHtml() {
     const ph = (key, extraStyle = '') =>
         `<span class="ph" data-field="${key}"${extraStyle ? ` style="${extraStyle}"` : ''}>{${key}}</span>`;
-    const u = 'text-decoration:underline;';
+    const u = '';
 
     return `
 <table style="width:100%;border-collapse:collapse;border:none;" border="0">
