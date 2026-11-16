@@ -578,8 +578,8 @@
   .menu-toggle { display: flex; }
   .sidebar { transform: translateX(-100%); transition: transform 0.28s ease; }
   .sidebar.open { transform: translateX(0); box-shadow: 20px 0 50px rgba(0,0,0,0.25); }
-  .main { margin-left: 0; }
-  .content { padding: 16px; }
+  .main { margin-left: 0; min-width: 0; width: 100%; }
+  .content { padding: 16px; min-width: 0; }
   .topbar { padding: 0 16px; }
   .topbar-title { font-size: 17px; }
   .tabs-bar { max-width: 100%; overflow-x: auto; }
@@ -605,6 +605,13 @@
   .bry-body { letter-spacing: 0.02em; }
 }
 @media (max-width: 480px) {
+  .topbar { height: auto; min-height: 64px; flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+  .topbar-left { flex: 1; min-width: 0; }
+  .topbar-title { font-size: 16px; }
+  .new-req-btn { width: 100%; justify-content: center; }
+  .tabs-bar { width: 100%; min-width: 0; overflow-x: auto; }
+  .tab { padding-right: 10px; padding-left: 10px; }
+  .empty-state { width: 100%; min-width: 0; padding: 48px 16px; }
   .doc-type-grid { grid-template-columns: repeat(2, 1fr); }
   .modal-btn-row { flex-direction: column; }
   .btn-cancel, .btn-submit { width: 100%; flex: none; }

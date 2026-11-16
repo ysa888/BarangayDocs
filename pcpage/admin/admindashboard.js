@@ -77,10 +77,52 @@ onAuthStateChanged(auth, async (user) => {
 // =============================================
 let sidebarOpen = true;
 window.toggleSidebar = function () {
+    const sidebar = document.getElementById('sidebar');
+    const main = document.getElementById('mainContent');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    const button = document.querySelector('.hamburger-btn');
+
+    if (window.matchMedia('(max-width: 640px)').matches) {
+        sidebarOpen = sidebar.classList.toggle('open');
+        backdrop?.classList.toggle('show', sidebarOpen);
+        button?.setAttribute('aria-expanded', String(sidebarOpen));
+        return;
+    }
+
     sidebarOpen = !sidebarOpen;
-    document.getElementById('sidebar').classList.toggle('collapsed', !sidebarOpen);
-    document.getElementById('mainContent').classList.toggle('expanded', !sidebarOpen);
+    sidebar.classList.toggle('collapsed', !sidebarOpen);
+    main.classList.toggle('expanded', !sidebarOpen);
+    button?.setAttribute('aria-expanded', String(sidebarOpen));
 };
+
+document.getElementById('sidebarBackdrop')?.addEventListener('click', () => {
+    document.getElementById('sidebar')?.classList.remove('open');
+    document.getElementById('sidebarBackdrop')?.classList.remove('show');
+    document.querySelector('.hamburger-btn')?.setAttribute('aria-expanded', 'false');
+    sidebarOpen = false;
+});
+
+document.querySelectorAll('#sidebar .sidebar-item[onclick]').forEach((item) => {
+    item.addEventListener('click', () => {
+        if (!window.matchMedia('(max-width: 640px)').matches) return;
+        document.getElementById('sidebar')?.classList.remove('open');
+        document.getElementById('sidebarBackdrop')?.classList.remove('show');
+        document.querySelector('.hamburger-btn')?.setAttribute('aria-expanded', 'false');
+        sidebarOpen = false;
+    });
+});
+
+window.addEventListener('resize', () => {
+    if (!window.matchMedia('(max-width: 640px)').matches) {
+        document.getElementById('sidebar')?.classList.remove('open');
+        document.getElementById('sidebarBackdrop')?.classList.remove('show');
+        sidebarOpen = !document.getElementById('sidebar')?.classList.contains('collapsed');
+        document.querySelector('.hamburger-btn')?.setAttribute('aria-expanded', String(sidebarOpen));
+    } else {
+        sidebarOpen = document.getElementById('sidebar')?.classList.contains('open') || false;
+        document.querySelector('.hamburger-btn')?.setAttribute('aria-expanded', String(sidebarOpen));
+    }
+});
 
 // =============================================
 // Sign Out

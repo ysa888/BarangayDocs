@@ -110,7 +110,7 @@ if (isLoginPage) {
 
             // Approved — redirect based on role
             if (userData.role === 'admin') {
-                window.location.href = 'barangaydocs_admin.html';
+                window.location.href = 'admin/admin_dashboard.html';
             } else {
                 window.location.href = 'barangaydocs_home.html';
             }
