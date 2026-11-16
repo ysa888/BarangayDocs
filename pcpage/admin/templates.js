@@ -27,7 +27,7 @@ import {
     normalizePageSettings, paperStyleObject, paperStyleString, baseCss,
     discoverResidentFields, sampleValues, renderTemplateHtml, sanitizeHtml,
     defaultTemplateHtml, makeQrDataUrl, printTemplateHtml, pageGeometry,
-    applyImageLayout, EDITOR_PAGE_GAP_PX
+    applyImageLayout, EDITOR_PAGE_GAP_PX, mountPages
 } from "./templateengine.js";
 
 // =============================================
@@ -299,6 +299,7 @@ async function loadResidentFieldNames() {
 const TINYMCE_FONTS = [
     'Palatino Linotype=palatino linotype,book antiqua,palatino,serif',
     'Times New Roman=times new roman,times,serif',
+    'Calibri=calibri,carlito,sans-serif',
     'Georgia=georgia,serif',
     'Garamond=garamond,serif',
     'Arial=arial,helvetica,sans-serif',
@@ -389,7 +390,7 @@ function ensureEditor() {
 
     const editorCss = [
         baseCss('body'),
-        'html{background:#ffffff;padding:0 0 24px}',
+        'html{background:#e6e6e6;padding:0 0 24px}',
         'body{box-shadow:none}',
         // "Drag on page" mode: only the behind/in-front images can be grabbed
         'body.tpl-move *{pointer-events:none !important}',
@@ -727,6 +728,7 @@ function syncPageSettingsUI() {
 
 function readPageSettingsUI() {
     pageSettings = normalizePageSettings({
+        v: 2,
         size: el('ps-size')?.value,
         orientation: el('ps-orient')?.value,
         margins: {
@@ -781,6 +783,13 @@ function paginateEditor() {
     if (!st) { st = doc2.createElement('style'); st.id = 'pg-style'; doc2.head.appendChild(st); }
     body.querySelectorAll('[data-pg]').forEach(n => n.removeAttribute('data-pg'));
     st.textContent = '';
+
+    // The sheets (white page + real border + shadow) are drawn separately, so the body itself
+    // only keeps a transparent border of the same width (keeps text wrapping identical to print).
+    const geo = pageGeometry(pageSettings);
+    body.style.setProperty('border', geo.bw ? `${geo.bw}px solid transparent` : '0 none');
+    body.style.setProperty('background', 'transparent');
+    body.style.setProperty('box-shadow', 'none');
 
     const cs = win.getComputedStyle(body);
     const pt = parseFloat(cs.paddingTop) || 0;
@@ -860,15 +869,26 @@ function paginateEditor() {
     // 3) draw the sheets: white page, thin edge lines, grey gap in between
     const pages = Math.max(1, Math.floor((lastBottomY - 0.5) / P) + 1);
     window.__tplPages = pages;
-    const edge = '#000000';
     body.style.setProperty('min-height', `${(pages * P - PAGE_GAP_PX + 2 * bw).toFixed(1)}px`);
-    // each sheet gets its own black border (top, bottom, left, right); the gap between sheets stays white
-    const tile = `0 0/100% ${P}px repeat-y`;
-    body.style.setProperty('background',
-        `linear-gradient(to bottom,${edge} 0,${edge} 1px,transparent 1px,transparent ${pageH - 1}px,${edge} ${pageH - 1}px,${edge} ${pageH}px,transparent ${pageH}px) ${tile},` +
-        `linear-gradient(to bottom,${edge} 0,${edge} ${pageH}px,transparent ${pageH}px) 0 0/1px ${P}px repeat-y,` +
-        `linear-gradient(to bottom,${edge} 0,${edge} ${pageH}px,transparent ${pageH}px) 100% 0/1px ${P}px repeat-y,` +
-        `#ffffff`);
+    drawSheets(body, doc2, pages, P, pageH, bw);
+}
+
+// One white sheet per page with its own border and shadow; the grey gap between sheets is the page break.
+function drawSheets(body, doc2, pages, P, pageH, bw) {
+    body.querySelectorAll('.tpl-sheet').forEach(n => n.remove());
+    const b = pageSettings.border;
+    const border = (b.style !== 'none' && b.width > 0) ? `${b.width}px ${b.style} ${b.color}` : 'none';
+    const w = body.clientWidth;
+    for (let i = 0; i < pages; i++) {
+        const d = doc2.createElement('div');
+        d.className = 'tpl-sheet';
+        d.setAttribute('data-mce-bogus', 'all');
+        d.setAttribute('contenteditable', 'false');
+        d.style.cssText = `position:absolute;z-index:-2;pointer-events:none;box-sizing:border-box;background:#fff;` +
+            `box-shadow:0 1px 8px rgba(0,0,0,.28);left:${-bw}px;top:${(i * P - bw).toFixed(1)}px;` +
+            `width:${w + 2 * bw}px;height:${(pageH + 2 * bw).toFixed(1)}px;border:${border}`;
+        body.insertBefore(d, body.firstChild);
+    }
 }
 
 // ---------------------------------------------
@@ -1179,10 +1199,12 @@ async function openPreview() {
         qrDataUrl: qr, baseUrl: APP_ROOT
     });
     const paper = el('preview-paper');
-    paper.setAttribute('style', paperStyleString(pageSettings));
-    paper.innerHTML = lastPreviewHtml;
-    el('pv-print').onclick = () => printTemplateHtml(lastPreviewHtml, pageSettings, 'Template test print');
+    paper.removeAttribute('style');
+    paper.innerHTML = '<div style="text-align:center;color:#666;padding:24px">Preparing preview…</div>';
     el('preview-modal').classList.add('open');
+    const popts = { values, qrDataUrl: qr, baseUrl: APP_ROOT };
+    await mountPages(paper, lastPreviewHtml, pageSettings, popts);   // real fixed-size pages, same as print
+    el('pv-print').onclick = () => printTemplateHtml(lastPreviewHtml, pageSettings, 'Template test print', popts);
 }
 
 // ---------------------------------------------

@@ -17,7 +17,7 @@
 // ─────────────────────────────────────────────
 
 /** Distance (mm) between the physical paper edge and the printed border. */
-export const PAPER_INSET_MM = 8;
+export const PAPER_INSET_MM = 0;   // real paper size (Word-like): no extra shrink; print margin is 0
 
 /** CSS pixels per millimetre. */
 const MM_PX = 96 / 25.4;
@@ -42,8 +42,9 @@ export const DEFAULT_PAGE_SETTINGS = {
     customW: 210,                                           // mm, only used when size === 'Custom'
     customH: 297,                                           // mm
     orientation: 'portrait',
-    margins: { top: 12, right: 15, bottom: 12, left: 15 }, // mm, inside the border
-    border: { style: 'solid', width: 3, color: '#111111' },
+    v: 2,                                                   // settings version (2 = margins measured from the real paper edge)
+    margins: { top: 20, right: 23, bottom: 20, left: 23 }, // mm, measured from the paper edge
+    border: { style: 'none', width: 3, color: '#111111' },  // no page border by default
     // Header / footer: repeated on EVERY page. html may contain {page}, {pages} and field chips.
     header: { enabled: false, html: '', height: 18 },       // height in mm
     footer: { enabled: false, html: '', height: 14 },       // height in mm
@@ -73,8 +74,15 @@ export function normalizePageSettings(s) {
         const n = Number(v);
         return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fb;
     };
-    const m = s.margins || {};
-    const b = s.border || {};
+    // Old templates (no v:2) had an 8mm hidden print inset and a default black border: convert them
+    const legacy = s.v !== 2 && !!(s.margins || s.border);
+    const add8 = (v) => { const n = Number(v); return Number.isFinite(n) ? n + 8 : v; };
+    const m0 = s.margins || {};
+    const m = legacy ? { top: add8(m0.top), right: add8(m0.right), bottom: add8(m0.bottom), left: add8(m0.left) } : m0;
+    let b = s.border || {};
+    if (legacy && b.style === 'solid' && Number(b.width) === 3 && String(b.color || '').toLowerCase() === '#111111') {
+        b = { ...b, style: 'none' };
+    }
     const hd = s.header || {};
     const ft = s.footer || {};
     const bg = s.background || {};
@@ -85,6 +93,7 @@ export function normalizePageSettings(s) {
         height: num(r.height, def.height, 5, 80)
     });
     return {
+        v: 2,
         size: PAGE_SIZES[s.size] ? s.size : d.size,
         customW: num(s.customW, d.customW, L.min, L.max),
         customH: num(s.customH, d.customH, L.min, L.max),
@@ -155,8 +164,8 @@ export function pageAtRule(settings) {
  */
 export function baseCss(sel = '.tpl-paper') {
     return [
-        `${sel}{font-family:'Palatino Linotype','Book Antiqua',Palatino,serif;font-size:12pt;line-height:1.4;color:#111;word-wrap:break-word}`,
-        `${sel} p{margin:0 0 .6em}`,
+        `${sel}{font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:1.15;color:#111;word-wrap:break-word}`,
+        `${sel} p{margin:0 0 8pt}`,
         `${sel} table{border-collapse:collapse}`,
         `${sel} td,${sel} th{padding:4px 6px;vertical-align:top}`,
         `${sel} img{max-width:100%;height:auto}`,
