@@ -752,7 +752,13 @@ async function paginateHtml(html, g) {
             img.style.position = 'absolute';
             if (!img.style.zIndex) img.style.zIndex = (img.getAttribute('data-layout') === 'front' || img.classList.contains('img-front')) ? '5' : '-1';
             if (Number.isFinite(t)) img.style.top = t.toFixed(1) + 'px';
-            (overlays[k] = overlays[k] || []).push(img.outerHTML);
+            const html = img.outerHTML;
+            if (img.getAttribute('data-repeat') === '1') {
+                // header / footer picture: shown at the same spot on EVERY page
+                pages.forEach((_, i) => { (overlays[i] = overlays[i] || []).push(html); });
+            } else {
+                (overlays[k] = overlays[k] || []).push(html);
+            }
         });
 
         return { chunks: pages, overlays: pages.map((_, i) => (overlays[i] || []).join('')) };
@@ -865,6 +871,9 @@ export function applyImageLayout(img, mode, pos = {}) {
     IMAGE_LAYOUTS.forEach(m => img.classList.remove('img-' + m));
     img.classList.add('img-' + mode);
     img.setAttribute('data-layout', mode);
+    if (mode !== 'behind' && mode !== 'front') img.removeAttribute('data-repeat');
+    if (pos.repeat === true) img.setAttribute('data-repeat', '1');
+    else if (pos.repeat === false) img.removeAttribute('data-repeat');
 
     if (Number.isFinite(pos.width) && pos.width > 0) {
         img.removeAttribute('width');

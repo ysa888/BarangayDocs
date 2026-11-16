@@ -393,7 +393,16 @@ function ensureEditor() {
         'body{box-shadow:none}',
         // "Drag on page" mode: only the behind/in-front images can be grabbed
         'body.tpl-move *{pointer-events:none !important}',
+        'body.tpl-move{cursor:move}',
         'body.tpl-move img[data-layout="behind"],body.tpl-move img[data-layout="front"]{pointer-events:auto !important;cursor:move;outline:2px dashed #2a5298}',
+        'body.tpl-move .tpl-grip{pointer-events:auto !important}',
+        // free-position images: move cursor, never the text cursor / native drag
+        'img[data-layout="behind"],img[data-layout="front"]{cursor:move;-webkit-user-drag:none;user-select:none}',
+        // selection frame + grips for behind / in-front images (editor-only, stripped on save)
+        '#tpl-ovl{position:absolute;z-index:50;pointer-events:none;border:2px dashed #2a5298;box-sizing:border-box}',
+        '#tpl-ovl .tpl-grip{position:absolute;pointer-events:auto;background:#2a5298;color:#fff;font:700 13px/20px sans-serif;text-align:center;width:22px;height:22px;border-radius:5px;user-select:none;touch-action:none}',
+        '#tpl-ovl .tpl-grip.mv{left:-2px;top:-24px;cursor:move}',
+        '#tpl-ovl .tpl-grip.rz{right:-8px;bottom:-8px;width:14px;height:14px;border-radius:3px;cursor:nwse-resize}',
         // placeholder chips: visible only while editing
         '.ph{background:#fff3cd;border:1px dashed #d4a017;border-radius:3px;padding:0 3px;color:#7a5b00}'
     ].join('\n');
@@ -426,7 +435,8 @@ function ensureEditor() {
         image_advtab: true,
         image_caption: false,
         image_title: true,
-        object_resizing: true,
+        // free-position images are resized with their own corner grip (TinyMCE's handles misplace them)
+        object_resizing: 'img:not([data-layout=behind]):not([data-layout=front]),table',
         automatic_uploads: true,
         paste_data_images: true,
         images_upload_handler: (blobInfo) =>
@@ -508,32 +518,67 @@ function ensureEditor() {
                 scope: 'node'
             });
 
-            // drag behind / in-front images (only while "Drag on page" is on)
+            // Move / resize behind + in-front images. Use the ✥ handle (shown on the selected image),
+// or grab the image itself. Pointer capture keeps the drag alive even outside the page.
             ed.on('init', () => {
-                const b = ed.getBody(), d = ed.getDoc();
-                b.addEventListener('mousedown', (e) => {
-                    if (!b.classList.contains('tpl-move')) return;
-                    const img = e.target.closest ? e.target.closest('img') : null;
-                    if (!img || !isOverlayImg(img)) return;
-                    e.preventDefault(); e.stopPropagation();
-                    selImg = img;
-                    const sx = e.clientX, sy = e.clientY;
-                    const ox = parseFloat(img.style.left) || 0, oy = parseFloat(img.style.top) || 0;
-                    const mv = (ev) => {
-                        img.style.left = (ox + ev.clientX - sx).toFixed(1) + 'px';
-                        img.style.top = (oy + ev.clientY - sy).toFixed(1) + 'px';
-                    };
-                    const up = () => {
-                        d.removeEventListener('mousemove', mv, true);
-                        d.removeEventListener('mouseup', up, true);
-                        ed.undoManager.add();
-                        setDirty(true);
-                        syncImageProps();
-                        schedulePaginate();
-                    };
-                    d.addEventListener('mousemove', mv, true);
-                    d.addEventListener('mouseup', up, true);
+                const b = ed.getBody();
+                // Native image drag is what showed the "can't drop here" cursor — block it.
+                b.addEventListener('dragstart', (e) => {
+                    const im = e.target && e.target.closest ? e.target.closest('img') : null;
+                    if (im && isOverlayImg(im)) e.preventDefault();
                 }, true);
+                const grabTarget = (e) => {
+                    const t = e.target;
+                    if (t && t.classList && t.classList.contains('tpl-grip') && selImg) {
+                        return { img: selImg, mode: t.classList.contains('rz') ? 'resize' : 'move' };
+                    }
+                    const im = t && t.closest ? t.closest('img') : null;
+                    return im && isOverlayImg(im) ? { img: im, mode: 'move' } : null;
+                };
+                b.addEventListener('mousedown', (e) => {
+                    if (grabTarget(e)) { e.preventDefault(); e.stopPropagation(); }   // no text cursor / selection
+                }, true);
+
+                let drag = null;
+                b.addEventListener('pointerdown', (e) => {
+                    if (e.button !== 0) return;
+                    const g = grabTarget(e);
+                    if (!g) return;
+                    e.preventDefault(); e.stopPropagation();
+                    selImg = g.img;
+                    drag = {
+                        img: g.img, mode: g.mode, id: e.pointerId, sx: e.clientX, sy: e.clientY,
+                        ox: parseFloat(g.img.style.left) || 0, oy: parseFloat(g.img.style.top) || 0,
+                        ow: g.img.getBoundingClientRect().width
+                    };
+                    try { b.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+                    positionHandle();
+                }, true);
+                b.addEventListener('pointermove', (e) => {
+                    if (!drag || e.pointerId !== drag.id) return;
+                    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+                    const im = drag.img;
+                    if (drag.mode === 'move') {
+                        im.style.left = (drag.ox + dx).toFixed(1) + 'px';
+                        im.style.top = (drag.oy + dy).toFixed(1) + 'px';
+                    } else {
+                        im.removeAttribute('width'); im.removeAttribute('height');
+                        im.style.width = Math.max(20, drag.ow + dx).toFixed(1) + 'px';
+                        im.style.height = 'auto';
+                    }
+                    positionHandle();
+                });
+                const endDrag = () => {
+                    if (!drag) return;
+                    try { b.releasePointerCapture(drag.id); } catch (_) { /* ignore */ }
+                    drag = null;
+                    ed.undoManager.add();
+                    setDirty(true);
+                    refreshImagePanel();
+                    schedulePaginate();
+                };
+                b.addEventListener('pointerup', endDrag);
+                b.addEventListener('pointercancel', endDrag);
                 refreshImagePanel();
             });
             ed.on('NodeChange', (e) => {
@@ -843,6 +888,50 @@ function sheetPitch() {
     return pt + pageGeometry(pageSettings).bodyH + pb + PAGE_GAP_PX;
 }
 
+// Selection frame with a move (✥) and resize grip, drawn over the selected behind / in-front image.
+// It is a bogus element: TinyMCE never saves it.
+function positionHandle() {
+    if (!editor || !editor.getBody) return;
+    const body = editor.getBody();
+    if (!body) return;
+    let h = body.querySelector('#tpl-ovl');
+    if (!selImg || !body.contains(selImg) || !isOverlayImg(selImg)) { if (h) h.remove(); return; }
+    if (!h) {
+        h = editor.getDoc().createElement('div');
+        h.id = 'tpl-ovl';
+        h.setAttribute('data-mce-bogus', 'all');
+        h.setAttribute('contenteditable', 'false');
+        h.innerHTML = '<div class="tpl-grip mv" data-mce-bogus="all" title="Drag to move">\u2725</div>' +
+                      '<div class="tpl-grip rz" data-mce-bogus="all" title="Drag to resize"></div>';
+        body.appendChild(h);
+    }
+    const cs = editor.getWin().getComputedStyle(body);
+    const r = selImg.getBoundingClientRect(), br = body.getBoundingClientRect();
+    h.style.left = (r.left - br.left - (parseFloat(cs.borderLeftWidth) || 0)).toFixed(1) + 'px';
+    h.style.top = (r.top - br.top - (parseFloat(cs.borderTopWidth) || 0)).toFixed(1) + 'px';
+    h.style.width = r.width.toFixed(1) + 'px';
+    h.style.height = r.height.toFixed(1) + 'px';
+}
+
+/** Stretch the selected image across the page at the very top (header) or bottom (footer), repeated on every page. */
+function placeImageBand(where) {
+    if (!selImg || !editor) return;
+    const cur = selImg.getAttribute('data-layout');
+    const mode = (cur === 'behind' || cur === 'front') ? cur : 'front';
+    const P = sheetPitch();
+    const pageH = P - PAGE_GAP_PX;
+    const topNow = parseFloat(selImg.style.top);
+    const k = Number.isFinite(topNow) ? Math.max(0, Math.floor(topNow / P)) : 0;
+    const fullW = editor.getBody().clientWidth;
+    setImageLayout(selImg, mode, { x: 0, y: k * P, width: fullW, repeat: true });
+    if (where === 'footer') {
+        const h = selImg.getBoundingClientRect().height;
+        selImg.style.top = (k * P + pageH - h).toFixed(1) + 'px';
+        afterImageChange();
+    }
+    showToast((where === 'footer' ? 'Footer' : 'Header') + ' image placed and set to repeat on every page. Drag the \u2725 handle to fine-tune.', 4500);
+}
+
 function scheduleImageRefresh() {
     clearTimeout(imgRefreshTimer);
     imgRefreshTimer = setTimeout(refreshImagePanel, 200);
@@ -898,6 +987,7 @@ function refreshImagePanel() {
 }
 
 function syncImageProps() {
+    positionHandle();
     const box = el('img-props');
     if (!box) return;
     if (!selImg || !editor || !editor.getBody().contains(selImg)) { box.classList.add('hidden'); return; }
@@ -914,7 +1004,9 @@ function syncImageProps() {
     set('img-y', Number.isFinite(top) ? ((top - k * P) / MM_PX).toFixed(1) : '0');
     set('img-w', (selImg.getBoundingClientRect().width / MM_PX).toFixed(1));
     set('img-opacity', Math.round((parseFloat(selImg.style.opacity) || 1) * 100));
-    ['img-page', 'img-x', 'img-y', 'img-opacity', 'btn-img-drag', 'btn-img-full'].forEach(id => { const n = el(id); if (n) n.disabled = !free; });
+    const rep = el('img-repeat');
+    if (rep) rep.checked = selImg.getAttribute('data-repeat') === '1';
+    ['img-page', 'img-x', 'img-y', 'img-opacity', 'img-repeat', 'btn-img-drag', 'btn-img-full'].forEach(id => { const n = el(id); if (n) n.disabled = !free; });
 }
 
 function readImageProps() {
@@ -931,12 +1023,13 @@ function readImageProps() {
         pos.x = num('img-x', 0) * MM_PX;
         pos.y = (page - 1) * P + num('img-y', 0) * MM_PX;
         pos.opacity = Math.min(100, Math.max(5, num('img-opacity', 100))) / 100;
+        pos.repeat = !!el('img-repeat')?.checked;
     }
     setImageLayout(selImg, mode, pos);
 }
 
 function initImagePanel() {
-    ['img-layout', 'img-page', 'img-x', 'img-y', 'img-w', 'img-opacity']
+    ['img-layout', 'img-page', 'img-x', 'img-y', 'img-w', 'img-opacity', 'img-repeat']
         .forEach(id => el(id)?.addEventListener('change', readImageProps));
 
     el('btn-img-drag')?.addEventListener('click', () => {
@@ -955,11 +1048,14 @@ function initImagePanel() {
         const P = sheetPitch();
         const top = parseFloat(selImg.style.top) || 0;
         const k = Math.max(0, Math.floor(top / P));
-        const innerW = pageGeometry(pageSettings).innerW * MM_PX;
+        const innerW = editor.getBody().clientWidth;
         setImageLayout(selImg, mode, { x: 0, y: top, width: innerW });
         syncImageProps();
         void k;
     });
+
+    el('btn-img-header')?.addEventListener('click', () => placeImageBand('header'));
+    el('btn-img-footer')?.addEventListener('click', () => placeImageBand('footer'));
 
     el('btn-img-del')?.addEventListener('click', () => {
         if (!selImg || !editor) return;

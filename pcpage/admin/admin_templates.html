@@ -1287,7 +1287,7 @@
             </div>
 
             <div class="side-pane hidden" id="pane-images">
-              <p class="side-note">Pick an image, then choose <b>Behind text</b> or <b>In front</b> to place it anywhere on the page — including the margins (good for a letterhead / header). Use <b>Drag on page</b> or type exact positions.</p>
+              <p class="side-note">Pick an image, then choose <b>Behind text</b> or <b>In front</b> to place it anywhere on the page — including the margins (good for a letterhead / header). Select it here, then <b>drag the ✥ handle</b> on the page to move it (corner square resizes). Behind-text images sit under the text, so use the handle or <b>Drag on page</b>.</p>
               <div id="img-list"></div>
               <div id="img-props" class="hidden">
                 <div class="ps-title">Layout</div>
@@ -1310,6 +1310,13 @@
                   <div class="form-group"><label>X (from left)</label><input id="img-x" type="number" step="1"></div>
                   <div class="form-group"><label>Y (from top)</label><input id="img-y" type="number" step="1"></div>
                   <div class="form-group full"><label>Opacity (%)</label><input id="img-opacity" type="number" min="5" max="100" step="5"></div>
+                </div>
+                <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:12px;font-weight:700;color:var(--text-sub);cursor:pointer">
+                  <input type="checkbox" id="img-repeat"> Repeat on every page (header / footer)
+                </label>
+                <div class="img-btns">
+                  <button type="button" class="btn-ghost" id="btn-img-header">Place as header</button>
+                  <button type="button" class="btn-ghost" id="btn-img-footer">Place as footer</button>
                 </div>
                 <div class="img-btns">
                   <button type="button" class="btn-ghost" id="btn-img-drag">Drag on page</button>
