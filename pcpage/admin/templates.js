@@ -387,7 +387,7 @@ function ensureEditor() {
 
     const editorCss = [
         baseCss('body'),
-        'html{background:#dfe5f0;padding:0 0 24px}',
+        'html{background:#ffffff;padding:0 0 24px}',
         'body{box-shadow:none}',
         // placeholder chips: visible only while editing
         '.ph{background:#fff3cd;border:1px dashed #d4a017;border-radius:3px;padding:0 3px;color:#7a5b00}'
@@ -749,11 +749,15 @@ function paginateEditor() {
     // 3) draw the sheets: white page, thin edge lines, grey gap in between
     const pages = Math.max(1, Math.floor((lastBottomY - 0.5) / P) + 1);
     window.__tplPages = pages;
-    const edge = '#b9c3da';
+    const edge = '#000000';
     body.style.setProperty('min-height', `${(pages * P - PAGE_GAP_PX + 2 * bw).toFixed(1)}px`);
+    // each sheet gets its own black border (top, bottom, left, right); the gap between sheets stays white
+    const tile = `0 0/100% ${P}px repeat-y`;
     body.style.setProperty('background',
-        `linear-gradient(to bottom,${edge} 0,${edge} 1px,transparent 1px,transparent ${pageH - 1}px,${edge} ${pageH - 1}px,${edge} ${pageH}px,transparent ${pageH}px) 0 0/100% ${P}px repeat-y,` +
-        `linear-gradient(to bottom,#ffffff 0,#ffffff ${pageH}px,#dfe5f0 ${pageH}px) 0 0/100% ${P}px repeat-y`);
+        `linear-gradient(to bottom,${edge} 0,${edge} 1px,transparent 1px,transparent ${pageH - 1}px,${edge} ${pageH - 1}px,${edge} ${pageH}px,transparent ${pageH}px) ${tile},` +
+        `linear-gradient(to bottom,${edge} 0,${edge} ${pageH}px,transparent ${pageH}px) 0 0/1px ${P}px repeat-y,` +
+        `linear-gradient(to bottom,${edge} 0,${edge} ${pageH}px,transparent ${pageH}px) 100% 0/1px ${P}px repeat-y,` +
+        `#ffffff`);
 }
 
 // ---------------------------------------------
