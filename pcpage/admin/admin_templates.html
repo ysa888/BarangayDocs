@@ -1349,20 +1349,12 @@
   </script>
   <script>
 
-    // Live page counter: the editor is one continuous sheet, final output is split into real pages.
+    // Live page counter (value is set by templates.js after each layout pass)
     setInterval(function () {
       var badge = document.getElementById('page-count');
-      var ed = window.tinymce && tinymce.activeEditor;
-      if (!badge || !ed || !ed.getBody || !ed.initialized) return;
-      try {
-        var b = ed.getBody(), cs = ed.getWin().getComputedStyle(b);
-        var pt = parseFloat(cs.paddingTop) || 0, pb = parseFloat(cs.paddingBottom) || 0;
-        var bodyH = (parseFloat(cs.minHeight) || 0) - pt - pb;
-        if (bodyH < 50) return;
-        var n = Math.max(1, Math.ceil((b.offsetHeight - pt - pb) / bodyH - 0.02));
-        badge.textContent = n + (n === 1 ? ' page' : ' pages');
-      } catch (e) {}
-    }, 800);
+      var n = window.__tplPages;
+      if (badge && n) badge.textContent = n + (n === 1 ? ' page' : ' pages');
+    }, 600);
 
     // Show / hide parts of the editor screen (remembered between visits)
     (function () {

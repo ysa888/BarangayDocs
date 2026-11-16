@@ -26,7 +26,7 @@ import {
     PAGE_SIZES, DEFAULT_PAGE_SETTINGS, FIELD_GROUPS,
     normalizePageSettings, paperStyleObject, paperStyleString, baseCss,
     discoverResidentFields, sampleValues, renderTemplateHtml, sanitizeHtml,
-    defaultTemplateHtml, makeQrDataUrl, printTemplateHtml
+    defaultTemplateHtml, makeQrDataUrl, printTemplateHtml, pageGeometry
 } from "./templateengine.js";
 
 // =============================================
@@ -388,7 +388,7 @@ function ensureEditor() {
     const editorCss = [
         baseCss('body'),
         'html{background:#dfe5f0;padding:0 0 24px}',
-        'body{box-shadow:0 6px 24px rgba(27,58,107,.18)}',
+        'body{box-shadow:none}',
         // placeholder chips: visible only while editing
         '.ph{background:#fff3cd;border:1px dashed #d4a017;border-radius:3px;padding:0 3px;color:#7a5b00}'
     ].join('\n');
@@ -465,6 +465,18 @@ function ensureEditor() {
                         onAction: () => insertField(f.key)
                     }))
                 })))
+            });
+
+            // Page-by-page layout inside the editor (visual only — stripped from saved HTML)
+            ed.on('GetContent', (e) => {
+                if (typeof e.content === 'string' && e.content.includes('data-pg')) {
+                    e.content = e.content.replace(/\sdata-pg="\d+"/g, '');
+                }
+            });
+            ed.on('input change keyup SetContent ExecCommand undo redo ObjectResized TableModified', schedulePaginate);
+            ed.on('init', () => {
+                ed.getBody().addEventListener('load', schedulePaginate, true);   // images finishing loading
+                setTimeout(schedulePaginate, 600);
             });
 
             const markDirty = () => { if (!loadingContent) setDirty(true); };
@@ -630,6 +642,118 @@ function applyPageToEditor() {
     if (!body) return;
     Object.entries(paperStyleObject(pageSettings)).forEach(([k, v]) => body.style.setProperty(k, v));
     body.style.setProperty('margin', '16px auto');
+    paginateEditor();
+}
+
+// ---------------------------------------------
+// Editor pagination: shows real page-sized sheets with a gap between them.
+// Content that would cross a page end is pushed to the next page with a temporary
+// margin (rules live in an injected <style>; the data-pg marker is removed in GetContent,
+// so nothing extra is ever saved, previewed, printed or exported).
+// ---------------------------------------------
+const PAGE_GAP_PX = 22;
+let paginateTimer = null;
+
+function schedulePaginate() {
+    clearTimeout(paginateTimer);
+    paginateTimer = setTimeout(paginateEditor, 150);
+}
+
+function paginateEditor() {
+    if (!editor) return;
+    const body = editor.getBody?.();
+    const doc2 = editor.getDoc?.();
+    const win = editor.getWin?.();
+    if (!body || !doc2 || !win) return;
+
+    let st = doc2.getElementById('pg-style');
+    if (!st) { st = doc2.createElement('style'); st.id = 'pg-style'; doc2.head.appendChild(st); }
+    body.querySelectorAll('[data-pg]').forEach(n => n.removeAttribute('data-pg'));
+    st.textContent = '';
+
+    const cs = win.getComputedStyle(body);
+    const pt = parseFloat(cs.paddingTop) || 0;
+    const pb = parseFloat(cs.paddingBottom) || 0;
+    const bw = parseFloat(cs.borderTopWidth) || 0;
+    const bodyH = pageGeometry(pageSettings).bodyH;
+    const pageH = pt + bodyH + pb;           // one sheet, in px
+    const P = pageH + PAGE_GAP_PX;           // distance from one sheet's top to the next
+    const originY = body.getBoundingClientRect().top + bw + pt;   // content-box top (y = 0)
+    const rectY = (r) => r.top - originY;
+
+    // 1) collect the pieces that may be moved (blocks; table rows; list items)
+    const units = [];
+    const flows = (n) => { const c = win.getComputedStyle(n); return c.position !== 'absolute' && c.position !== 'fixed' && c.float === 'none'; };
+    let prevBottom = 0;
+    for (const child of body.children) {
+        const tag = child.tagName;
+        if (tag === 'STYLE' || tag === 'SCRIPT') continue;
+        if (!flows(child)) continue;
+        const cr = child.getBoundingClientRect();
+        if (tag === 'TABLE') {
+            let first = true;
+            for (const tr of child.rows) {
+                const r = tr.getBoundingClientRect();
+                units.push({ m: tr, a: tr, mode: 'row', top: rectY(r), bottom: rectY(r) + r.height, h: r.height });
+                first = false;
+            }
+            if (first) units.push({ m: child, a: child, mode: 'block', top: rectY(cr), bottom: rectY(cr) + cr.height, h: cr.height, gap0: rectY(cr) - prevBottom });
+        } else if ((tag === 'UL' || tag === 'OL') && child.children.length > 1) {
+            let i = 0;
+            let lastBottom = prevBottom;
+            for (const li of child.children) {
+                const r = li.getBoundingClientRect();
+                const u = { m: li, a: i === 0 ? child : li, mode: 'block', top: rectY(r), bottom: rectY(r) + r.height, h: r.height };
+                u.gap0 = i === 0 ? rectY(cr) - prevBottom : rectY(r) - lastBottom;
+                units.push(u);
+                lastBottom = u.bottom;
+                i++;
+            }
+        } else {
+            units.push({ m: child, a: child, mode: 'block', top: rectY(cr), bottom: rectY(cr) + cr.height, h: cr.height, gap0: rectY(cr) - prevBottom });
+        }
+        prevBottom = rectY(cr) + cr.height;
+    }
+
+    // 2) walk top→bottom, pushing anything that crosses a page end onto the next sheet
+    let shift = 0, k = 0, lastBottomY = 0;
+    const rules = [];
+    for (const u of units) {
+        if (u.h < 1) continue;
+        const top = u.top + shift;
+        const bottom = u.bottom + shift;
+        const page = Math.floor(top / P);
+        const contentEnd = page * P + bodyH;
+        const inMargin = top >= contentEnd - 0.5;
+        const crosses = bottom > contentEnd + 0.5 && u.h <= bodyH;
+        if (inMargin || crosses) {
+            const d = (page + 1) * P - top;
+            if (d > 0.5) {
+                k++;
+                u.a.setAttribute('data-pg', String(k));
+                if (u.mode === 'row') {
+                    [...u.a.children].forEach((cell, i) => {
+                        const p0 = parseFloat(win.getComputedStyle(cell).paddingTop) || 0;
+                        rules.push(`[data-pg="${k}"]>:nth-child(${i + 1}){padding-top:${(p0 + d).toFixed(1)}px !important}`);
+                    });
+                } else {
+                    rules.push(`[data-pg="${k}"]{margin-top:${((u.gap0 || 0) + d).toFixed(1)}px !important}`);
+                }
+                shift += d;
+            }
+        }
+        lastBottomY = u.bottom + shift;
+    }
+    st.textContent = rules.join('\n');
+
+    // 3) draw the sheets: white page, thin edge lines, grey gap in between
+    const pages = Math.max(1, Math.floor((lastBottomY - 0.5) / P) + 1);
+    window.__tplPages = pages;
+    const edge = '#b9c3da';
+    body.style.setProperty('min-height', `${(pages * P - PAGE_GAP_PX + 2 * bw).toFixed(1)}px`);
+    body.style.setProperty('background',
+        `linear-gradient(to bottom,${edge} 0,${edge} 1px,transparent 1px,transparent ${pageH - 1}px,${edge} ${pageH - 1}px,${edge} ${pageH}px,transparent ${pageH}px) 0 0/100% ${P}px repeat-y,` +
+        `linear-gradient(to bottom,#ffffff 0,#ffffff ${pageH}px,#dfe5f0 ${pageH}px) 0 0/100% ${P}px repeat-y`);
 }
 
 // ---------------------------------------------
