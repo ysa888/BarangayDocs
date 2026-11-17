@@ -8,8 +8,8 @@
 //        { documentId, documentName, html, pageSettings, version,
 //          createdAt, updatedAt, updatedBy }
 //   residents/{uid}              (existing)  → read-only, only to discover field names
-// Storage
-//   templates/{docId}/…          (NEW)       → logos / seals / signatures uploaded in the editor
+// Image hosting (Cloudinary, free) → logos / seals / signatures uploaded in the editor.
+//   Only the https URLs are stored inside the template HTML. No Firebase Storage, no Base64.
 // =============================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
@@ -18,10 +18,6 @@ import {
     getFirestore, doc, getDoc, setDoc, deleteDoc, collection,
     query, where, limit, onSnapshot, getDocs, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
-import {
-    getStorage, ref as sRef, uploadBytes, getDownloadURL, getBytes
-} from "https://www.gstatic.com/firebasejs/12.12.1/firebase-storage.js";
-
 import {
     PAGE_SIZES, DEFAULT_PAGE_SETTINGS, FIELD_GROUPS,
     normalizePageSettings, paperStyleObject, paperStyleString, baseCss,
@@ -46,7 +42,19 @@ const firebaseConfig = {
 const app     = initializeApp(firebaseConfig);
 const auth    = getAuth(app);
 const db      = getFirestore(app);
-const storage = getStorage(app);
+
+// =============================================
+// Image hosting: Cloudinary (free plan, no credit card) — replaces Firebase Storage.
+// One-time setup (2 minutes):
+//   1. Sign up at https://cloudinary.com (free, no card) and copy your "Cloud name" from the dashboard.
+//   2. Settings ▸ Upload ▸ Upload presets ▸ Add upload preset ▸ Signing mode: **Unsigned** ▸ Save.
+//      Copy the preset's name.
+//   3. Paste both values below.
+// =============================================
+const CLOUDINARY = {
+    cloudName:    'YOUR_CLOUD_NAME',
+    uploadPreset: 'YOUR_UNSIGNED_UPLOAD_PRESET'
+};
 
 const el = (id) => document.getElementById(id);
 
@@ -58,8 +66,6 @@ const resolveAsset = (p) => { try { return new URL(p, APP_ROOT).href; } catch (_
 
 // Firestore documents are capped at 1 MiB — keep a safety margin
 const MAX_TEMPLATE_BYTES = 900 * 1024;
-// If Storage is unavailable, small images may be embedded instead
-const MAX_INLINE_IMAGE_BYTES = 150 * 1024;
 
 // =============================================
 // Helpers
@@ -153,7 +159,6 @@ let editor = null;               // TinyMCE instance
 let pageSettings = normalizePageSettings(DEFAULT_PAGE_SETTINGS);
 let dirty = false;
 let loadingContent = false;      // true while we programmatically set editor content
-let warnedInlineImages = false;
 
 // Original imported .docx, kept untouched so it can be edited and re-exported later
 // (set by onDocxChosen via setOriginalDocx; cleared when a template is opened or closed).
@@ -166,8 +171,8 @@ if (typeof JSZip === 'undefined') {
     console.warn('JSZip did not load — original .docx preservation will be unavailable.');
 }
 
-let originalDocxFresh = false;   // imported in this session and not yet uploaded to Storage
-let storedOriginal = null;       // { path, name } of the original .docx already saved in Storage
+let originalDocxFresh = false;   // imported in this session and not yet uploaded to the image host
+let storedOriginal = null;       // { url, name } of the original .docx already saved on the image host
 
 // Stores a freshly imported .docx, replacing whatever was stored before.
 function setOriginalDocx(file, buffer, zip) {
@@ -378,7 +383,7 @@ async function openEditor(docId) {
         console.warn('Could not read template:', err);
     }
 
-    storedOriginal = saved?.originalDocx?.path ? saved.originalDocx : null;
+    storedOriginal = saved?.originalDocx?.url ? saved.originalDocx : null;
     pageSettings = normalizePageSettings(saved?.pageSettings || DEFAULT_PAGE_SETTINGS);
     syncPageSettingsUI();
 
@@ -661,44 +666,48 @@ function pickImageFile(cb, _value, meta) {
 }
 
 // ---------------------------------------------
-// Image upload → Firebase Storage (fallback: small inline image)
+// Image upload → Cloudinary (unsigned preset). Returns a permanent https URL.
+// Nothing is ever embedded as Base64 and nothing goes to Firebase Storage.
 // ---------------------------------------------
-async function uploadImageBlob(blob, filename = 'image.png') {
-    const safe = String(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
-    const path = `templates/${current?.id || 'misc'}/${Date.now()}_${safe}`;
-    try {
-        const r = sRef(storage, path);
-        await uploadBytes(r, blob, { contentType: blob.type || 'image/png' });
-        return await getDownloadURL(r);
-    } catch (err) {
-        console.warn('Storage upload failed:', err);
-        if (blob.size <= MAX_INLINE_IMAGE_BYTES) {
-            if (!warnedInlineImages) {
-                warnedInlineImages = true;
-                showToast('Storage upload failed — small image embedded instead. Check Storage rules.', 5000);
-            }
-            return await blobToDataUrl(blob);
-        }
-        throw new Error('Image upload failed. Make sure Firebase Storage is enabled and admins are allowed to write to templates/. (' + (err.message || err) + ')');
+async function cloudinaryUpload(blob, filename, resourceType = 'image') {
+    if (!CLOUDINARY.cloudName || CLOUDINARY.cloudName.startsWith('YOUR_') ||
+        !CLOUDINARY.uploadPreset || CLOUDINARY.uploadPreset.startsWith('YOUR_')) {
+        throw new Error('Image hosting is not configured. Set CLOUDINARY.cloudName and CLOUDINARY.uploadPreset at the top of templates.js.');
     }
+    const fd = new FormData();
+    fd.append('file', blob, filename);
+    fd.append('upload_preset', CLOUDINARY.uploadPreset);
+    fd.append('folder', `barangay-templates/${current?.id || 'misc'}`);
+    let res;
+    try {
+        res = await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(CLOUDINARY.cloudName)}/${resourceType}/upload`, {
+            method: 'POST', body: fd
+        });
+    } catch (err) {
+        throw new Error('Could not reach the image host. Check your internet connection. (' + (err.message || err) + ')');
+    }
+    let data = null;
+    try { data = await res.json(); } catch (_) { /* ignore */ }
+    if (!res.ok || !data || !data.secure_url) {
+        throw new Error('Image upload failed: ' + ((data && data.error && data.error.message) || res.statusText || res.status));
+    }
+    return data.secure_url;
 }
 
-/** Upload any leftover data: images (e.g. from .docx import) so the template stays small. */
+async function uploadImageBlob(blob, filename = 'image.png') {
+    const safe = String(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
+    return cloudinaryUpload(blob, safe, 'image');
+}
+
+/** Upload any leftover data: images (e.g. from a .docx import) and replace them with hosted URLs. */
 async function externalizeDataImages(html) {
     const doc2 = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
     const imgs = [...doc2.body.querySelectorAll('img[src^="data:image/"]')];
-    let failed = 0;
     for (let i = 0; i < imgs.length; i++) {
-        try {
-            const blob = await (await fetch(imgs[i].getAttribute('src'))).blob();
-            const ext = (blob.type.split('/')[1] || 'png').replace('+xml', '');
-            imgs[i].setAttribute('src', await uploadImageBlob(blob, `image_${i + 1}.${ext}`));
-        } catch (err) {
-            failed++;
-            console.warn('Could not upload embedded image:', err);
-        }
+        const blob = await (await fetch(imgs[i].getAttribute('src'))).blob();
+        const ext = (blob.type.split('/')[1] || 'png').replace('+xml', '');
+        imgs[i].setAttribute('src', await uploadImageBlob(blob, `image_${i + 1}.${ext}`));   // throws → save is aborted
     }
-    if (failed) showToast(`${failed} embedded image(s) could not be uploaded and were kept inline.`, 5000);
     return doc2.body.innerHTML;
 }
 
@@ -1181,11 +1190,14 @@ async function saveTemplate() {
     if (!editor || !current) return;
     setSaving(true);
     try {
-        await editor.uploadImages();                    // push pasted / picked images to Storage
+        await editor.uploadImages();                    // push pasted / picked images to the image host
         let html = editor.getContent();
         html = await externalizeDataImages(html);       // e.g. images that came from a .docx
         html = sanitizeHtml(html);
 
+        if (/<img[^>]+src=["']?\s*(data:|blob:)/i.test(html)) {
+            throw new Error('An image could not be uploaded to the image host, so the template was not saved.');
+        }
         if (!html.replace(/<[^>]*>/g, '').trim() && !/<img/i.test(html)) {
             throw new Error('The template is empty.');
         }
@@ -1198,18 +1210,17 @@ async function saveTemplate() {
         const prev = await getDoc(refDoc);
         const base = prev.exists() ? prev.data() : null;
 
-        // Keep the original .docx (with its real headers / footers) so it survives a reload
+        // Keep the original .docx (with its real headers / footers) so it survives a reload.
+        // Best effort, hosted on Cloudinary (raw file) — a failure never blocks saving the template.
         if (originalDocxBuffer && originalDocxFresh) {
             try {
-                const path = `templates/${current.id}/original.docx`;
-                await uploadBytes(sRef(storage, path), new Blob([originalDocxBuffer]), {
-                    contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                });
-                storedOriginal = { path, name: (originalDocxFile && originalDocxFile.name) || 'original.docx' };
+                const name = (originalDocxFile && originalDocxFile.name) || 'original.docx';
+                const url = await cloudinaryUpload(new Blob([originalDocxBuffer]), name, 'raw');
+                storedOriginal = { url, name };
                 originalDocxFresh = false;
             } catch (err) {
                 console.warn('Could not store original .docx:', err);
-                showToast('Template saved, but the original Word file could not be stored (Storage rules?).', 5000);
+                showToast('Template saved, but the original Word file could not be stored for later export.', 5000);
             }
         }
 
@@ -1448,6 +1459,48 @@ async function extractHeaderFooterHtml(buf) {
     return out;
 }
 
+// Reads paper size, orientation and margins from the last section of the Word file,
+// so the template opens with the same page setup as the original document.
+async function extractPageSettings(zip) {
+    const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const xml = new DOMParser().parseFromString(await zip.file('word/document.xml').async('string'), 'application/xml');
+    const sects = xml.getElementsByTagNameNS(W, 'sectPr');
+    if (!sects.length) return null;
+    const sect = sects[sects.length - 1];
+    const attr = (node, name) => { const v = node && parseFloat(node.getAttributeNS(W, name)); return Number.isFinite(v) ? v : null; };
+    const TW_MM = 56.7;   // twips per mm
+    const out = {};
+
+    const pgSz = sect.getElementsByTagNameNS(W, 'pgSz')[0];
+    if (pgSz) {
+        const w = attr(pgSz, 'w'), h = attr(pgSz, 'h');
+        if (w && h) {
+            const wmm = w / TW_MM, hmm = h / TW_MM;
+            const orient = pgSz.getAttributeNS(W, 'orient');
+            out.orientation = (orient === 'landscape' || wmm > hmm) ? 'landscape' : 'portrait';
+            const lo = Math.min(wmm, hmm), hi = Math.max(wmm, hmm);
+            for (const [key, sz] of Object.entries(PAGE_SIZES)) {
+                const dims = Object.values(sz).filter(v => typeof v === 'number' && v > 50);
+                if (dims.length >= 2) {
+                    const a = Math.min(dims[0], dims[1]), b = Math.max(dims[0], dims[1]);
+                    if (Math.abs(a - lo) < 2 && Math.abs(b - hi) < 2) { out.size = key; break; }
+                }
+            }
+            out.sizeMm = [Math.round(lo), Math.round(hi)];
+        }
+    }
+    const pgMar = sect.getElementsByTagNameNS(W, 'pgMar')[0];
+    if (pgMar) {
+        const m = {};
+        for (const k of ['top', 'bottom', 'left', 'right']) {
+            const v = attr(pgMar, k);
+            if (v !== null) m[k] = Math.round(Math.abs(v) / TW_MM * 10) / 10;
+        }
+        if (Object.keys(m).length) out.margins = m;
+    }
+    return out;
+}
+
 async function onDocxChosen(e) {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -1476,13 +1529,31 @@ async function onDocxChosen(e) {
         }
 
         // 2) Convert for display in TinyMCE (images stay embedded as data: URLs; they are
-        //    moved to Storage when the template is saved).
+        //    uploaded to the image host when the template is saved).
         const result = await mammoth.convertToHtml({ arrayBuffer: buf }, docxMammothOptions());
         const hf = await extractHeaderFooterHtml(buf);
 
         // 3) Only now replace the previously stored original, so a failed import keeps the old one.
         setOriginalDocx(file, buf, zip);
         storedOriginal = null;   // the previously stored original no longer matches this import
+
+        // Carry over the original paper size, orientation and margins
+        let pageNote = '';
+        try {
+            const ps = await extractPageSettings(zip);
+            if (ps) {
+                pageSettings = normalizePageSettings({
+                    ...pageSettings,
+                    ...(ps.size ? { size: ps.size } : {}),
+                    ...(ps.orientation ? { orientation: ps.orientation } : {}),
+                    margins: { ...pageSettings.margins, ...(ps.margins || {}) }
+                });
+                syncPageSettingsUI();
+                if (ps.sizeMm && !ps.size) pageNote = ` Paper size ${ps.sizeMm[0]}×${ps.sizeMm[1]} mm isn't in the size list — check the Page tab.`;
+            }
+        } catch (err) {
+            console.warn('Could not read page setup from the .docx:', err);
+        }
 
         setEditorContent(
             (hf.header ? `<div class="tpl-hf" data-hf="header">${hf.header}</div>` : '') +
@@ -1496,7 +1567,7 @@ async function onDocxChosen(e) {
             : '';
         showToast((n
             ? `Imported with ${n} formatting note(s) — please review the layout.`
-            : 'Word file imported. Review the layout, then save.') + hfNote, 6000);
+            : 'Word file imported. Review the layout, then save.') + hfNote + pageNote, 6000);
     } catch (err) {
         console.error(err);
         showToast('Could not read that .docx: ' + (err.message || err), 5000);
@@ -1559,17 +1630,19 @@ async function exportOriginalDocx() {
 async function exportDocx() {
     if (!editor || !current) return;
 
-    // Original saved earlier → reload it from Storage so its headers / footers survive a page reload.
-    if (!originalDocxBuffer && storedOriginal?.path) {
+    // Original saved earlier → reload it from the image host so its headers / footers survive a page reload.
+    if (!originalDocxBuffer && storedOriginal?.url) {
         try {
-            originalDocxBuffer = await getBytes(sRef(storage, storedOriginal.path));
+            const r = await fetch(storedOriginal.url);
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            originalDocxBuffer = await r.arrayBuffer();
             originalDocxFile = { name: storedOriginal.name };
         } catch (err) {
             console.warn('Could not load stored original .docx:', err);
         }
     }
 
-    // An original .docx is available (imported now, or restored from Storage) → export that file as-is.
+    // An original .docx is available (imported now, or restored from the image host) → export that file as-is.
     if (originalDocxBuffer) {
         try {
             await exportOriginalDocx();
