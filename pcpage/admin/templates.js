@@ -26,7 +26,8 @@ import {
     PAGE_SIZES, DEFAULT_PAGE_SETTINGS, FIELD_GROUPS,
     normalizePageSettings, paperStyleObject, paperStyleString, baseCss,
     discoverResidentFields, sampleValues, renderTemplateHtml, sanitizeHtml,
-    defaultTemplateHtml, makeQrDataUrl, printTemplateHtml
+    defaultTemplateHtml, makeQrDataUrl, printTemplateHtml, pageGeometry,
+    applyImageLayout, EDITOR_PAGE_GAP_PX, mountPages
 } from "./templateengine.js";
 
 // =============================================
@@ -196,12 +197,13 @@ function initPage(user, adminData) {
     document.querySelectorAll('.side-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             document.querySelectorAll('.side-tab').forEach(t => t.classList.toggle('active', t === tab));
-            ['pane-fields', 'pane-page'].forEach(id => el(id)?.classList.toggle('hidden', id !== tab.dataset.pane));
+            ['pane-fields', 'pane-page', 'pane-images'].forEach(id => el(id)?.classList.toggle('hidden', id !== tab.dataset.pane));
         });
     });
     el('field-search')?.addEventListener('input', renderFieldPanel);
     renderFieldPanel();
     initPageSettingsUI();
+    initImagePanel();
 
     window.addEventListener('beforeunload', (e) => {
         if (dirty) { e.preventDefault(); e.returnValue = ''; }
@@ -297,6 +299,7 @@ async function loadResidentFieldNames() {
 const TINYMCE_FONTS = [
     'Palatino Linotype=palatino linotype,book antiqua,palatino,serif',
     'Times New Roman=times new roman,times,serif',
+    'Calibri=calibri,carlito,sans-serif',
     'Georgia=georgia,serif',
     'Garamond=garamond,serif',
     'Arial=arial,helvetica,sans-serif',
@@ -387,9 +390,24 @@ function ensureEditor() {
 
     const editorCss = [
         baseCss('body'),
-        'html{background:#dfe5f0;padding:0 0 24px}',
-        'body{box-shadow:0 6px 24px rgba(27,58,107,.18)}',
+        'html{background:#e6e6e6;padding:0 0 96px;position:relative}',
+        'body{box-shadow:none}',
+        // "Drag on page" mode: only the behind/in-front images can be grabbed
+        'body.tpl-move *{pointer-events:none !important}',
+        'body.tpl-move{cursor:move}',
+        'body.tpl-move img[data-layout="behind"],body.tpl-move img[data-layout="front"]{pointer-events:auto !important;cursor:move;outline:2px dashed #2a5298}',
+        'body.tpl-move .tpl-grip{pointer-events:auto !important}',
+        // free-position images: move cursor, never the text cursor / native drag
+        'img[data-layout="behind"],img[data-layout="front"]{cursor:move;-webkit-user-drag:none;user-select:none}',
+        // selection frame + grips for behind / in-front images (editor-only, stripped on save)
+        '#tpl-ovl{position:absolute;z-index:50;pointer-events:none;border:2px dashed #2a5298;box-sizing:border-box}',
+        '#tpl-ovl .tpl-grip{position:absolute;pointer-events:auto;background:#2a5298;color:#fff;font:700 13px/20px sans-serif;text-align:center;width:22px;height:22px;border-radius:5px;user-select:none;touch-action:none}',
+        '#tpl-ovl .tpl-grip.mv{left:-2px;top:-24px;cursor:move}',
+        '#tpl-ovl .tpl-grip.rz{right:-8px;bottom:-8px;width:14px;height:14px;border-radius:3px;cursor:nwse-resize}',
         // placeholder chips: visible only while editing
+        '.tpl-pagebreak{display:block;height:0;margin:0;padding:0;border:0;position:relative;clear:both}',
+        '.tpl-pagebreak::after{content:"Page break";position:absolute;left:0;top:-8px;font:700 10px/16px sans-serif;color:#fff;background:#2a5298;padding:0 6px;border-radius:3px;pointer-events:none}',
+        '.tpl-pagebreak[data-pagebreak="blank"]::after{content:"Blank page";background:#7a5b00}',
         '.ph{background:#fff3cd;border:1px dashed #d4a017;border-radius:3px;padding:0 3px;color:#7a5b00}'
     ].join('\n');
 
@@ -397,11 +415,11 @@ function ensureEditor() {
         target: el('tpl-editor'),
         height: Math.max(560, window.innerHeight - 190),
         menubar: 'edit insert format table',
-        plugins: 'advlist lists table image link charmap searchreplace pagebreak code',
+        plugins: 'advlist lists table image link charmap searchreplace code',
         toolbar:
             'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | forecolor backcolor | ' +
             'alignleft aligncenter alignright alignjustify | lineheight | bullist numlist outdent indent | ' +
-            'table image hr pagebreak | casebtn placeholders | removeformat',
+            'table image imglayout hr | newpage blankpage | casebtn placeholders | removeformat',
         toolbar_mode: 'wrap',
         branding: false,
         promotion: false,
@@ -421,7 +439,8 @@ function ensureEditor() {
         image_advtab: true,
         image_caption: false,
         image_title: true,
-        object_resizing: true,
+        // free-position images are resized with their own corner grip (TinyMCE's handles misplace them)
+        object_resizing: 'img:not([data-layout=behind]):not([data-layout=front]),table',
         automatic_uploads: true,
         paste_data_images: true,
         images_upload_handler: (blobInfo) =>
@@ -442,6 +461,9 @@ function ensureEditor() {
                 el('editor-loading')?.classList.add('hidden');
                 applyPageToEditor();
             });
+
+            ed.ui.registry.addButton('newpage',   { text: 'New page',    tooltip: 'Start the following content on a new page', onAction: () => insertPageBreak(false) });
+            ed.ui.registry.addButton('blankpage', { text: '+ Blank page', tooltip: 'Insert an empty page here',                onAction: () => insertPageBreak(true) });
 
             ed.ui.registry.addMenuButton('casebtn', {
                 text: 'Aa',
@@ -466,6 +488,112 @@ function ensureEditor() {
                     }))
                 })))
             });
+
+            // Page-by-page layout inside the editor (visual only — stripped from saved HTML)
+            ed.on('GetContent', (e) => {
+                if (typeof e.content === 'string' && e.content.includes('data-pg')) {
+                    e.content = e.content.replace(/\sdata-pg="\d+"/g, '');
+                }
+            });
+            ed.on('input change keyup SetContent ExecCommand undo redo ObjectResized TableModified', schedulePaginate);
+            ed.on('ResizeWindow ResizeEditor', schedulePaginate);
+            ed.on('init', () => {
+                ed.getBody().addEventListener('load', schedulePaginate, true);   // images finishing loading
+                setTimeout(schedulePaginate, 600);
+            });
+
+            // Image layout (inline / wrap / behind text / in front) — menu on the toolbar and on the image itself
+            const LAYOUTS = [
+                ['inline', 'In line with text'], ['left', 'Wrap text — image left'], ['right', 'Wrap text — image right'],
+                ['center', 'Centered'], ['behind', 'Behind text (free position)'], ['front', 'In front of text (free position)']
+            ];
+            ed.ui.registry.addMenuButton('imglayout', {
+                text: 'Image layout',
+                tooltip: 'Behind text, in front, wrap…',
+                fetch: (cb) => cb(LAYOUTS.map(([mode, label]) => ({
+                    type: 'menuitem', text: label,
+                    onAction: () => {
+                        const n = ed.selection.getNode();
+                        if (n && n.nodeName === 'IMG') setImageLayout(n, mode);
+                        else showToast('Click an image first, then choose its layout.', 3000);
+                    }
+                })))
+            });
+            ed.ui.registry.addContextToolbar('imgctx', {
+                predicate: (n) => n.nodeName === 'IMG',
+                items: 'imglayout',
+                position: 'node',
+                scope: 'node'
+            });
+
+            // Move / resize behind + in-front images. Use the ✥ handle (shown on the selected image),
+// or grab the image itself. Pointer capture keeps the drag alive even outside the page.
+            ed.on('init', () => {
+                const b = ed.getBody();
+                // Native image drag is what showed the "can't drop here" cursor — block it.
+                b.addEventListener('dragstart', (e) => {
+                    const im = e.target && e.target.closest ? e.target.closest('img') : null;
+                    if (im && isOverlayImg(im)) e.preventDefault();
+                }, true);
+                const grabTarget = (e) => {
+                    const t = e.target;
+                    if (t && t.classList && t.classList.contains('tpl-grip') && selImg) {
+                        return { img: selImg, mode: t.classList.contains('rz') ? 'resize' : 'move' };
+                    }
+                    const im = t && t.closest ? t.closest('img') : null;
+                    return im && isOverlayImg(im) ? { img: im, mode: 'move' } : null;
+                };
+                b.addEventListener('mousedown', (e) => {
+                    if (grabTarget(e)) { e.preventDefault(); e.stopPropagation(); }   // no text cursor / selection
+                }, true);
+
+                let drag = null;
+                b.addEventListener('pointerdown', (e) => {
+                    if (e.button !== 0) return;
+                    const g = grabTarget(e);
+                    if (!g) return;
+                    e.preventDefault(); e.stopPropagation();
+                    selImg = g.img;
+                    drag = {
+                        img: g.img, mode: g.mode, id: e.pointerId, sx: e.clientX, sy: e.clientY,
+                        ox: parseFloat(g.img.style.left) || 0, oy: parseFloat(g.img.style.top) || 0,
+                        ow: g.img.getBoundingClientRect().width
+                    };
+                    try { b.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+                    positionHandle();
+                }, true);
+                b.addEventListener('pointermove', (e) => {
+                    if (!drag || e.pointerId !== drag.id) return;
+                    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+                    const im = drag.img;
+                    if (drag.mode === 'move') {
+                        im.style.left = (drag.ox + dx).toFixed(1) + 'px';
+                        im.style.top = (drag.oy + dy).toFixed(1) + 'px';
+                    } else {
+                        im.removeAttribute('width'); im.removeAttribute('height');
+                        im.style.width = Math.max(20, drag.ow + dx).toFixed(1) + 'px';
+                        im.style.height = 'auto';
+                    }
+                    positionHandle();
+                });
+                const endDrag = () => {
+                    if (!drag) return;
+                    try { b.releasePointerCapture(drag.id); } catch (_) { /* ignore */ }
+                    drag = null;
+                    ed.undoManager.add();
+                    setDirty(true);
+                    refreshImagePanel();
+                    schedulePaginate();
+                };
+                b.addEventListener('pointerup', endDrag);
+                b.addEventListener('pointercancel', endDrag);
+                refreshImagePanel();
+            });
+            ed.on('NodeChange', (e) => {
+                if (e.element && e.element.nodeName === 'IMG') selImg = e.element;
+                scheduleImageRefresh();
+            });
+            ed.on('SetContent input change ExecCommand undo redo', scheduleImageRefresh);
 
             const markDirty = () => { if (!loadingContent) setDirty(true); };
             ed.on('input change undo redo SetContent ExecCommand', (e) => {
@@ -577,6 +705,14 @@ function insertField(key) {
     setDirty(true);
 }
 
+function insertPageBreak(blank) {
+    if (!editor) return;
+    editor.focus();
+    editor.insertContent(`<div class="tpl-pagebreak" data-pagebreak="${blank ? 'blank' : '1'}" contenteditable="false"></div>`);
+    setDirty(true);
+    schedulePaginate();
+}
+
 // ---------------------------------------------
 // Page settings (size / orientation / margins / border)
 // ---------------------------------------------
@@ -607,6 +743,7 @@ function syncPageSettingsUI() {
 
 function readPageSettingsUI() {
     pageSettings = normalizePageSettings({
+        v: 2,
         size: el('ps-size')?.value,
         orientation: el('ps-orient')?.value,
         margins: {
@@ -630,6 +767,369 @@ function applyPageToEditor() {
     if (!body) return;
     Object.entries(paperStyleObject(pageSettings)).forEach(([k, v]) => body.style.setProperty(k, v));
     body.style.setProperty('margin', '16px auto');
+    body.style.setProperty('position', 'relative');
+    body.style.setProperty('isolation', 'isolate');
+    body.style.setProperty('z-index', '1');
+    paginateEditor();
+}
+
+// ---------------------------------------------
+// Editor pagination: shows real page-sized sheets with a gap between them.
+// Content that would cross a page end is pushed to the next page with a temporary
+// margin (rules live in an injected <style>; the data-pg marker is removed in GetContent,
+// so nothing extra is ever saved, previewed, printed or exported).
+// ---------------------------------------------
+const PAGE_GAP_PX = EDITOR_PAGE_GAP_PX;
+const MM_PX = 96 / 25.4;
+let paginateTimer = null;
+
+function schedulePaginate() {
+    clearTimeout(paginateTimer);
+    paginateTimer = setTimeout(paginateEditor, 150);
+}
+
+function paginateEditor() {
+    if (!editor) return;
+    const body = editor.getBody?.();
+    const doc2 = editor.getDoc?.();
+    const win = editor.getWin?.();
+    if (!body || !doc2 || !win) return;
+
+    let st = doc2.getElementById('pg-style');
+    if (!st) { st = doc2.createElement('style'); st.id = 'pg-style'; doc2.head.appendChild(st); }
+    body.querySelectorAll('[data-pg]').forEach(n => n.removeAttribute('data-pg'));
+    st.textContent = '';
+
+    // The sheets (white page + real border + shadow) are drawn separately, so the body itself
+    // only keeps a transparent border of the same width (keeps text wrapping identical to print).
+    const geo = pageGeometry(pageSettings);
+    body.style.setProperty('border', geo.bw ? `${geo.bw}px solid transparent` : '0 none');
+    body.style.setProperty('background', 'transparent');
+    body.style.setProperty('box-shadow', 'none');
+
+    const cs = win.getComputedStyle(body);
+    const pt = parseFloat(cs.paddingTop) || 0;
+    const pb = parseFloat(cs.paddingBottom) || 0;
+    const bw = parseFloat(cs.borderTopWidth) || 0;
+    const bodyH = pageGeometry(pageSettings).bodyH;
+    const pageH = pt + bodyH + pb;           // one sheet, in px
+    const P = pageH + PAGE_GAP_PX;           // distance from one sheet's top to the next
+    const originY = body.getBoundingClientRect().top + bw + pt;   // content-box top (y = 0)
+    const rectY = (r) => r.top - originY;
+
+    // 1) collect the pieces that may be moved (blocks; table rows; list items)
+    const units = [];
+    const flows = (n) => { const c = win.getComputedStyle(n); return c.position !== 'absolute' && c.position !== 'fixed' && c.float === 'none'; };
+    let prevBottom = 0;
+    for (const child of body.children) {
+        const tag = child.tagName;
+        if (tag === 'STYLE' || tag === 'SCRIPT') continue;
+        if (child.hasAttribute('data-pagebreak')) {
+            units.push({ mode: 'break', blank: child.getAttribute('data-pagebreak') === 'blank', h: 0 });
+            continue;
+        }
+        if (!flows(child)) continue;
+        const cr = child.getBoundingClientRect();
+        if (tag === 'TABLE') {
+            let first = true;
+            for (const tr of child.rows) {
+                const r = tr.getBoundingClientRect();
+                units.push({ m: tr, a: tr, mode: 'row', top: rectY(r), bottom: rectY(r) + r.height, h: r.height });
+                first = false;
+            }
+            if (first) units.push({ m: child, a: child, mode: 'block', top: rectY(cr), bottom: rectY(cr) + cr.height, h: cr.height, gap0: rectY(cr) - prevBottom });
+        } else if ((tag === 'UL' || tag === 'OL') && child.children.length > 1) {
+            let i = 0;
+            let lastBottom = prevBottom;
+            for (const li of child.children) {
+                const r = li.getBoundingClientRect();
+                const u = { m: li, a: i === 0 ? child : li, mode: 'block', top: rectY(r), bottom: rectY(r) + r.height, h: r.height };
+                u.gap0 = i === 0 ? rectY(cr) - prevBottom : rectY(r) - lastBottom;
+                units.push(u);
+                lastBottom = u.bottom;
+                i++;
+            }
+        } else {
+            units.push({ m: child, a: child, mode: 'block', top: rectY(cr), bottom: rectY(cr) + cr.height, h: cr.height, gap0: rectY(cr) - prevBottom });
+        }
+        prevBottom = rectY(cr) + cr.height;
+    }
+
+    // 2) walk top→bottom, pushing anything that crosses a page end (or follows a page break) onto the next sheet
+    let shift = 0, k = 0, lastBottomY = 0, pending = 0, basePage = 0;
+    const rules = [];
+    const pushUnit = (u, d) => {
+        k++;
+        u.a.setAttribute('data-pg', String(k));
+        if (u.mode === 'row') {
+            [...u.a.children].forEach((cell, i) => {
+                const p0 = parseFloat(win.getComputedStyle(cell).paddingTop) || 0;
+                rules.push(`[data-pg="${k}"]>:nth-child(${i + 1}){padding-top:${(p0 + d).toFixed(1)}px !important}`);
+            });
+        } else {
+            rules.push(`[data-pg="${k}"]{margin-top:${((u.gap0 || 0) + d).toFixed(1)}px !important}`);
+        }
+        shift += d;
+    };
+    for (const u of units) {
+        if (u.mode === 'break') {
+            if (!pending) basePage = Math.max(0, Math.floor((lastBottomY - 0.5) / P));
+            const inc = u.blank ? 2 : 1;
+            pending += lastBottomY > 0 ? inc : inc - 1;
+            continue;
+        }
+        if (u.h < 1) continue;
+        if (pending) {
+            const d0 = (basePage + pending) * P - (u.top + shift);
+            pending = 0;
+            if (d0 > 0.5) pushUnit(u, d0);
+        }
+        const top = u.top + shift;
+        const bottom = u.bottom + shift;
+        const page = Math.floor(top / P);
+        const contentEnd = page * P + bodyH;
+        const inMargin = top >= contentEnd - 0.5;
+        const crosses = bottom > contentEnd + 0.5 && u.h <= bodyH;
+        if (inMargin || crosses) {
+            const d = (page + 1) * P - top;
+            if (d > 0.5) pushUnit(u, d);
+        }
+        lastBottomY = u.bottom + shift;
+    }
+    if (pending > 1) lastBottomY = (basePage + pending - 1) * P + 1;   // blank page at the very end
+    st.textContent = rules.join('\n');
+
+    // 3) draw the sheets: white page, thin edge lines, grey gap in between
+    const pages = Math.max(1, Math.floor((lastBottomY - 0.5) / P) + 1);
+    window.__tplPages = pages;
+    body.style.setProperty('min-height', `${(pages * P - PAGE_GAP_PX + 2 * bw).toFixed(1)}px`);
+    drawSheets(body, doc2, pages, P, pageH, bw);
+}
+
+// One white sheet per page with its own border and shadow; the grey gap between sheets is the page break.
+// The sheets live in a wrapper that is a sibling of <body> (child of <html>), NOT inside the body:
+// non-editable blocks inside the body make TinyMCE draw its black "fake caret" line next to them,
+// which showed up as a big black line that appeared and disappeared while typing / moving the cursor.
+function drawSheets(body, doc2, pages, P, pageH, bw) {
+    body.querySelectorAll('.tpl-sheet, #tpl-sheets').forEach(n => n.remove());   // clean up older versions
+    const html = doc2.documentElement;
+    let wrap = doc2.getElementById('tpl-sheets');
+    if (!wrap) {
+        wrap = doc2.createElement('div');
+        wrap.id = 'tpl-sheets';
+        wrap.setAttribute('data-mce-bogus', 'all');
+        wrap.setAttribute('aria-hidden', 'true');
+        wrap.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;pointer-events:none;user-select:none';
+        html.insertBefore(wrap, body);          // before <body> so it paints underneath the text
+    }
+    const b = pageSettings.border;
+    const border = (b.style !== 'none' && b.width > 0) ? `${b.width}px ${b.style} ${b.color}` : 'none';
+    const win = doc2.defaultView;
+    const br = body.getBoundingClientRect();
+    const x0 = br.left + (win.scrollX || 0);     // body border-box, in document coordinates
+    const y0 = br.top + (win.scrollY || 0);
+    const w = body.clientWidth;
+    let out = '';
+    for (let i = 0; i < pages; i++) {
+        out += `<div class="tpl-sheet" style="position:absolute;pointer-events:none;box-sizing:border-box;background:#fff;` +
+            `box-shadow:0 1px 8px rgba(0,0,0,.28);left:${x0.toFixed(1)}px;top:${(y0 + i * P).toFixed(1)}px;` +
+            `width:${w + 2 * bw}px;height:${(pageH + 2 * bw).toFixed(1)}px;border:${border}"></div>`;
+    }
+    wrap.innerHTML = out;
+}
+
+// ---------------------------------------------
+// Images: layout (behind / in front / wrap), exact position, drag, size, opacity
+// Positions are stored on the image itself (style + data-layout), so they are saved with the
+// template and drawn on the matching page in Preview / Print — including inside the margins.
+// ---------------------------------------------
+let selImg = null;
+let imgRefreshTimer = null;
+const isOverlayImg = (img) => ['behind', 'front'].includes(img.getAttribute('data-layout'));
+const LAYOUT_LABEL = { inline: 'In line', left: 'Wrap left', right: 'Wrap right', center: 'Centered', behind: 'Behind text', front: 'In front' };
+
+function sheetPitch() {
+    const body = editor.getBody();
+    const cs = editor.getWin().getComputedStyle(body);
+    const pt = parseFloat(cs.paddingTop) || 0, pb = parseFloat(cs.paddingBottom) || 0;
+    return pt + pageGeometry(pageSettings).bodyH + pb + PAGE_GAP_PX;
+}
+
+// Selection frame with a move (✥) and resize grip, drawn over the selected behind / in-front image.
+// It is a bogus element: TinyMCE never saves it.
+function positionHandle() {
+    if (!editor || !editor.getBody) return;
+    const body = editor.getBody();
+    if (!body) return;
+    let h = body.querySelector('#tpl-ovl');
+    if (!selImg || !body.contains(selImg) || !isOverlayImg(selImg)) { if (h) h.remove(); return; }
+    if (!h) {
+        h = editor.getDoc().createElement('div');
+        h.id = 'tpl-ovl';
+        h.setAttribute('data-mce-bogus', 'all');
+        h.setAttribute('contenteditable', 'false');
+        h.innerHTML = '<div class="tpl-grip mv" data-mce-bogus="all" title="Drag to move">\u2725</div>' +
+                      '<div class="tpl-grip rz" data-mce-bogus="all" title="Drag to resize"></div>';
+        body.appendChild(h);
+    }
+    const cs = editor.getWin().getComputedStyle(body);
+    const r = selImg.getBoundingClientRect(), br = body.getBoundingClientRect();
+    h.style.left = (r.left - br.left - (parseFloat(cs.borderLeftWidth) || 0)).toFixed(1) + 'px';
+    h.style.top = (r.top - br.top - (parseFloat(cs.borderTopWidth) || 0)).toFixed(1) + 'px';
+    h.style.width = r.width.toFixed(1) + 'px';
+    h.style.height = r.height.toFixed(1) + 'px';
+}
+
+/** Stretch the selected image across the page at the very top (header) or bottom (footer), repeated on every page. */
+function placeImageBand(where) {
+    if (!selImg || !editor) return;
+    const cur = selImg.getAttribute('data-layout');
+    const mode = (cur === 'behind' || cur === 'front') ? cur : 'front';
+    const P = sheetPitch();
+    const pageH = P - PAGE_GAP_PX;
+    const topNow = parseFloat(selImg.style.top);
+    const k = Number.isFinite(topNow) ? Math.max(0, Math.floor(topNow / P)) : 0;
+    const fullW = editor.getBody().clientWidth;
+    setImageLayout(selImg, mode, { x: 0, y: k * P, width: fullW, repeat: true });
+    if (where === 'footer') {
+        const h = selImg.getBoundingClientRect().height;
+        selImg.style.top = (k * P + pageH - h).toFixed(1) + 'px';
+        afterImageChange();
+    }
+    showToast((where === 'footer' ? 'Footer' : 'Header') + ' image placed and set to repeat on every page. Drag the \u2725 handle to fine-tune.', 4500);
+}
+
+function scheduleImageRefresh() {
+    clearTimeout(imgRefreshTimer);
+    imgRefreshTimer = setTimeout(refreshImagePanel, 200);
+}
+
+function afterImageChange() {
+    editor.undoManager.add();
+    setDirty(true);
+    schedulePaginate();
+    refreshImagePanel();
+}
+
+function setImageLayout(img, mode, pos = {}) {
+    if (!img || !editor) return;
+    editor.undoManager.transact(() => applyImageLayout(img, mode, pos));
+    selImg = img;
+    afterImageChange();
+}
+
+function refreshImagePanel() {
+    const host = el('img-list');
+    if (!host || !editor || !editor.getBody) return;
+    const body = editor.getBody();
+    if (!body) return;
+    const imgs = [...body.querySelectorAll('img')];
+    if (selImg && !body.contains(selImg)) selImg = null;
+    host.innerHTML = '';
+    if (!imgs.length) {
+        const n = document.createElement('p');
+        n.className = 'side-note';
+        n.textContent = 'No images yet. Use Insert ▸ Image (or import a .docx), then choose how it sits here.';
+        host.appendChild(n);
+    }
+    imgs.forEach((img, i) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'field-chip' + (img === selImg ? ' sel' : '');
+        const c = document.createElement('code');
+        c.textContent = 'Image ' + (i + 1);
+        const s = document.createElement('span');
+        s.textContent = LAYOUT_LABEL[img.getAttribute('data-layout') || 'inline'] || 'In line';
+        b.append(c, s);
+        b.addEventListener('click', () => {
+            selImg = img;
+            editor.selection.select(img);
+            editor.focus();
+            try { img.scrollIntoView({ block: 'center' }); } catch (_) { /* ignore */ }
+            refreshImagePanel();
+        });
+        host.appendChild(b);
+    });
+    syncImageProps();
+}
+
+function syncImageProps() {
+    positionHandle();
+    const box = el('img-props');
+    if (!box) return;
+    if (!selImg || !editor || !editor.getBody().contains(selImg)) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    const mode = selImg.getAttribute('data-layout') || 'inline';
+    const free = mode === 'behind' || mode === 'front';
+    const set = (id, v) => { const n = el(id); if (n) n.value = v; };
+    set('img-layout', mode);
+    const P = sheetPitch();
+    const left = parseFloat(selImg.style.left), top = parseFloat(selImg.style.top);
+    const k = Number.isFinite(top) ? Math.max(0, Math.floor(top / P)) : 0;
+    set('img-page', k + 1);
+    set('img-x', Number.isFinite(left) ? (left / MM_PX).toFixed(1) : '0');
+    set('img-y', Number.isFinite(top) ? ((top - k * P) / MM_PX).toFixed(1) : '0');
+    set('img-w', (selImg.getBoundingClientRect().width / MM_PX).toFixed(1));
+    set('img-opacity', Math.round((parseFloat(selImg.style.opacity) || 1) * 100));
+    const rep = el('img-repeat');
+    if (rep) rep.checked = selImg.getAttribute('data-repeat') === '1';
+    ['img-page', 'img-x', 'img-y', 'img-opacity', 'img-repeat', 'btn-img-drag', 'btn-img-full'].forEach(id => { const n = el(id); if (n) n.disabled = !free; });
+}
+
+function readImageProps() {
+    if (!selImg || !editor) return;
+    const mode = el('img-layout')?.value || 'inline';
+    const free = mode === 'behind' || mode === 'front';
+    const num = (id, d) => { const v = parseFloat(el(id)?.value); return Number.isFinite(v) ? v : d; };
+    const pos = {};
+    const w = num('img-w', 0);
+    if (w > 5) pos.width = w * MM_PX;
+    if (free) {
+        const P = sheetPitch();
+        const page = Math.max(1, Math.round(num('img-page', 1)));
+        pos.x = num('img-x', 0) * MM_PX;
+        pos.y = (page - 1) * P + num('img-y', 0) * MM_PX;
+        pos.opacity = Math.min(100, Math.max(5, num('img-opacity', 100))) / 100;
+        pos.repeat = !!el('img-repeat')?.checked;
+    }
+    setImageLayout(selImg, mode, pos);
+}
+
+function initImagePanel() {
+    ['img-layout', 'img-page', 'img-x', 'img-y', 'img-w', 'img-opacity', 'img-repeat']
+        .forEach(id => el(id)?.addEventListener('change', readImageProps));
+
+    el('btn-img-drag')?.addEventListener('click', () => {
+        if (!editor) return;
+        const b = editor.getBody();
+        const on = !b.classList.contains('tpl-move');
+        b.classList.toggle('tpl-move', on);
+        el('btn-img-drag').classList.toggle('on', on);
+        el('btn-img-drag').textContent = on ? 'Done moving' : 'Drag on page';
+        if (on) showToast('Drag the highlighted image anywhere — even into the margins. Click "Done moving" when finished.', 4500);
+    });
+
+    el('btn-img-full')?.addEventListener('click', () => {
+        if (!selImg || !editor) return;
+        const mode = selImg.getAttribute('data-layout') || 'inline';
+        const P = sheetPitch();
+        const top = parseFloat(selImg.style.top) || 0;
+        const k = Math.max(0, Math.floor(top / P));
+        const innerW = editor.getBody().clientWidth;
+        setImageLayout(selImg, mode, { x: 0, y: top, width: innerW });
+        syncImageProps();
+        void k;
+    });
+
+    el('btn-img-header')?.addEventListener('click', () => placeImageBand('header'));
+    el('btn-img-footer')?.addEventListener('click', () => placeImageBand('footer'));
+
+    el('btn-img-del')?.addEventListener('click', () => {
+        if (!selImg || !editor) return;
+        editor.undoManager.transact(() => selImg.remove());
+        selImg = null;
+        afterImageChange();
+    });
 }
 
 // ---------------------------------------------
@@ -746,10 +1246,12 @@ async function openPreview() {
         qrDataUrl: qr, baseUrl: APP_ROOT
     });
     const paper = el('preview-paper');
-    paper.setAttribute('style', paperStyleString(pageSettings));
-    paper.innerHTML = lastPreviewHtml;
-    el('pv-print').onclick = () => printTemplateHtml(lastPreviewHtml, pageSettings, 'Template test print');
+    paper.removeAttribute('style');
+    paper.innerHTML = '<div style="text-align:center;color:#666;padding:24px">Preparing preview…</div>';
     el('preview-modal').classList.add('open');
+    const popts = { values, qrDataUrl: qr, baseUrl: APP_ROOT };
+    await mountPages(paper, lastPreviewHtml, pageSettings, popts);   // real fixed-size pages, same as print
+    el('pv-print').onclick = () => printTemplateHtml(lastPreviewHtml, pageSettings, 'Template test print', popts);
 }
 
 // ---------------------------------------------

@@ -17,10 +17,12 @@
 // ─────────────────────────────────────────────
 
 /** Distance (mm) between the physical paper edge and the printed border. */
-export const PAPER_INSET_MM = 8;
+export const PAPER_INSET_MM = 0;   // real paper size (Word-like): no extra shrink; print margin is 0
 
 /** CSS pixels per millimetre. */
 const MM_PX = 96 / 25.4;
+/** Grey gap (px) the editor draws between sheets. The overlay-image mapping below must use the same value. */
+export const EDITOR_PAGE_GAP_PX = 22;
 
 export const PAGE_SIZES = {
     A4:     { w: 210,   h: 297,   label: 'A4 (210 × 297 mm)' },
@@ -40,8 +42,9 @@ export const DEFAULT_PAGE_SETTINGS = {
     customW: 210,                                           // mm, only used when size === 'Custom'
     customH: 297,                                           // mm
     orientation: 'portrait',
-    margins: { top: 12, right: 15, bottom: 12, left: 15 }, // mm, inside the border
-    border: { style: 'solid', width: 3, color: '#111111' },
+    v: 2,                                                   // settings version (2 = margins measured from the real paper edge)
+    margins: { top: 20, right: 23, bottom: 20, left: 23 }, // mm, measured from the paper edge
+    border: { style: 'none', width: 3, color: '#111111' },  // no page border by default
     // Header / footer: repeated on EVERY page. html may contain {page}, {pages} and field chips.
     header: { enabled: false, html: '', height: 18 },       // height in mm
     footer: { enabled: false, html: '', height: 14 },       // height in mm
@@ -71,8 +74,15 @@ export function normalizePageSettings(s) {
         const n = Number(v);
         return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fb;
     };
-    const m = s.margins || {};
-    const b = s.border || {};
+    // Old templates (no v:2) had an 8mm hidden print inset and a default black border: convert them
+    const legacy = s.v !== 2 && !!(s.margins || s.border);
+    const add8 = (v) => { const n = Number(v); return Number.isFinite(n) ? n + 8 : v; };
+    const m0 = s.margins || {};
+    const m = legacy ? { top: add8(m0.top), right: add8(m0.right), bottom: add8(m0.bottom), left: add8(m0.left) } : m0;
+    let b = s.border || {};
+    if (legacy && b.style === 'solid' && Number(b.width) === 3 && String(b.color || '').toLowerCase() === '#111111') {
+        b = { ...b, style: 'none' };
+    }
     const hd = s.header || {};
     const ft = s.footer || {};
     const bg = s.background || {};
@@ -83,6 +93,7 @@ export function normalizePageSettings(s) {
         height: num(r.height, def.height, 5, 80)
     });
     return {
+        v: 2,
         size: PAGE_SIZES[s.size] ? s.size : d.size,
         customW: num(s.customW, d.customW, L.min, L.max),
         customH: num(s.customH, d.customH, L.min, L.max),
@@ -153,8 +164,8 @@ export function pageAtRule(settings) {
  */
 export function baseCss(sel = '.tpl-paper') {
     return [
-        `${sel}{font-family:'Palatino Linotype','Book Antiqua',Palatino,serif;font-size:12pt;line-height:1.4;color:#111;word-wrap:break-word}`,
-        `${sel} p{margin:0 0 .6em}`,
+        `${sel}{font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:1.15;color:#111;word-wrap:break-word}`,
+        `${sel} p{margin:0 0 8pt}`,
         `${sel} table{border-collapse:collapse}`,
         `${sel} td,${sel} th{padding:4px 6px;vertical-align:top}`,
         `${sel} img{max-width:100%;height:auto}`,
@@ -452,6 +463,32 @@ function fillChip(chip, key, value) {
     }
 }
 
+function stripUnderline(node) {
+    if (!node || node.nodeType !== 1) return;
+    const st = node.getAttribute('style');
+    if (st && /underline/i.test(st)) {
+        const n = st.replace(/text-decoration(?:-line)?\s*:[^;]*;?/gi, '').trim();
+        if (n) node.setAttribute('style', n); else node.removeAttribute('style');
+    }
+}
+function unwrap(el) {
+    while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
+    el.remove();
+}
+function removeFieldUnderline(chip, root) {
+    stripUnderline(chip);
+    chip.querySelectorAll('u').forEach(unwrap);
+    chip.querySelectorAll('[style]').forEach(stripUnderline);
+    // wrappers such as <u><span class="ph">…</span></u> or <span style="text-decoration:underline">
+    let p = chip.parentElement;
+    const txt = chip.textContent.trim();
+    while (p && p !== root && (p.tagName === 'U' || p.tagName === 'SPAN') && p.textContent.trim() === txt) {
+        const next = p.parentElement;
+        if (p.tagName === 'U') unwrap(p); else stripUnderline(p);
+        p = next;
+    }
+}
+
 /**
  * Turn saved template HTML into final HTML for ONE resident.
  *  - <span class="ph" data-field="key">  → replaced with the value (formatting kept)
@@ -502,6 +539,7 @@ export function renderTemplateHtml(html, values, opts = {}) {
             return;
         }
         fillChip(chip, key, valueFor(key));
+        removeFieldUnderline(chip, root);
         chip.classList.remove('ph');
         chip.removeAttribute('data-field');
         if (!chip.getAttribute('class')) chip.removeAttribute('class');
@@ -723,6 +761,12 @@ async function paginateHtml(html, g) {
             const node = queue.shift();
             if (node.nodeType === 8) continue;
             if (node.nodeType === 3 && !node.nodeValue.trim() && !cur.firstChild) continue;
+            if (node.nodeType === 1 && node.hasAttribute('data-pagebreak')) {
+                const blank = node.getAttribute('data-pagebreak') === 'blank';
+                if (cur.firstChild) flush();
+                if (blank) pages.push('');
+                continue;
+            }
             const rem = fill(cur, node);
             if (rem === null) continue;
             if (rem === node) {
@@ -737,20 +781,26 @@ async function paginateHtml(html, g) {
 
         // pin "behind text" / "in front" images to the page their position falls on
         const overlays = [];
-        const pitch = g.bodyH;
-        const mt = g.s.margins.top * MM_PX;
-        const hh = g.hh * MM_PX;
+        // Editor sheets are drawn P px apart (sheet height + gap), so an image's editor `top`
+        // tells us its page (k) and its position on that page (top - k*P).
+        const P = g.s.margins.top * MM_PX + g.bodyH + g.s.margins.bottom * MM_PX + EDITOR_PAGE_GAP_PX;
         overlayImgs.forEach(img => {
             const top = parseFloat(img.style.top);
             let k = 0, t = top;
             if (Number.isFinite(top)) {
-                k = Math.min(pages.length - 1, Math.max(0, Math.floor((top - mt) / pitch)));
-                t = top - k * pitch + hh;
+                k = Math.min(pages.length - 1, Math.max(0, Math.floor(top / P)));
+                t = top - k * P;
             }
             img.style.position = 'absolute';
             if (!img.style.zIndex) img.style.zIndex = (img.getAttribute('data-layout') === 'front' || img.classList.contains('img-front')) ? '5' : '-1';
             if (Number.isFinite(t)) img.style.top = t.toFixed(1) + 'px';
-            (overlays[k] = overlays[k] || []).push(img.outerHTML);
+            const html = img.outerHTML;
+            if (img.getAttribute('data-repeat') === '1') {
+                // header / footer picture: shown at the same spot on EVERY page
+                pages.forEach((_, i) => { (overlays[i] = overlays[i] || []).push(html); });
+            } else {
+                (overlays[k] = overlays[k] || []).push(html);
+            }
         });
 
         return { chunks: pages, overlays: pages.map((_, i) => (overlays[i] || []).join('')) };
@@ -821,7 +871,7 @@ export function editorCss(settings, opts = {}) {
     const s = g.s;
     const m = s.margins;
     const mtPx = (m.top * MM_PX).toFixed(1);
-    const guide = 'rgba(220,80,80,.55)';
+    const guide = 'rgba(220,60,60,.9)';
     const url = safeCssUrl(s.background.src, opts.baseUrl);
     return [
         `html{background:#e6e6e6;padding:0}`,
@@ -830,8 +880,10 @@ export function editorCss(settings, opts = {}) {
             `width:${g.innerW}mm;min-height:${g.innerH}mm;margin:16px auto;` +
             `padding:${m.top}mm ${m.right}mm ${m.bottom}mm ${m.left}mm;` +
             `border:${pageBorderCss(s)};background-color:#ffffff;` +
-            `background-image:linear-gradient(to bottom,transparent calc(100% - 2px),${guide} calc(100% - 2px));` +
-            `background-size:100% ${g.bodyH.toFixed(1)}px;background-position:0 ${mtPx}px;background-repeat:repeat-y;` +
+            `background-image:linear-gradient(to bottom,transparent calc(100% - 3px),${guide} calc(100% - 3px)),` +
+            `linear-gradient(to bottom,transparent 50%,rgba(27,58,107,.045) 50%);` +
+            `background-size:100% ${g.bodyH.toFixed(1)}px,100% ${(g.bodyH * 2).toFixed(1)}px;` +
+            `background-position:0 ${mtPx}px,0 ${mtPx}px;background-repeat:repeat-y;` +
             `box-shadow:0 1px 8px rgba(0,0,0,.28);overflow-wrap:break-word}`,
         url ? `body::before{content:'';position:absolute;left:0;top:0;right:0;bottom:0;z-index:-1;pointer-events:none;` +
               `background-image:${url};${bgFitCss(s.background.fit)};opacity:${s.background.opacity}}` : '',
@@ -861,6 +913,9 @@ export function applyImageLayout(img, mode, pos = {}) {
     IMAGE_LAYOUTS.forEach(m => img.classList.remove('img-' + m));
     img.classList.add('img-' + mode);
     img.setAttribute('data-layout', mode);
+    if (mode !== 'behind' && mode !== 'front') img.removeAttribute('data-repeat');
+    if (pos.repeat === true) img.setAttribute('data-repeat', '1');
+    else if (pos.repeat === false) img.removeAttribute('data-repeat');
 
     if (Number.isFinite(pos.width) && pos.width > 0) {
         img.removeAttribute('width');
@@ -980,7 +1035,7 @@ ${pageAtRule(s)}
 export function defaultTemplateHtml() {
     const ph = (key, extraStyle = '') =>
         `<span class="ph" data-field="${key}"${extraStyle ? ` style="${extraStyle}"` : ''}>{${key}}</span>`;
-    const u = 'text-decoration:underline;';
+    const u = '';
 
     return `
 <table style="width:100%;border-collapse:collapse;border:none;" border="0">

@@ -1042,6 +1042,37 @@
       .editor-actions { margin-left: 0; width: 100%; }
     }
 
+
+    /* ═══════════════════════════════════════════
+       EDITOR — compact header + maximized editing area
+       ═══════════════════════════════════════════ */
+    .main:has(#view-editor:not(.hidden)) { padding: 10px 12px; }
+    #view-editor { --ed-h: max(520px, calc(100vh - 60px - 20px - 50px)); }
+
+    #view-editor .editor-head { gap: 6px 8px; margin-bottom: 8px; flex-wrap: wrap; }
+    #view-editor .editor-head h1 { font-size: 17px; white-space: nowrap; }
+    #view-editor .editor-actions { margin-left: auto; gap: 5px; flex-wrap: wrap; }
+    #view-editor .editor-actions .sep { width: 1px; height: 20px; background: var(--border); margin: 0 3px; }
+    #view-editor .btn-ghost,
+    #view-editor .btn-save { height: 32px; padding: 0 10px; font-size: 12px; border-radius: 8px; gap: 5px; white-space: nowrap; }
+    #view-editor .btn-ghost.on { background: #EBF0FB; border-color: var(--primary-light); color: var(--primary); }
+
+    #view-editor .editor-layout { gap: 10px; }
+    #view-editor .editor-main { height: var(--ed-h); display: flex; flex-direction: column; }
+    #view-editor .editor-main > .tox-tinymce { flex: 1 1 auto; height: auto !important; min-height: 0; border: 0 !important; border-radius: 0 !important; }
+    #view-editor .editor-main.no-toolbar .tox-editor-header { display: none !important; }
+
+    #view-editor .editor-side { width: 250px; top: 70px; height: var(--ed-h); max-height: none; }
+    #view-editor .editor-layout.side-hidden .editor-side { display: none; }
+
+    @media (max-width: 1100px) {
+      #view-editor .editor-side { width: 100%; position: static; height: auto; max-height: 50vh; }
+    }
+
+    .field-chip.sel { border-style: solid; border-color: var(--primary-light); background: #EBF0FB; }
+    .img-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+    .img-btns .btn-ghost { height: 30px; padding: 0 10px; font-size: 12px; }
+    .btn-ghost:disabled { opacity: .45; cursor: not-allowed; }
   </style>
   <link rel="stylesheet" href="adminresponsive.css">
 </head>
@@ -1176,14 +1207,19 @@
           <h1 id="editor-title">Template</h1>
           <span class="badge default" id="editor-badge">Default layout</span>
           <span class="dirty-dot" id="dirty-dot" title="Unsaved changes"></span>
+          <span class="badge custom" id="page-count" title="Estimated page count. Red lines in the editor mark where each page ends.">1 page</span>
 
           <div class="editor-actions">
             <input type="file" id="docx-file" accept=".docx" class="hidden">
-            <button class="btn-ghost" id="btn-import" title="Replace the editor content with a Word (.docx) file">⬆ Import .docx</button>
-            <button class="btn-ghost" id="btn-export" title="Download this template as a Word (.docx) file">⬇ Export .docx</button>
+            <button class="btn-ghost" id="btn-toggle-side" title="Show / hide the Fields & Page panel">Hide panel</button>
+            <button class="btn-ghost" id="btn-toggle-toolbar" title="Show / hide the editor menu & toolbar">Hide toolbar</button>
+            <button class="btn-ghost" id="btn-focus" title="Hide the left menu for a bigger editor">Focus</button>
+            <span class="sep"></span>
+            <button class="btn-ghost" id="btn-import" title="Replace the editor content with a Word (.docx) file">⬆ Import</button>
+            <button class="btn-ghost" id="btn-export" title="Download this template as a Word (.docx) file">⬇ Export</button>
             <button class="btn-ghost" id="btn-preview">👁 Preview</button>
-            <button class="btn-ghost" id="btn-reset" title="Load the standard certificate layout into the editor">↺ Standard layout</button>
-            <button class="btn-ghost danger" id="btn-remove" title="Delete the saved custom template">Remove custom</button>
+            <button class="btn-ghost" id="btn-reset" title="Load the standard certificate layout into the editor">↺ Standard</button>
+            <button class="btn-ghost danger" id="btn-remove" title="Delete the saved custom template">Remove</button>
             <button class="btn-save" id="btn-save"><span id="save-tpl-label">Save Template</span></button>
           </div>
         </div>
@@ -1198,6 +1234,7 @@
             <div class="side-tabs">
               <div class="side-tab active" data-pane="pane-fields">Fields</div>
               <div class="side-tab" data-pane="pane-page">Page</div>
+              <div class="side-tab" data-pane="pane-images">Images</div>
             </div>
 
             <div class="side-pane" id="pane-fields">
@@ -1247,6 +1284,47 @@
               </div>
 
               <p class="side-note" style="margin-top:14px">Table borders (for layouts like the header and footer) are set with <b>Table ▸ Table properties</b> in the editor menu.</p>
+            </div>
+
+            <div class="side-pane hidden" id="pane-images">
+              <p class="side-note">Pick an image, then choose <b>Behind text</b> or <b>In front</b> to place it anywhere on the page — including the margins (good for a letterhead / header). Select it here, then <b>drag the ✥ handle</b> on the page to move it (corner square resizes). Behind-text images sit under the text, so use the handle or <b>Drag on page</b>.</p>
+              <div id="img-list"></div>
+              <div id="img-props" class="hidden">
+                <div class="ps-title">Layout</div>
+                <div class="ps-grid">
+                  <div class="form-group full">
+                    <select id="img-layout">
+                      <option value="inline">In line with text</option>
+                      <option value="left">Wrap text — image left</option>
+                      <option value="right">Wrap text — image right</option>
+                      <option value="center">Centered</option>
+                      <option value="behind">Behind text (free)</option>
+                      <option value="front">In front of text (free)</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="ps-title">Position &amp; size (mm)</div>
+                <div class="ps-grid">
+                  <div class="form-group"><label>Page</label><input id="img-page" type="number" min="1" step="1"></div>
+                  <div class="form-group"><label>Width</label><input id="img-w" type="number" min="5" step="1"></div>
+                  <div class="form-group"><label>X (from left)</label><input id="img-x" type="number" step="1"></div>
+                  <div class="form-group"><label>Y (from top)</label><input id="img-y" type="number" step="1"></div>
+                  <div class="form-group full"><label>Opacity (%)</label><input id="img-opacity" type="number" min="5" max="100" step="5"></div>
+                </div>
+                <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:12px;font-weight:700;color:var(--text-sub);cursor:pointer">
+                  <input type="checkbox" id="img-repeat"> Repeat on every page (header / footer)
+                </label>
+                <div class="img-btns">
+                  <button type="button" class="btn-ghost" id="btn-img-header">Place as header</button>
+                  <button type="button" class="btn-ghost" id="btn-img-footer">Place as footer</button>
+                </div>
+                <div class="img-btns">
+                  <button type="button" class="btn-ghost" id="btn-img-drag">Drag on page</button>
+                  <button type="button" class="btn-ghost" id="btn-img-full">Full width</button>
+                  <button type="button" class="btn-ghost danger" id="btn-img-del">Delete</button>
+                </div>
+                <p class="side-note" style="margin-top:10px">X / Y are measured from the page's top-left corner, so <b>0, 0</b> sits at the very corner of the paper and negative numbers go past it.</p>
+              </div>
             </div>
           </aside>
         </div>
@@ -1315,6 +1393,42 @@
           ///waa
       });
     }, 6000);
+  </script>
+  <script>
+
+    // Live page counter (value is set by templates.js after each layout pass)
+    setInterval(function () {
+      var badge = document.getElementById('page-count');
+      var n = window.__tplPages;
+      if (badge && n) badge.textContent = n + (n === 1 ? ' page' : ' pages');
+    }, 600);
+
+    // Show / hide parts of the editor screen (remembered between visits)
+    (function () {
+      var $ = function (id) { return document.getElementById(id); };
+      var layout = document.querySelector('#view-editor .editor-layout');
+      var main = document.querySelector('#view-editor .editor-main');
+      function get(k) { try { return localStorage.getItem('tplui:' + k) === '1'; } catch (e) { return false; } }
+      function put(k, v) { try { localStorage.setItem('tplui:' + k, v ? '1' : '0'); } catch (e) {} }
+      function bind(btnId, key, labels, apply) {
+        var b = $(btnId); if (!b) return;
+        function set(v) {
+          apply(v); put(key, v);
+          b.textContent = v ? labels[1] : labels[0];
+          b.classList.toggle('on', v);
+          b.setAttribute('aria-pressed', String(v));
+        }
+        set(get(key));
+        b.addEventListener('click', function () { set(!get(key)); });
+      }
+      bind('btn-toggle-side', 'side', ['Hide panel', 'Show panel'], function (v) { layout.classList.toggle('side-hidden', v); });
+      bind('btn-toggle-toolbar', 'toolbar', ['Hide toolbar', 'Show toolbar'], function (v) { main.classList.toggle('no-toolbar', v); });
+      bind('btn-focus', 'focus', ['Focus', 'Exit focus'], function (v) {
+        var sb = $('sidebar'), mc = $('mainContent');
+        if (sb) sb.classList.toggle('collapsed', v);
+        if (mc) mc.classList.toggle('expanded', v);
+      });
+    })();
   </script>
   <script type="module" src="templates.js"></script>
   <script type="module" src="adminnavbar.js"></script>
