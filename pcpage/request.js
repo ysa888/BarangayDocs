@@ -46,6 +46,9 @@ const el = (id) => document.getElementById(id);
 // Live map of documentName → icon filename, populated from Firestore
 const docsIconMap = {};
 
+// Home page cards link here with ?doc=<document id>; used once to preselect + open the modal
+let deepLinkDocId = new URLSearchParams(location.search).get('doc');
+
 // Page settings of the admin-made template currently shown in the preview
 // (null → the built-in hardcoded certificate is being shown)
 let activeTemplateSettings = null;
@@ -365,10 +368,14 @@ function listenDocumentTypes() {
         // Rebuild the icon map
         Object.keys(docsIconMap).forEach(k => delete docsIconMap[k]);
 
-        // Sort by name for consistent ordering
+        // Oldest first = the order the admin added them (same as the home page)
         const docs = snapshot.docs
             .map(d => ({ id: d.id, ...d.data() }))
-            .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            .sort((a, b) => {
+                const at = a.createdAt?.toMillis?.() ?? 0;
+                const bt = b.createdAt?.toMillis?.() ?? 0;
+                return (at - bt) || (a.name || '').localeCompare(b.name || '');
+            });
 
         if (docs.length === 0) {
             grid.innerHTML = '<div class="doc-type-grid-empty">No documents available at this time.</div>';
@@ -379,7 +386,16 @@ function listenDocumentTypes() {
         docs.forEach(d => { docsIconMap[d.name] = d.icon || 'Icons/barangayclearance.png'; });
 
         // Preserve the currently selected doc name (if any) across re-renders
-        const prevSelected = grid.querySelector('.doc-type-btn.selected')?.dataset.name || null;
+        let prevSelected = grid.querySelector('.doc-type-btn.selected')?.dataset.name || null;
+
+        // Deep link from the home page card: select that document and open the modal (once)
+        let openAfterRender = false;
+        if (deepLinkDocId) {
+            const target = docs.find(d => d.id === deepLinkDocId);
+            if (target) { prevSelected = target.name; openAfterRender = true; }
+            deepLinkDocId = null;
+            history.replaceState(null, '', location.pathname);
+        }
 
         // Render buttons
         grid.innerHTML = docs.map((d, i) => {
@@ -389,15 +405,17 @@ function listenDocumentTypes() {
             const isSelected = prevSelected ? d.name === prevSelected : isFirst;
             return `
                 <div class="doc-type-btn${isSelected ? ' selected' : ''}"
-                     data-name="${d.name}"
+                     data-name="${escapeHtml(d.name)}"
                      onclick="selectDoc(this)">
                     <img class="doc-type-icon"
                          src="${icon}"
                          alt="${d.name}"
                          onerror="this.src='Icons/barangayclearance.png'">
-                    ${d.name}
+                    ${escapeHtml(d.name)}
                 </div>`;
         }).join('');
+
+        if (openAfterRender) window.openModal();
     });
 }
 

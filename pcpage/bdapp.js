@@ -246,6 +246,9 @@ async function initHome(user, userData) {
     if (ucName) ucName.textContent = fullName;
     if (ucAddr) ucAddr.textContent = `${userData.barangay || 'Barangay Banicain'}, ${userData.city || 'Olongapo City'}`;
 
+    // Available / unavailable documents (live from the admin's documents list)
+    listenHomeDocuments();
+
     // ── Notification button toggle ──
     const notifBtn      = el('notifBtn');
     const notifDropdown = el('notifDropdown');
@@ -308,6 +311,76 @@ async function initHome(user, userData) {
         });
         notifState.reqs = sorted;
         renderNotifs();
+    });
+}
+
+// ── Home page: document cards from Firestore ──
+// Oldest first (what the admin added first is shown first).
+// status === 'active'  → "Available Documents" (click opens the request modal with it selected)
+// anything else        → "Unavailable Documents" (greyed out, not clickable)
+function listenHomeDocuments() {
+    const grid   = el('docGrid');
+    const unGrid = el('unavailGrid');
+    if (!grid) return;
+
+    const buildCard = (d) => {
+        const card = document.createElement('div');
+        card.className = 'doc-card';
+        card.innerHTML = `
+            <div class="doc-icon-area">
+                <img src="${escapeHtml(d.icon || 'Icons/barangayclearance.png')}" alt=""
+                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+                <div class="icon-ph" style="display:none;">No Icon</div>
+            </div>
+            <div class="doc-label">${escapeHtml(d.name || '—')}</div>`;
+        return card;
+    };
+
+    onSnapshot(collection(db, 'documents'), (snap) => {
+        const docs = snap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => {
+                const at = a.createdAt?.toMillis?.() ?? 0;
+                const bt = b.createdAt?.toMillis?.() ?? 0;
+                return (at - bt) || (a.name || '').localeCompare(b.name || '');
+            });
+
+        // Home shows only the 8 most recently added in each list (still oldest → newest).
+        // Everything is still reachable from "View All" / the New Document Request modal.
+        const HOME_LIMIT  = 8;
+        const available   = docs.filter(d => d.status === 'active').slice(-HOME_LIMIT);
+        const unavailable = docs.filter(d => d.status !== 'active').slice(-HOME_LIMIT);
+
+        grid.replaceChildren();
+        if (!available.length) {
+            grid.innerHTML = '<div class="doc-grid-empty">No documents available at this time.</div>';
+        }
+        available.forEach(d => {
+            const card = buildCard(d);
+            card.addEventListener('click', () => {
+                location.href = 'barangaydocs_request.html?doc=' + encodeURIComponent(d.id);
+            });
+            grid.appendChild(card);
+        });
+
+        if (unGrid) {
+            unGrid.replaceChildren();
+            if (!unavailable.length) {
+                unGrid.innerHTML = '<div class="doc-grid-empty">No unavailable documents.</div>';
+            }
+            unavailable.forEach(d => unGrid.appendChild(buildCard(d)));
+        }
+
+        // keep the search box filter applied after a live update
+        const q = (el('searchInput')?.value || '').toLowerCase();
+        if (q) {
+            grid.querySelectorAll('.doc-card').forEach(c => {
+                c.style.display = c.querySelector('.doc-label').textContent.toLowerCase().includes(q) ? '' : 'none';
+            });
+        }
+    }, (err) => {
+        console.error('Documents listener failed (check Firestore rules):', err);
+        grid.innerHTML = '<div class="doc-grid-empty">Could not load documents.</div>';
     });
 }
 
