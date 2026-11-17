@@ -1037,44 +1037,6 @@
       .vc-footer { padding-left: 18px; padding-right: 18px; }
     }
 
-    /* =============================================
-       STREET CHIPS
-       ============================================= */
-    .street-chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    .street-chip {
-      height: 38px;
-      padding: 0 16px;
-      border: 2px solid var(--border);
-      border-radius: 20px;
-      background: var(--bg);
-      font-family: 'Nunito', sans-serif;
-      font-size: 13px;
-      font-weight: 800;
-      color: var(--text-sub);
-      cursor: pointer;
-      transition: background 0.2s, border-color 0.2s, color 0.2s;
-    }
-
-    .street-chip:hover {
-      border-color: var(--primary-light);
-      background: #EAF0FB;
-      color: var(--primary);
-    }
-
-    .street-chip.selected {
-      background: var(--primary);
-      border-color: var(--primary);
-      color: #fff;
-    }
-
-    .street-chip-other { border-style: dashed; }
-    .street-chip-other.selected { border-style: solid; }
-
     /* ── RESPONSIVE (tablet / mobile) ── */
     @media (max-width: 1100px) {
       .left-panel { padding: 40px; }
@@ -1102,10 +1064,158 @@
       .modal-box { width: calc(100vw - 32px); }
       .modal-header, .modal-body, .modal-footer { padding-left: 18px; padding-right: 18px; }
     }
+    /* ── LOADING SCREEN ── */
+    .bd-loader {
+      position: fixed; inset: 0; z-index: 100000;
+      background: var(--primary);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 28px;
+      opacity: 0; visibility: hidden;
+      transition: opacity 0.3s ease, visibility 0.3s;
+      overflow: hidden;
+    }
+    .bd-loader::before {
+      content: ''; position: absolute; width: 600px; height: 600px; border-radius: 50%;
+      background: rgba(255,255,255,0.04); top: -150px; left: -150px;
+    }
+    .bd-loader::after {
+      content: ''; position: absolute; width: 400px; height: 400px; border-radius: 50%;
+      background: rgba(79,195,247,0.08); bottom: -100px; right: -100px;
+    }
+    .bd-loader.show { opacity: 1; visibility: visible; }
+
+    .bd-doc {
+      position: relative; z-index: 1;
+      width: 132px; height: 168px;
+      background: #fff; border-radius: 16px;
+      padding: 22px 18px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.28);
+      overflow: hidden;
+      transform: translateY(8px) scale(0.96);
+      transition: transform 0.4s ease;
+    }
+    .bd-loader.show .bd-doc { transform: none; }
+    .bd-doc-title { width: 56%; height: 8px; border-radius: 4px; background: var(--primary); margin-bottom: 14px; }
+    .bd-doc-line {
+      height: 5px; border-radius: 3px; background: var(--border); margin-bottom: 9px;
+      transform-origin: left; transform: scaleX(0);
+    }
+    .bd-loader.show .bd-doc-line { animation: bdLine 0.5s ease forwards; }
+    .bd-doc-line:nth-of-type(2) { width: 100%; animation-delay: 0.15s; }
+    .bd-doc-line:nth-of-type(3) { width: 88%;  animation-delay: 0.3s; }
+    .bd-doc-line:nth-of-type(4) { width: 70%;  animation-delay: 0.45s; }
+    @keyframes bdLine { to { transform: scaleX(1); } }
+
+    .bd-qr {
+      position: absolute; right: 16px; bottom: 16px;
+      width: 40px; height: 40px;
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px;
+    }
+    .bd-qr i { background: var(--primary); border-radius: 1px; opacity: 0; }
+    .bd-loader.show .bd-qr i { animation: bdQr 0.3s ease forwards; }
+    .bd-qr i:nth-child(odd)  { animation-delay: 0.9s; }
+    .bd-qr i:nth-child(even) { animation-delay: 1.05s; }
+    .bd-qr i.off { background: transparent; }
+    @keyframes bdQr { to { opacity: 1; } }
+
+    .bd-scan {
+      position: absolute; left: 0; right: 0; top: 0; height: 36px;
+      background: linear-gradient(to bottom, rgba(79,195,247,0), rgba(79,195,247,0.45));
+      border-bottom: 2px solid var(--accent);
+      transform: translateY(-40px);
+    }
+    .bd-loader.show .bd-scan { animation: bdScan 1.3s ease-in-out 0.2s infinite; }
+    @keyframes bdScan { 0% { transform: translateY(-40px); } 100% { transform: translateY(176px); } }
+
+    .bd-check {
+      position: absolute; z-index: 2; right: -14px; top: -14px;
+      width: 44px; height: 44px; border-radius: 50%;
+      background: var(--accent-green); border: 4px solid var(--primary);
+      display: flex; align-items: center; justify-content: center;
+      transform: scale(0);
+    }
+    .bd-check svg { width: 20px; height: 20px; stroke: #fff; fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+    .bd-loader.done .bd-check { animation: bdPop 0.4s cubic-bezier(.2,1.6,.4,1) forwards; }
+    .bd-loader.done .bd-scan { animation: none; opacity: 0; }
+    @keyframes bdPop { to { transform: scale(1); } }
+    .bd-doc-wrap { position: relative; z-index: 1; }
+
+    .bd-status { position: relative; z-index: 1; text-align: center; }
+    .bd-status h3 {
+      font-family: 'Poppins', sans-serif; font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 6px;
+    }
+    .bd-status p { font-size: 14px; color: rgba(255,255,255,0.6); min-height: 21px; }
+    .bd-bar {
+      position: relative; z-index: 1;
+      width: 220px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.15); overflow: hidden;
+    }
+    .bd-bar span { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 3px; }
+    .bd-loader.show .bd-bar span { animation: bdBar var(--bd-dur, 3000ms) ease-in-out forwards; }
+    @keyframes bdBar { to { width: 100%; } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .bd-loader.show .bd-scan { animation: none; opacity: 0; }
+      .bd-loader.show .bd-doc-line { animation-duration: 0.01s; animation-delay: 0s; }
+      .bd-loader.show .bd-qr i { animation-duration: 0.01s; animation-delay: 0s; }
+    }
   </style>
 </head>
 
 <body>
+
+  <!-- LOADING SCREEN -->
+  <div class="bd-loader show" id="bd-loader" role="status" aria-live="polite" aria-hidden="false">
+    <div class="bd-doc-wrap">
+      <div class="bd-doc">
+        <div class="bd-doc-title"></div>
+        <div class="bd-doc-line"></div>
+        <div class="bd-doc-line"></div>
+        <div class="bd-doc-line"></div>
+        <div class="bd-qr">
+          <i></i><i></i><i></i><i class="off"></i><i></i>
+          <i></i><i class="off"></i><i></i><i></i><i class="off"></i>
+          <i></i><i></i><i class="off"></i><i></i><i></i>
+          <i class="off"></i><i></i><i></i><i></i><i></i>
+          <i></i><i class="off"></i><i></i><i class="off"></i><i></i>
+        </div>
+        <div class="bd-scan"></div>
+      </div>
+      <div class="bd-check">
+        <svg viewBox="0 0 24 24"><polyline points="5 12.5 10 17.5 19 7"/></svg>
+      </div>
+    </div>
+    <div class="bd-status">
+      <h3 id="bd-title">BarangayDocs</h3>
+      <p id="bd-msg">Getting things ready…</p>
+    </div>
+    <div class="bd-bar"><span></span></div>
+  </div>
+
+  <script>
+    // Splash loading screen: shows for 3 seconds when the page opens, then reveals the login page
+    (function () {
+      var DURATION = 3000;
+      var el = document.getElementById('bd-loader');
+      var title = document.getElementById('bd-title');
+      var msg = document.getElementById('bd-msg');
+
+      el.style.setProperty('--bd-dur', DURATION + 'ms');
+      document.body.style.overflow = 'hidden';
+
+      setTimeout(function () { msg.textContent = 'Loading your portal…'; }, DURATION * 0.45);
+      setTimeout(function () {
+        el.classList.add('done');
+        title.textContent = 'Welcome!';
+        msg.textContent = 'Opening the registration page…';
+      }, DURATION * 0.85);
+      setTimeout(function () {
+        el.classList.remove('show', 'done');
+        el.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+      }, DURATION);
+    })();
+  </script>
+
 
   <!-- LEFT PANEL -->
   <div class="left-panel">
@@ -1235,18 +1345,21 @@
 
         <div class="field">
           <label>Street</label>
-          <div class="street-chips" id="street-chips" role="group" aria-label="Select your street">
-            <button type="button" class="street-chip" data-street="Little St.">Little St.</button>
-            <button type="button" class="street-chip" data-street="Perimeter St.">Perimeter St.</button>
-            <button type="button" class="street-chip" data-street="Gordon St.">Gordon St.</button>
-            <button type="button" class="street-chip" data-street="W 1st St.">W 1st St.</button>
-            <button type="button" class="street-chip" data-street="W 2nd St.">W 2nd St.</button>
-            <button type="button" class="street-chip" data-street="10th St.">10th St.</button>
-            <button type="button" class="street-chip" data-street="Foster St.">Foster St.</button>
-            <button type="button" class="street-chip" data-street="Luna St.">Luna St.</button>
-            <button type="button" class="street-chip" data-street="Esteban St.">Esteban St.</button>
-            <button type="button" class="street-chip" data-street="2nd St.">2nd St.</button>
-            <button type="button" class="street-chip street-chip-other" data-street="__others__">Others</button>
+          <div class="input-wrap select-wrap">
+            <select id="street-select">
+              <option value="">Select your street</option>
+                <option value="Little St.">Little St.</option>
+                <option value="Perimeter St.">Perimeter St.</option>
+                <option value="Gordon St.">Gordon St.</option>
+                <option value="W 1st St.">W 1st St.</option>
+                <option value="W 2nd St.">W 2nd St.</option>
+                <option value="10th St.">10th St.</option>
+                <option value="Foster St.">Foster St.</option>
+                <option value="Luna St.">Luna St.</option>
+                <option value="Esteban St.">Esteban St.</option>
+                <option value="2nd St.">2nd St.</option>
+                <option value="__others__">Others</option>
+            </select>
           </div>
           <div class="input-wrap" id="street-other-wrap" style="display:none; margin-top:10px;">
             <input id="street-other" type="text" placeholder="Type your street name">
@@ -1558,30 +1671,25 @@
   </div>
 
   <script>
-    // Street picker: chips set #street-name; "Others" reveals a free-text box.
+    // Street picker: dropdown sets #street-name; "Others" reveals a free-text box.
     (function () {
-      var chips = document.querySelectorAll('#street-chips .street-chip');
+      var select = document.getElementById('street-select');
       var otherWrap = document.getElementById('street-other-wrap');
       var otherInput = document.getElementById('street-other');
       var hidden = document.getElementById('street-name');
 
       function sync() {
-        var sel = document.querySelector('#street-chips .street-chip.selected');
-        if (!sel) { hidden.value = ''; return; }
-        hidden.value = sel.dataset.street === '__others__'
+        if (!select.value) { hidden.value = ''; return; }
+        hidden.value = select.value === '__others__'
           ? otherInput.value.trim()
-          : sel.dataset.street;
+          : select.value;
       }
 
-      chips.forEach(function (chip) {
-        chip.addEventListener('click', function () {
-          chips.forEach(function (c) { c.classList.remove('selected'); });
-          chip.classList.add('selected');
-          var isOther = chip.dataset.street === '__others__';
-          otherWrap.style.display = isOther ? 'block' : 'none';
-          if (isOther) otherInput.focus(); else otherInput.value = '';
-          sync();
-        });
+      select.addEventListener('change', function () {
+        var isOther = select.value === '__others__';
+        otherWrap.style.display = isOther ? 'block' : 'none';
+        if (isOther) otherInput.focus(); else otherInput.value = '';
+        sync();
       });
 
       otherInput.addEventListener('input', sync);

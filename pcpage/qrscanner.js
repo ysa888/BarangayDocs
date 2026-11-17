@@ -1,6 +1,7 @@
 // =============================================
 // qrscanner.js — shared camera QR scanner
 // Used by scanqr.js (resident) and adminscanqr.js (admin)
+// Also exports decodeQRFromFile() for the "Upload QR" button.
 //
 // - Uses the browser's built-in BarcodeDetector when available
 //   (Chrome / Edge / Android), otherwise falls back to jsQR (CDN).
@@ -42,6 +43,59 @@ export function parseQRPayload(text) {
         out.ref = m ? m[0].toUpperCase() : (raw.length <= 40 ? raw : null);
     }
     return out;
+}
+
+/**
+ * decodeQRFromFile(file) → Promise<string>
+ * Reads a QR code from an uploaded image file and resolves with its text.
+ * Rejects with an Error (user-friendly message) if no QR is found.
+ */
+export async function decodeQRFromFile(file) {
+    if (!file || !/^image\//.test(file.type || '')) {
+        throw new Error('Please choose an image file (PNG, JPG, etc.).');
+    }
+
+    // Load the image
+    let bitmap;
+    try {
+        bitmap = await createImageBitmap(file);
+    } catch {
+        bitmap = await new Promise((resolve, reject) => {
+            const url = URL.createObjectURL(file);
+            const img = new Image();
+            img.onload  = () => { URL.revokeObjectURL(url); resolve(img); };
+            img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read that image.')); };
+            img.src = url;
+        });
+    }
+    const w = bitmap.width || bitmap.naturalWidth;
+    const h = bitmap.height || bitmap.naturalHeight;
+
+    // 1) Native BarcodeDetector (if available)
+    if ('BarcodeDetector' in window) {
+        try {
+            const det = new BarcodeDetector({ formats: ['qr_code'] });
+            const codes = await det.detect(bitmap);
+            if (codes.length) return codes[0].rawValue;
+        } catch { /* fall through to jsQR */ }
+    }
+
+    // 2) jsQR — try a few sizes, since very large/small images can fail
+    const jsQR = await loadJsQR();
+    const canvas = document.createElement('canvas');
+    const c = canvas.getContext('2d', { willReadFrequently: true });
+    for (const maxSide of [1000, 600, 1600]) {
+        const scale = Math.min(1, maxSide / Math.max(w, h));
+        canvas.width  = Math.max(1, Math.round(w * scale));
+        canvas.height = Math.max(1, Math.round(h * scale));
+        c.fillStyle = '#fff';                       // flatten transparent PNGs onto white
+        c.fillRect(0, 0, canvas.width, canvas.height);
+        c.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        const img = c.getImageData(0, 0, canvas.width, canvas.height);
+        const res = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
+        if (res?.data) return res.data;
+    }
+    throw new Error('No QR code was found in that image. Try a clearer, closer picture.');
 }
 
 function cameraErrorMessage(err) {

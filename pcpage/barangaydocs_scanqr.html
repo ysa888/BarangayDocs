@@ -78,6 +78,10 @@
     .cam-btn { height: 48px; padding: 0 28px; background: var(--accent); border: none; border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800; color: var(--primary); cursor: pointer; transition: opacity 0.2s; }
     .cam-btn:hover { opacity: 0.85; }
     .cam-btn.stop { background: var(--red-bg); color: var(--red-text); }
+    .cam-btn-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    .upload-btn { height: 48px; padding: 0 24px; background: transparent; border: 1.5px solid var(--accent); border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800; color: var(--accent); cursor: pointer; transition: background 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+    .upload-btn:hover { background: rgba(255,255,255,0.1); }
+    .upload-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .cam-area { position: relative; overflow: hidden; }
     .cam-area video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
     .cam-area.active { border-style: solid; border-color: rgba(79,195,247,0.5); }
@@ -267,7 +271,11 @@
               <p class="cam-text">Camera feed will<br>appear here</p>
             </div>
           </div>
-          <button class="cam-btn" id="launchCamBtn">Launch Camera</button>
+          <div class="cam-btn-row">
+            <button class="cam-btn" id="launchCamBtn">Launch Camera</button>
+            <button class="upload-btn" id="uploadQrBtn" type="button"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Upload QR</span></button>
+            <input type="file" id="uploadQrInput" accept="image/*" hidden>
+          </div>
         </div>
 
         <div class="manual-card">
@@ -423,7 +431,8 @@
     document.getElementById('menuToggle').addEventListener('click', toggleSidebar);
   </script>
 
-  <!-- standalone script — no dependency on bdapp.js -->
+  <!-- bdapp.js handles the sidebar profile (name/avatar) + logout -->
+  <script type="module" src="bdapp.js"></script>
   <script type="module" src="scanqr.js"></script>
 </body>
 </html>

@@ -167,7 +167,7 @@ function render() {
         Object.assign({ indexAxis: 'y', scales: { x: { stacked: true, ticks: { precision: 0 } }, y: { stacked: true, ticks: { callback: shortTick } } } }, leg));
 
     const gc = top(tally(R, r => r.gender)), cc = top(tally(R, r => r.civil));
-    mk('cGender', 'pie', { labels: gc.map(x => x[0]), datasets: [{ data: gc.map(x => x[1]), backgroundColor: ['#E91E8C', '#2A5298', '#7E57C2', '#9AA5BC'], borderWidth: 2 }] }, leg, 'gender');
+    mk('cGender', 'pie', { labels: gc.map(x => x[0]), datasets: [{ data: gc.map(x => x[1]), backgroundColor: ['#2A5298', '#E91E8C', '#7E57C2', '#9AA5BC'], borderWidth: 2 }] }, leg, 'gender');
     mk('cCivil', 'doughnut', { labels: cc.map(x => x[0]), datasets: [{ data: cc.map(x => x[1]), backgroundColor: P, borderWidth: 2 }] }, Object.assign({ cutout: '55%' }, leg), 'civil');
     const wd = tally(R, r => (r.created.getDay() + 6) % 7);
     mk('cDay', 'bar', { labels: DAYS, datasets: [{ label: 'Requests', data: DAYS.map((_, i) => wd.get(i) || 0), backgroundColor: DAYS.map((_, i) => i > 4 ? '#9AA5BC' : '#4FC3F7'), borderRadius: 6 }] },

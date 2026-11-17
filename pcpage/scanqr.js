@@ -30,7 +30,7 @@ import {
     getDocs,
     updateDoc
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
-import { createQRScanner, parseQRPayload } from "./qrscanner.js";
+import { createQRScanner, parseQRPayload, decodeQRFromFile } from "./qrscanner.js";
 
 // =============================================
 // Firebase Config & Init
@@ -1954,6 +1954,31 @@ function initScanQR(user, userData) {
             }
         });
         camBtn.addEventListener('click', () => scanner.isRunning() ? scanner.stop() : scanner.start());
+
+        // ── Upload QR image ──
+        const uploadBtn   = el('uploadQrBtn');
+        const uploadInput = el('uploadQrInput');
+        if (uploadBtn && uploadInput) {
+            uploadBtn.addEventListener('click', () => { scanner.stop(); uploadInput.click(); });
+            uploadInput.addEventListener('change', async () => {
+                const file = uploadInput.files?.[0];
+                uploadInput.value = '';                 // allow re-uploading the same file
+                if (!file) return;
+                try {
+                    const text = await decodeQRFromFile(file);
+                    const qr = parseQRPayload(text);
+                    if (!qr.ref || !/^BRY-\d{4}-\d{4,6}$/i.test(qr.ref)) {
+                        showVerifyMessage('Not a BarangayDocs QR', 'That QR code is not a BarangayDocs document. Please upload the QR printed on the document.');
+                        return;
+                    }
+                    const refInput = el('refInput');
+                    if (refInput) refInput.value = qr.ref;
+                    lookupRequest(qr.ref, fullName, qr);
+                } catch (err) {
+                    showVerifyMessage('Could Not Read QR', err.message || 'Could not read that image.');
+                }
+            });
+        }
     }
 }
 

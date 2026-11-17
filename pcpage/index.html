@@ -213,6 +213,16 @@
       animation: pulse 2s infinite;
     }
     .hero-status span { font-size: 13px; color: rgba(255,255,255,0.65); font-weight: 700; }
+    .hero-status.offline { border-color: rgba(220,53,69,0.45); }
+    .hero-status.offline .status-dot {
+      background: #DC3545;
+      box-shadow: 0 0 0 3px rgba(220,53,69,0.3);
+      animation: pulseRed 2s infinite;
+    }
+    @keyframes pulseRed {
+      0%, 100% { box-shadow: 0 0 0 3px rgba(220,53,69,0.3); }
+      50% { box-shadow: 0 0 0 6px rgba(220,53,69,0.15); }
+    }
 
     /* HERO RIGHT */
     .hero-right {
@@ -818,9 +828,9 @@
           </div>
         </div>
 
-        <div class="hero-status">
+        <div class="hero-status" id="heroStatus">
           <div class="status-dot"></div>
-          <span>System Active &bull; Mon – Fri, 9:00 AM – 5:00 PM</span>
+          <span id="heroStatusText">System Active &bull; Mon – Fri, 9:00 AM – 5:00 PM</span>
         </div>
       </div>
     </div>
@@ -1239,6 +1249,30 @@
         navToggle.classList.remove('open');
       });
     });
+  </script>
+  <script type="module">
+    import { watchStatus, computeStatus, formatReopen } from './barangaystatus.js';
+
+    const box  = document.getElementById('heroStatus');
+    const text = document.getElementById('heroStatusText');
+    const HOURS = 'Mon \u2013 Fri, 9:00 AM \u2013 5:00 PM';
+    let data = null;
+
+    function render() {
+      const s = computeStatus(data);
+      box.classList.toggle('offline', !s.open);
+      if (s.open) {
+        text.textContent = s.source === 'manual'
+          ? 'System Active \u2022 Opened by admin until ' + formatReopen(s.closeAt).replace(/^today /, '')
+          : 'System Active \u2022 ' + HOURS;
+      } else {
+        text.textContent = 'System Offline \u2022 Reopens ' + formatReopen(s.reopenAt);
+      }
+    }
+
+    render();
+    try { watchStatus(d => { data = d; render(); }); } catch (e) { console.warn('Status unavailable', e); }
+    setInterval(render, 30000);   // flips at 9 AM / 5 PM without a refresh
   </script>
 </body>
 </html>
