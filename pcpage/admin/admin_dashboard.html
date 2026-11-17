@@ -135,19 +135,7 @@
     .avail-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
     .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1e1e2e; color: #fff; border-radius: 12px; padding: 12px 20px; font-size: 13px; font-weight: 700; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 999; white-space: nowrap; }
     .toast.show { opacity: 1; }
-<<<<<<< HEAD
-    @media (max-width: 900px) { .stats-grid { grid-template-columns: 1fr 1fr; } }
-    @media (max-width: 640px) { .sidebar { transform: translateX(calc(-1 * var(--sidebar-w))); } .sidebar.open { transform: translateX(0); } .main { margin-left: 0; } .stats-grid { grid-template-columns: 1fr 1fr; } }
-    /* Mobile fit: keep the table inside the screen (swipe sideways for extra columns) */
     .layout, .main { min-width: 0; }
-    .table-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    .table-head-row, #recent-requests-body { min-width: 560px; }
-    @media (max-width: 640px) {
-      .top-navbar { padding: 0 12px; }
-      .main { padding: 16px; max-width: 100%; }
-      .stats-grid { gap: 10px; }
-      .stat-card { padding: 12px; min-width: 0; }
-=======
     .sidebar-backdrop { display: none; }
     @media (max-width: 900px) {
       .stats-grid { grid-template-columns: 1fr 1fr; }
@@ -194,7 +182,6 @@
       .admin-badge { display: none; }
       .main { padding-right: 10px; padding-left: 10px; }
       .page-header p { font-size: 12px; }
->>>>>>> e1bbbdf16eb92066afd9f00e414b23245f130bd2
     }
   </style>
   <link rel="stylesheet" href="adminresponsive.css">
@@ -227,6 +214,10 @@
       <div class="sidebar-item active" onclick="window.location.href='admin_dashboard.html'">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         <span>Dashboard</span>
+      </div>
+      <div class="sidebar-item" onclick="window.location.href='admin_analytics.html'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>Analytics</span>
       </div>
     </div>
     <div class="sidebar-divider"></div>
