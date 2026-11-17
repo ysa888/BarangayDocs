@@ -1037,6 +1037,44 @@
       .vc-footer { padding-left: 18px; padding-right: 18px; }
     }
 
+    /* =============================================
+       STREET CHIPS
+       ============================================= */
+    .street-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .street-chip {
+      height: 38px;
+      padding: 0 16px;
+      border: 2px solid var(--border);
+      border-radius: 20px;
+      background: var(--bg);
+      font-family: 'Nunito', sans-serif;
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--text-sub);
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s, color 0.2s;
+    }
+
+    .street-chip:hover {
+      border-color: var(--primary-light);
+      background: #EAF0FB;
+      color: var(--primary);
+    }
+
+    .street-chip.selected {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    .street-chip-other { border-style: dashed; }
+    .street-chip-other.selected { border-style: solid; }
+
     /* ── RESPONSIVE (tablet / mobile) ── */
     @media (max-width: 1100px) {
       .left-panel { padding: 40px; }
@@ -1189,10 +1227,32 @@
         </div>
 
         <div class="field">
-          <label>House No. / Street</label>
+          <label>House No.</label>
           <div class="input-wrap">
-            <input id="house-number" type="text" placeholder="123 Rizal Street">
+            <input id="house-number" type="text" placeholder="e.g. 123">
           </div>
+        </div>
+
+        <div class="field">
+          <label>Street</label>
+          <div class="street-chips" id="street-chips" role="group" aria-label="Select your street">
+            <button type="button" class="street-chip" data-street="Little St.">Little St.</button>
+            <button type="button" class="street-chip" data-street="Perimeter St.">Perimeter St.</button>
+            <button type="button" class="street-chip" data-street="Gordon St.">Gordon St.</button>
+            <button type="button" class="street-chip" data-street="W 1st St.">W 1st St.</button>
+            <button type="button" class="street-chip" data-street="W 2nd St.">W 2nd St.</button>
+            <button type="button" class="street-chip" data-street="10th St.">10th St.</button>
+            <button type="button" class="street-chip" data-street="Foster St.">Foster St.</button>
+            <button type="button" class="street-chip" data-street="Luna St.">Luna St.</button>
+            <button type="button" class="street-chip" data-street="Esteban St.">Esteban St.</button>
+            <button type="button" class="street-chip" data-street="2nd St.">2nd St.</button>
+            <button type="button" class="street-chip street-chip-other" data-street="__others__">Others</button>
+          </div>
+          <div class="input-wrap" id="street-other-wrap" style="display:none; margin-top:10px;">
+            <input id="street-other" type="text" placeholder="Type your street name">
+          </div>
+          <!-- Final street value (chip choice or custom text) -->
+          <input type="hidden" id="street-name" value="">
         </div>
 
         <div class="field">
@@ -1497,6 +1557,36 @@
     </div>
   </div>
 
+  <script>
+    // Street picker: chips set #street-name; "Others" reveals a free-text box.
+    (function () {
+      var chips = document.querySelectorAll('#street-chips .street-chip');
+      var otherWrap = document.getElementById('street-other-wrap');
+      var otherInput = document.getElementById('street-other');
+      var hidden = document.getElementById('street-name');
+
+      function sync() {
+        var sel = document.querySelector('#street-chips .street-chip.selected');
+        if (!sel) { hidden.value = ''; return; }
+        hidden.value = sel.dataset.street === '__others__'
+          ? otherInput.value.trim()
+          : sel.dataset.street;
+      }
+
+      chips.forEach(function (chip) {
+        chip.addEventListener('click', function () {
+          chips.forEach(function (c) { c.classList.remove('selected'); });
+          chip.classList.add('selected');
+          var isOther = chip.dataset.street === '__others__';
+          otherWrap.style.display = isOther ? 'block' : 'none';
+          if (isOther) otherInput.focus(); else otherInput.value = '';
+          sync();
+        });
+      });
+
+      otherInput.addEventListener('input', sync);
+    })();
+  </script>
   <script type="module" src="bdlogsign.js"></script>
 </body>
 

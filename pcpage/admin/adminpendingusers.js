@@ -90,6 +90,19 @@ function getInitials(firstName, lastName) {
     return ((firstName?.[0] || '') + (lastName?.[0] || '')).toUpperCase();
 }
 
+// Shows the resident's face photo in a circle avatar, falling back to initials
+function setAvatar(node, data) {
+    node.textContent = getInitials(data.firstName, data.lastName);
+    if (!data.faceUrl) return;
+    const img = new Image();
+    img.alt = '';
+    img.onload = () => {
+        node.textContent = '';
+        node.appendChild(img);
+    };
+    img.src = data.faceUrl;
+}
+
 function formatDate(isoString) {
     if (!isoString) return '—';
     return new Date(isoString).toLocaleDateString('en-PH', {
@@ -101,14 +114,14 @@ function formatDate(isoString) {
 // View User — INFO Modal
 // =============================================
 function viewUser(uid, data) {
-    el('modal-initials').textContent = getInitials(data.firstName, data.lastName);
+    setAvatar(el('modal-initials'), data);
     el('modal-name').textContent     = `${data.firstName} ${data.middleName ? data.middleName + ' ' : ''}${data.lastName}`;
     el('modal-email').textContent    = data.email || '—';
     el('modal-contact').textContent  = data.contactNumber || '—';
     el('modal-birthday').textContent = data.birthday || '—';
     el('modal-sex').textContent      = data.sex || '—';
     el('modal-civil').textContent    = data.civilStatus || '—';
-    el('modal-address').textContent  = [data.houseNumber, data.barangay, data.city, data.province].filter(Boolean).join(', ') || '—';
+    el('modal-address').textContent  = [data.houseNumber, data.street, data.barangay, data.city, data.province].filter(Boolean).join(', ') || '—';
     el('modal-years').textContent    = data.yearsResidency ? `${data.yearsResidency} year(s)` : '—';
     el('modal-joined').textContent   = formatDate(data.createdAt);
 
@@ -119,20 +132,49 @@ function viewUser(uid, data) {
     statusBadge.className   = `badge ${cls}`;
     statusBadge.textContent = lbl;
 
-    // Valid ID image
-    const wrap    = el('modal-valid-id-wrap');
-    const openBtn = el('modal-open-id-btn');
-    if (data.validIdUrl) {
-        wrap.innerHTML = `<img src="${data.validIdUrl}" alt="Valid ID" onerror="this.parentElement.innerHTML='<div class=\\'valid-id-no-img\\'>Image failed to load</div>'" />`;
-        openBtn.href   = data.validIdUrl;
-        openBtn.style.display = 'inline-block';
-    } else {
-        wrap.innerHTML        = '<div class="valid-id-no-img">No ID uploaded</div>';
-        openBtn.style.display = 'none';
-    }
+    // Valid ID + Face photo (shown for pending, approved and rejected users)
+    renderPhoto('modal-valid-id-wrap', 'modal-open-id-btn', data.validIdUrl, 'Valid ID', 'No ID uploaded');
+    renderPhoto('modal-face-wrap', 'modal-open-face-btn', data.faceUrl, 'Face photo', 'No face photo uploaded');
 
     el('user-modal').classList.add('open');
 }
+
+// Renders a submitted photo into its box, with "Open Full Image" + click-to-enlarge
+function renderPhoto(wrapId, btnId, url, altText, emptyText) {
+    const wrap = el(wrapId);
+    const btn  = el(btnId);
+    if (!wrap) return;
+
+    if (!url) {
+        wrap.innerHTML = `<div class="valid-id-no-img">${emptyText}</div>`;
+        if (btn) btn.style.display = 'none';
+        return;
+    }
+
+    wrap.innerHTML = '';
+    const img = document.createElement('img');
+    img.alt = altText;
+    img.addEventListener('error', () => {
+        wrap.innerHTML = '<div class="valid-id-no-img">Image failed to load</div>';
+    });
+    img.addEventListener('click', () => {
+        el('lightbox-img').src = url;
+        el('lightbox').classList.add('open');
+    });
+    img.src = url;
+    wrap.appendChild(img);
+
+    if (btn) {
+        btn.href = url;
+        btn.style.display = 'inline-block';
+    }
+}
+
+// Close the enlarged photo
+el('lightbox')?.addEventListener('click', () => {
+    el('lightbox').classList.remove('open');
+    el('lightbox-img').src = '';
+});
 
 el('close-modal')?.addEventListener('click', () => el('user-modal').classList.remove('open'));
 el('user-modal')?.addEventListener('click', (e) => {
@@ -198,7 +240,7 @@ function buildRow(uid, data) {
 
     row.innerHTML = `
         <div style="width:38px;flex-shrink:0;">
-            <div class="user-avatar-sm">${getInitials(data.firstName, data.lastName)}</div>
+            <div class="user-avatar-sm"></div>
         </div>
         <div class="col-uname">
             <div>
@@ -208,7 +250,7 @@ function buildRow(uid, data) {
         </div>
         <div class="col-contact"><span>${data.contactNumber || '—'}</span></div>
         <div class="col-date"><span>${formatDate(data.createdAt)}</span></div>
-        <div class="col-brgy"><span>${data.houseNumber || '—'}</span></div>
+        <div class="col-brgy"><span>${[data.houseNumber, data.street].filter(Boolean).join(' ') || '—'}</span></div>
         <div class="col-status"><span class="badge waiting">Waiting</span></div>
         <div class="col-action">
             <div class="action-row">
@@ -218,6 +260,8 @@ function buildRow(uid, data) {
             </div>
         </div>
     `;
+
+    setAvatar(row.querySelector('.user-avatar-sm'), data);
 
     // Store data on row for re-use after approve/reject
     row._userData = data;

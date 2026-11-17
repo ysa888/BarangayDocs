@@ -410,7 +410,10 @@ if (isRegisterPage) {
         const yearsResidency = el('years-residency').value.trim();
         const validIdFile    = el('valid-id').files[0];
 
-        if (!houseNumber)    return alert('Please enter your House No. / Street.');
+        const street         = el('street-name').value.trim();
+
+        if (!houseNumber)    return alert('Please enter your House No.');
+        if (!street)         return alert('Please select your Street (or choose "Others" and type it).');
         if (!yearsResidency) return alert('Please enter your Years of Residency.');
         if (!validIdFile)    return alert('Please upload a valid ID before proceeding.');
         if (!faceFile)       return alert('Please take or upload a face photo before proceeding.');
@@ -561,6 +564,7 @@ if (isRegisterPage) {
         const sex            = el('sex').value;
         const civilStatus    = el('civil-status').value;
         const houseNumber    = el('house-number').value.trim();
+        const street         = el('street-name').value.trim();
         const yearsResidency = el('years-residency').value.trim();
 
         // Disable button + show loading state
@@ -598,6 +602,7 @@ if (isRegisterPage) {
                 sex,
                 civilStatus,
                 houseNumber,
+                street,
                 barangay:        'Barangay Banicain',
                 city:            'Olongapo City',
                 province:        'Zambales',
