@@ -19,7 +19,7 @@ import {
     query, where, limit, onSnapshot, getDocs, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 import {
-    getStorage, ref as sRef, uploadBytes, getDownloadURL
+    getStorage, ref as sRef, uploadBytes, getDownloadURL, getBytes
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-storage.js";
 
 import {
@@ -154,6 +154,35 @@ let pageSettings = normalizePageSettings(DEFAULT_PAGE_SETTINGS);
 let dirty = false;
 let loadingContent = false;      // true while we programmatically set editor content
 let warnedInlineImages = false;
+
+// Original imported .docx, kept untouched so it can be edited and re-exported later
+// (set by onDocxChosen via setOriginalDocx; cleared when a template is opened or closed).
+let originalDocxFile = null;     // File chosen by the admin (or null)
+let originalDocxBuffer = null;   // ArrayBuffer with the original file bytes (or null)
+let originalDocxZip = null;      // JSZip instance of the original package (or null)
+
+// JSZip is a classic <script> in admin_templates.html, which always runs before this module.
+if (typeof JSZip === 'undefined') {
+    console.warn('JSZip did not load — original .docx preservation will be unavailable.');
+}
+
+let originalDocxFresh = false;   // imported in this session and not yet uploaded to Storage
+let storedOriginal = null;       // { path, name } of the original .docx already saved in Storage
+
+// Stores a freshly imported .docx, replacing whatever was stored before.
+function setOriginalDocx(file, buffer, zip) {
+    originalDocxFile = file;
+    originalDocxBuffer = buffer;
+    originalDocxZip = zip;
+    originalDocxFresh = true;
+}
+
+function clearOriginalDocx() {
+    originalDocxFile = null;
+    originalDocxBuffer = null;
+    originalDocxZip = null;
+    originalDocxFresh = false;
+}
 
 // =============================================
 // Init Page
@@ -332,6 +361,8 @@ async function openEditor(docId) {
     const d = documentTypes.find(x => x.id === docId);
     if (!d) return;
     current = { id: d.id, name: d.name || 'Document' };
+    clearOriginalDocx();
+    storedOriginal = null;
 
     el('editor-title').textContent = current.name;
     setView('editor');
@@ -347,6 +378,7 @@ async function openEditor(docId) {
         console.warn('Could not read template:', err);
     }
 
+    storedOriginal = saved?.originalDocx?.path ? saved.originalDocx : null;
     pageSettings = normalizePageSettings(saved?.pageSettings || DEFAULT_PAGE_SETTINGS);
     syncPageSettingsUI();
 
@@ -365,6 +397,8 @@ async function closeEditor() {
     }))) return;
     setDirty(false);
     current = null;
+    clearOriginalDocx();
+    storedOriginal = null;
     setView('list');
 }
 
@@ -1164,7 +1198,23 @@ async function saveTemplate() {
         const prev = await getDoc(refDoc);
         const base = prev.exists() ? prev.data() : null;
 
+        // Keep the original .docx (with its real headers / footers) so it survives a reload
+        if (originalDocxBuffer && originalDocxFresh) {
+            try {
+                const path = `templates/${current.id}/original.docx`;
+                await uploadBytes(sRef(storage, path), new Blob([originalDocxBuffer]), {
+                    contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                });
+                storedOriginal = { path, name: (originalDocxFile && originalDocxFile.name) || 'original.docx' };
+                originalDocxFresh = false;
+            } catch (err) {
+                console.warn('Could not store original .docx:', err);
+                showToast('Template saved, but the original Word file could not be stored (Storage rules?).', 5000);
+            }
+        }
+
         await setDoc(refDoc, {
+            originalDocx: storedOriginal || null,
             documentId: current.id,
             documentName: current.name,
             html,
@@ -1194,6 +1244,8 @@ async function resetToStandardLayout() {
     }))) return;
     pageSettings = normalizePageSettings(DEFAULT_PAGE_SETTINGS);
     syncPageSettingsUI();
+    clearOriginalDocx();
+    storedOriginal = null;
     setEditorContent(defaultTemplateHtml());
     applyPageToEditor();
     setDirty(true);
@@ -1212,6 +1264,8 @@ async function removeCustomTemplate() {
     }))) return;
     try {
         await deleteDoc(doc(db, 'documentTemplates', current.id));
+        clearOriginalDocx();
+        storedOriginal = null;
         pageSettings = normalizePageSettings(DEFAULT_PAGE_SETTINGS);
         syncPageSettingsUI();
         setEditorContent(defaultTemplateHtml());
@@ -1257,6 +1311,143 @@ async function openPreview() {
 // ---------------------------------------------
 // .docx import / export
 // ---------------------------------------------
+
+// Mammoth cannot output inline styles, so paragraph alignment is carried through a temporary
+// style name (see docxTransformDocument) → class "tpl-al-<x>" → turned into text-align afterwards.
+const DOCX_ALIGN_MAP = { center: 'center', right: 'right', end: 'right', both: 'justify', distribute: 'justify' };
+const DOCX_ALIGN_TAG = '__tplAlign_';
+const DOCX_ALIGN_HEADINGS = [
+    ['Heading 1', 'h1'], ['Heading 2', 'h2'], ['Heading 3', 'h3'],
+    ['Heading 4', 'h4'], ['Heading 5', 'h5'], ['Heading 6', 'h6'],
+    ['Title', 'h1'], ['Subtitle', 'h2']
+];
+
+function docxStyleMap() {
+    const map = [
+        'u => u',
+        'strike => s',
+        "br[type='page'] => hr.tpl-pagebreak",
+        "p[style-name='Title'] => h1:fresh",
+        "p[style-name='Subtitle'] => h2:fresh"
+    ];
+    for (const a of new Set(Object.values(DOCX_ALIGN_MAP))) {
+        for (const [style, tag] of DOCX_ALIGN_HEADINGS) {
+            map.push(`p[style-name='${style}${DOCX_ALIGN_TAG}${a}'] => ${tag}.tpl-al-${a}:fresh`);
+        }
+        map.push(`p[style-name='${DOCX_ALIGN_TAG}${a}'] => p.tpl-al-${a}:fresh`);
+    }
+    return map;
+}
+
+// Tags centred / right / justified paragraphs so docxStyleMap() can turn them into classes.
+function docxTransformDocument() {
+    return mammoth.transforms.paragraph((p) => {
+        const a = DOCX_ALIGN_MAP[p.alignment];
+        if (!a || p.numbering) return p;                       // left-aligned (default) or list item
+        const isHeading = DOCX_ALIGN_HEADINGS.some(([s]) => s.toLowerCase() === String(p.styleName || '').toLowerCase());
+        const base = isHeading ? DOCX_ALIGN_HEADINGS.find(([s]) => s.toLowerCase() === p.styleName.toLowerCase())[0] : '';
+        return { ...p, styleName: base + DOCX_ALIGN_TAG + a };
+    });
+}
+
+// Mammoth HTML → HTML for TinyMCE: alignment classes → inline text-align, page breaks → editor page breaks.
+function docxHtmlForEditor(html) {
+    const d = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+    d.body.querySelectorAll('[class*="tpl-al-"]').forEach((node) => {
+        const m = /\btpl-al-(center|right|justify)\b/.exec(node.className);
+        if (!m) return;
+        node.style.textAlign = m[1];
+        node.classList.remove('tpl-al-' + m[1]);
+        if (!node.classList.length) node.removeAttribute('class');
+    });
+    d.body.querySelectorAll('hr.tpl-pagebreak').forEach((hr) => {
+        const brk = d.createElement('div');
+        brk.className = 'tpl-pagebreak';
+        brk.setAttribute('data-pagebreak', '1');
+        brk.setAttribute('contenteditable', 'false');
+        // A Word page break sits inside a <p>, and <hr> cannot, so the HTML parser has already closed
+        // that paragraph and left one empty <p> behind after the <hr>: drop it.
+        const next = hr.nextElementSibling;
+        if (next && next.tagName === 'P' && !next.textContent.trim() && !next.querySelector('img')) next.remove();
+        hr.replaceWith(brk);
+    });
+    return d.body.innerHTML;
+}
+
+function docxMammothOptions() {
+    return {
+        styleMap: docxStyleMap(),
+        transformDocument: docxTransformDocument(),
+        ignoreEmptyParagraphs: false,
+        convertImage: mammoth.images.imgElement((image) =>
+            image.read('base64').then((b64) => ({ src: `data:${image.contentType};base64,${b64}` })))
+    };
+}
+
+// Mammoth only reads the document body, so Word headers / footers (letterhead logos, office name,
+// address lines...) were silently dropped. Here each header / footer part (the "default" one of the
+// last section) is rebuilt into a tiny stand-alone .docx whose body is that part, and converted too.
+async function extractHeaderFooterHtml(buf) {
+    const out = { header: '', footer: '' };
+    const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    const parse = (s) => new DOMParser().parseFromString(s, 'application/xml');
+
+    const zip0 = await JSZip.loadAsync(buf);
+    const docXml = await zip0.file('word/document.xml').async('string');
+    const relsFile = zip0.file('word/_rels/document.xml.rels');
+    if (!relsFile) return out;
+    const relDoc = parse(await relsFile.async('string'));
+    const targets = {};
+    [...relDoc.getElementsByTagName('Relationship')].forEach(r => { targets[r.getAttribute('Id')] = r.getAttribute('Target'); });
+
+    const sects = parse(docXml).getElementsByTagNameNS(W, 'sectPr');
+    if (!sects.length) return out;
+    const sect = sects[sects.length - 1];
+
+    for (const kind of ['header', 'footer']) {
+        const refs = [...sect.getElementsByTagNameNS(W, kind + 'Reference')];
+        const ref = refs.find(r => r.getAttributeNS(W, 'type') === 'default') || refs[0];
+        const target = ref && targets[ref.getAttributeNS(R, 'id')];
+        if (!target) continue;
+        const partPath = 'word/' + target.replace(/^\/?(word\/)?/, '');
+        const partFile = zip0.file(partPath);
+        if (!partFile) continue;
+
+        try {
+            const zip = await JSZip.loadAsync(buf);                       // fresh copy; never touch the original
+            let partXml = await partFile.async('string');
+            const tag = kind === 'header' ? 'hdr' : 'ftr';
+            partXml = partXml
+                .replace(/r:(embed|id|link)="([^"]+)"/g, 'r:$1="hf_$2"')  // avoid rId clashes with document rels
+                .replace(new RegExp(`<w:${tag}\\b([^>]*)>`), '<w:document$1><w:body>')
+                .replace(new RegExp(`</w:${tag}>`), '</w:body></w:document>');
+            zip.file('word/document.xml', partXml);
+
+            let rels = await zip.file('word/_rels/document.xml.rels').async('string');
+            const partName = partPath.split('/').pop();
+            const pr = zip.file(`word/_rels/${partName}.rels`);
+            if (pr) {
+                const extra = (await pr.async('string'))
+                    .replace(/<\?xml[^>]*\?>/, '')
+                    .replace(/<\/?Relationships[^>]*>/g, '')
+                    .replace(/\bId="([^"]+)"/g, 'Id="hf_$1"');
+                rels = rels.replace('</Relationships>', extra + '</Relationships>');
+                zip.file('word/_rels/document.xml.rels', rels);
+            }
+
+            const res = await mammoth.convertToHtml(
+                { arrayBuffer: await zip.generateAsync({ type: 'arraybuffer' }) },
+                docxMammothOptions());
+            const html = docxHtmlForEditor(res.value);
+            if (html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim() || /<img/i.test(html)) out[kind] = html;
+        } catch (err) {
+            console.warn(`Could not read the Word ${kind}:`, err);
+        }
+    }
+    return out;
+}
+
 async function onDocxChosen(e) {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -1265,25 +1456,47 @@ async function onDocxChosen(e) {
         showToast('The .docx import library could not be loaded.', 5000);
         return;
     }
+    if (typeof JSZip === 'undefined') {
+        showToast('The .docx reader (JSZip) could not be loaded.', 5000);
+        return;
+    }
     if (!(await confirmDialog({
         title: 'Import this Word file?',
-        text: 'The editor content will be replaced with the contents of the .docx. Fonts, alignment and some layout may need re-applying. Nothing is saved until you click Save Template.',
+        text: 'The editor content (and any Word file imported earlier) will be replaced with this .docx. Some fonts and layout details may still need re-applying. Nothing is saved until you click Save Template.',
         yesLabel: 'Import', danger: true
     }))) return;
 
     try {
         const buf = await file.arrayBuffer();
-        const result = await mammoth.convertToHtml({ arrayBuffer: buf }, {
-            convertImage: mammoth.images.imgElement((image) =>
-                image.read('base64').then((b64) => ({ src: `data:${image.contentType};base64,${b64}` })))
-        });
-        setEditorContent(result.value);
+
+        // 1) Open the package with JSZip and make sure it really is a Word document.
+        const zip = await JSZip.loadAsync(buf);
+        if (!zip.file('word/document.xml')) {
+            throw new Error('this is not a valid .docx file (word/document.xml is missing).');
+        }
+
+        // 2) Convert for display in TinyMCE (images stay embedded as data: URLs; they are
+        //    moved to Storage when the template is saved).
+        const result = await mammoth.convertToHtml({ arrayBuffer: buf }, docxMammothOptions());
+        const hf = await extractHeaderFooterHtml(buf);
+
+        // 3) Only now replace the previously stored original, so a failed import keeps the old one.
+        setOriginalDocx(file, buf, zip);
+        storedOriginal = null;   // the previously stored original no longer matches this import
+
+        setEditorContent(
+            (hf.header ? `<div class="tpl-hf" data-hf="header">${hf.header}</div>` : '') +
+            docxHtmlForEditor(result.value) +
+            (hf.footer ? `<div class="tpl-hf" data-hf="footer">${hf.footer}</div>` : ''));
         applyPageToEditor();
         setDirty(true);
         const n = (result.messages || []).length;
-        showToast(n
+        const hfNote = (hf.header || hf.footer)
+            ? ' ' + [hf.header && 'Header (top)', hf.footer && 'Footer (bottom)'].filter(Boolean).join(' and ') + ' content was carried over.'
+            : '';
+        showToast((n
             ? `Imported with ${n} formatting note(s) — please review the layout.`
-            : 'Word file imported. Review the layout, then save.', 4500);
+            : 'Word file imported. Review the layout, then save.') + hfNote, 6000);
     } catch (err) {
         console.error(err);
         showToast('Could not read that .docx: ' + (err.message || err), 5000);
@@ -1307,8 +1520,67 @@ async function remoteImagesToDataUrls(html) {
     return { html: d.body.innerHTML, failed };
 }
 
+// Triggers a browser download for a Blob.
+function downloadBlob(blob, filename) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+// STAGE 3 (step 1): export the ORIGINAL imported .docx untouched.
+// The original bytes are re-opened with JSZip (a fresh instance, so the copy kept in memory is never
+// modified) and written back out with every entry intact: word/document.xml, styles, numbering,
+// header/footer parts, media, relationships (_rels), [Content_Types].xml, section settings (sectPr)...
+// TinyMCE edits are deliberately NOT merged in yet.
+async function exportOriginalDocx() {
+    if (typeof JSZip === 'undefined') throw new Error('JSZip is not loaded.');
+    const zip = await JSZip.loadAsync(originalDocxBuffer);
+    if (!zip.file('word/document.xml')) throw new Error('The stored original is not a valid .docx.');
+
+    const blob = await zip.generateAsync({
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 },
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    });
+
+    const fromName = originalDocxFile && originalDocxFile.name;
+    const filename = fromName
+        ? fromName.replace(/\.docx$/i, '') + '_exported.docx'
+        : `${current.name.replace(/[^a-zA-Z0-9._-]+/g, '_')}_template.docx`;
+    downloadBlob(blob, filename);
+    showToast('Original Word file exported unchanged (editor changes are not included yet).', 5000);
+}
+
 async function exportDocx() {
     if (!editor || !current) return;
+
+    // Original saved earlier → reload it from Storage so its headers / footers survive a page reload.
+    if (!originalDocxBuffer && storedOriginal?.path) {
+        try {
+            originalDocxBuffer = await getBytes(sRef(storage, storedOriginal.path));
+            originalDocxFile = { name: storedOriginal.name };
+        } catch (err) {
+            console.warn('Could not load stored original .docx:', err);
+        }
+    }
+
+    // An original .docx is available (imported now, or restored from Storage) → export that file as-is.
+    if (originalDocxBuffer) {
+        try {
+            await exportOriginalDocx();
+        } catch (err) {
+            console.error(err);
+            showToast('Export failed: ' + (err.message || err), 5000);
+        }
+        return;
+    }
+
+    // No imported original → keep the previous behaviour (editor content → .docx via html-docx-js)
     if (typeof htmlDocx === 'undefined') {
         showToast('The .docx export library could not be loaded.', 5000);
         return;
