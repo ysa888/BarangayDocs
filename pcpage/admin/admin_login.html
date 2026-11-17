@@ -460,6 +460,23 @@
     </div>
   </div>
 
+  <script>
+    // Press Enter in either field = click the sign-in button
+    (function () {
+      var btn = document.getElementById('admin-login-btn');
+      ['admin-email', 'admin-pw'].forEach(function (id) {
+        var input = document.getElementById(id);
+        if (!input) return;
+        input.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' && !e.isComposing) {
+            e.preventDefault();
+            if (btn && !btn.disabled) btn.click();
+          }
+        });
+      });
+    })();
+  </script>
+
   <script type="module" src="adminlogin.js"></script>
 </body>
 </html>
