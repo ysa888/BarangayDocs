@@ -44,16 +44,11 @@ const auth    = getAuth(app);
 const db      = getFirestore(app);
 
 // =============================================
-// Image hosting: Cloudinary (free plan, no credit card) — replaces Firebase Storage.
-// One-time setup (2 minutes):
-//   1. Sign up at https://cloudinary.com (free, no card) and copy your "Cloud name" from the dashboard.
-//   2. Settings ▸ Upload ▸ Upload presets ▸ Add upload preset ▸ Signing mode: **Unsigned** ▸ Save.
-//      Copy the preset's name.
-//   3. Paste both values below.
+// Image hosting: Cloudinary — same account and unsigned preset already used by bdlogsign.js.
 // =============================================
 const CLOUDINARY = {
-    cloudName:    'YOUR_CLOUD_NAME',
-    uploadPreset: 'YOUR_UNSIGNED_UPLOAD_PRESET'
+    cloudName:    'ddizbxtdd',
+    uploadPreset: 'barangaydocs_preset'
 };
 
 const el = (id) => document.getElementById(id);
