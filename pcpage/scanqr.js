@@ -30,6 +30,7 @@ import {
     getDocs,
     updateDoc
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+import { createQRScanner, parseQRPayload } from "./qrscanner.js";
 
 // =============================================
 // Firebase Config & Init
@@ -136,7 +137,7 @@ onAuthStateChanged(auth, async (user) => {
 
     // Admin redirect safety: admins should not use resident pages
     if (userData.role === 'admin') {
-        window.location.href = 'admin/admin_dashboard.html';
+        window.location.href = 'barangaydocs_admin.html';
         return;
     }
 
@@ -1928,40 +1929,82 @@ function initScanQR(user, userData) {
         }
     });
 
-    // ── Camera Simulate (replace with real QR lib if needed) ──
-    const camBtn = document.querySelector('.cam-btn');
-    if (camBtn) {
-        camBtn.addEventListener('click', () => {
-            alert('Camera scanning requires a physical device or QR library integration.\nUse Manual Verification to enter a reference number.');
+    // ── Camera QR scanner ──
+    const camBtn  = el('launchCamBtn');
+    const camArea = el('camArea');
+    const video   = el('camVideo');
+    if (camBtn && video) {
+        const scanner = createQRScanner({
+            video,
+            onStateChange: (on) => {
+                camArea?.classList.toggle('active', on);
+                camBtn.classList.toggle('stop', on);
+                camBtn.textContent = on ? 'Stop Camera' : 'Launch Camera';
+            },
+            onError: (msg) => showVerifyMessage('Camera Unavailable', msg),
+            onDetect: (text) => {
+                const qr = parseQRPayload(text);
+                if (!qr.ref || !/^BRY-\d{4}-\d{4,6}$/i.test(qr.ref)) {
+                    showVerifyMessage('Not a BarangayDocs QR', 'That QR code is not a BarangayDocs document. Please scan the QR printed on the document.');
+                    return;
+                }
+                const refInput = el('refInput');
+                if (refInput) refInput.value = qr.ref;
+                lookupRequest(qr.ref, fullName, qr);
+            }
         });
+        camBtn.addEventListener('click', () => scanner.isRunning() ? scanner.stop() : scanner.start());
     }
 }
 
-// Lookup a request from Firestore by reference number
-async function lookupRequest(refNo, currentUserName) {
-    try {
-        const q = query(
-            collection(db, 'requests'),
-            where('referenceNo', '==', refNo)
-        );
-        const snapshot = await getDocs(q);
+// Show a message in the result panel (hides any previous result)
+function showVerifyMessage(title, text) {
+    const placeholder = el('resultPlaceholder');
+    el('resultCard')?.classList.remove('show');
+    if (!placeholder) return;
+    placeholder.style.display = '';
+    placeholder.querySelector('h3').textContent = title;
+    placeholder.querySelector('p').textContent  = text;
+}
 
-        if (snapshot.empty) {
+// Lookup a request from Firestore by reference number
+// `qr` (optional) = parsed QR payload, used to cross-check the scanned code against the record
+async function lookupRequest(refNo, currentUserName, qr = null) {
+    try {
+        const ref  = refNo.trim().toUpperCase();
+        const user = auth.currentUser;
+
+        // 1) The resident's OWN request — always allowed by the rules (uid must match),
+        //    always up to date, and works even if no verifications copy exists yet.
+        if (user) {
+            const own = await getDocs(query(
+                collection(db, 'requests'),
+                where('uid', '==', user.uid),
+                where('referenceNo', '==', ref)
+            ));
+            if (!own.empty) {
+                showVerifyResult(own.docs[0].data(), ref, qr);
+                return;
+            }
+        }
+
+        // 2) Someone else's document — read the public-safe copy
+        //    (verifications/{referenceNo}); raw requests of other people stay private.
+        const snap = await getDoc(doc(db, 'verifications', ref));
+        if (!snap.exists()) {
             showVerifyResult(null, refNo);
             return;
         }
-
-        const data = snapshot.docs[0].data();
-        showVerifyResult(data, refNo);
+        showVerifyResult(snap.data(), ref, qr);
 
     } catch (err) {
         console.error('Verify error:', err);
-        alert('Verification failed: ' + err.message);
+        showVerifyMessage('Lookup Failed', 'Verification failed: ' + err.message);
     }
 }
 
 // Display verification result
-function showVerifyResult(data, refNo) {
+function showVerifyResult(data, refNo, qr = null) {
     const placeholder = el('resultPlaceholder');
     const card        = el('resultCard');
 
@@ -1989,7 +2032,17 @@ function showVerifyResult(data, refNo) {
         // Badge — show status
         const badge = card.querySelector('.result-badge');
         if (badge) {
-            if (['approved', 'ready', 'released'].includes(data.status)) {
+            const expired  = data.expiresAt && (data.expiresAt.toDate ? data.expiresAt.toDate() : new Date(data.expiresAt)) < new Date();
+            const mismatch = qr?.code && data.docCode && qr.code !== data.docCode;
+            if (mismatch) {
+                badge.style.background = 'var(--red-bg)';
+                badge.style.color      = 'var(--red-text)';
+                badge.innerHTML        = '✕ INVALID — QR code does not match this record';
+            } else if (['approved', 'ready', 'released'].includes(data.status) && expired) {
+                badge.style.background = 'var(--red-bg)';
+                badge.style.color      = 'var(--red-text)';
+                badge.innerHTML        = '✕ EXPIRED — Document is no longer valid';
+            } else if (['approved', 'ready', 'released'].includes(data.status)) {
                 badge.style.background = 'var(--green-bg)';
                 badge.style.color      = 'var(--green-text)';
                 badge.innerHTML        = '✓ VERIFIED — Authentic Document';
@@ -2029,7 +2082,7 @@ function showVerifyResult(data, refNo) {
         if (rName)    rName.textContent    = data.residentName   || '—';
         if (rType)    rType.textContent    = data.documentType   || '—';
         if (rDate)    rDate.textContent    = data.readyAt ? formatDate(data.readyAt)   : '—';
-        if (rValid)   rValid.textContent   = data.readyAt ? validUntil(data.readyAt)   : '—';
+        if (rValid)   rValid.textContent   = data.expiresAt ? formatDate(data.expiresAt) : (data.readyAt ? validUntil(data.readyAt) : '—');
         if (rPurpose) rPurpose.textContent = data.purpose        || '—';
         if (rRef)     rRef.textContent     = data.referenceNo    || refNo;
 
@@ -2049,24 +2102,43 @@ function showVerifyResult(data, refNo) {
             statusField.style.color  = s.color;
         }
 
-        // Timeline — Processing step
-        const tProc = el('timeProcessing');
-        if (tProc && ['processing', 'approved', 'ready', 'released'].includes(data.status)) {
-            const when = data.processedAt || data.approvedAt || data.readyAt || data.updatedAt;
-            tProc.textContent = when ? formatDate(when) : 'Done';
-            tProc.classList.remove('pending-txt');
-        }
-
-        // Timeline — Ready for Pickup step
-        if (['ready', 'released'].includes(data.status)) {
-            const lblReady  = el('lblReady');
-            const timeReady = el('timeReady');
-            if (lblReady) lblReady.classList.remove('muted');
-            if (timeReady) {
-                timeReady.textContent = data.readyAt ? formatDate(data.readyAt) : 'Done';
-                timeReady.classList.remove('pending-txt');
+        // Timeline — fully re-rendered on every lookup so scanning several
+        // documents in a row never leaves stale steps from the previous one.
+        const fmtDT = (v) => {
+            const d = v?.toDate ? v.toDate() : new Date(v);
+            return `${d.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })} at ${d.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+        };
+        const rank = { pending: 0, processing: 1, approved: 2, ready: 3, released: 4 }[data.status] ?? 0;
+        const isRejected = data.status === 'rejected';
+        [
+            { dot: 'dotSubmitted',  line: 'lineSubmitted',  lbl: 'lblSubmitted',  time: 'timeSubmitted',  label: 'Submitted',          ts: data.createdAt,   rank: 0 },
+            { dot: 'dotProcessing', line: 'lineProcessing', lbl: 'lblProcessing', time: 'timeProcessing', label: 'Processing Started', ts: data.processedAt, rank: 1 },
+            { dot: 'dotReady',      line: 'lineReady',      lbl: 'lblReady',      time: 'timeReady',      label: 'Ready for Pickup',   ts: data.readyAt,     rank: 3 },
+            { dot: 'dotReleased',   line: null,             lbl: 'lblReleased',   time: 'timeReleased',   label: 'Released',           ts: data.releasedAt,  rank: 4 },
+        ].forEach((s, i) => {
+            const dot = el(s.dot), line = s.line ? el(s.line) : null, lbl = el(s.lbl), time = el(s.time);
+            if (!dot || !lbl || !time) return;
+            lbl.textContent = s.label;
+            if (!isRejected && rank >= s.rank) {
+                dot.className = 'tl-dot done';
+                if (line) line.className = 'tl-line done';
+                lbl.className = 'tl-label';
+                time.className = 'tl-time done-txt';
+                time.textContent = s.ts ? fmtDT(s.ts) : '—';
+            } else if (isRejected && i > 0) {
+                dot.className = 'tl-dot rejected-dot';
+                if (line) line.className = 'tl-line';
+                lbl.className = 'tl-label muted';
+                time.className = 'tl-time';
+                time.textContent = 'N/A — Rejected';
+            } else {
+                dot.className = 'tl-dot';
+                if (line) line.className = 'tl-line';
+                lbl.className = 'tl-label muted';
+                time.className = 'tl-time pending-txt';
+                time.textContent = 'Awaiting';
             }
-        }
+        });
     }
 }
 

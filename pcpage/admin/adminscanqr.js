@@ -5,6 +5,7 @@
 
 import { initializeApp }   from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
 import { mountRejectReasonPicker, renderRejectReasonBox } from "./rejectreasons.js";
+import { createQRScanner, parseQRPayload } from "./qrscanner.js";
 import { getAuth, onAuthStateChanged, signOut }
                            from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import {
@@ -342,10 +343,35 @@ function initVerifyPage() {
         }
     });
 
-    // Camera button — placeholder (real QR scanning needs jsQR or ZXing)
-    el('launchCamBtn')?.addEventListener('click', () => {
-        alert('Camera scanning requires a QR library integration.\nUse Manual Verification to enter a reference number.');
-    });
+    // Camera QR scanner (BarcodeDetector, falling back to jsQR)
+    const camBtn  = el('launchCamBtn');
+    const camArea = el('camArea');
+    const video   = el('camVideo');
+    if (camBtn && video) {
+        const scanner = createQRScanner({
+            video,
+            onStateChange: (on) => {
+                camArea?.classList.toggle('active', on);
+                camBtn.classList.toggle('stop', on);
+                const lbl = el('camBtnLabel');
+                if (lbl) lbl.textContent = on ? 'Stop Camera' : 'Launch Camera';
+                const icon = el('camIcon'), txt = el('camText');
+                if (icon) icon.style.display = on ? 'none' : '';
+                if (txt)  txt.style.display  = on ? 'none' : '';
+            },
+            onError: (msg) => showMessage('Camera Unavailable', msg),
+            onDetect: (text) => {
+                const qr = parseQRPayload(text);
+                if (!qr.ref || !/^BRY-\d{4}-\d{4,6}$/i.test(qr.ref)) {
+                    showMessage('Not a BarangayDocs QR', 'That QR code is not a BarangayDocs document. Please scan the QR printed on the document.');
+                    return;
+                }
+                if (refInput) refInput.value = qr.ref;
+                lookupRequest(qr.ref, qr);
+            }
+        });
+        camBtn.addEventListener('click', () => scanner.isRunning() ? scanner.stop() : scanner.start());
+    }
 
     // ✅ FIX #4 & #6: wire admin action buttons + confirm modal
     wireAdminActionButtons();
@@ -353,7 +379,20 @@ function initVerifyPage() {
 
 // ── Firestore Lookup ─────────────────────────────────────────
 
-async function lookupRequest(refNo) {
+// Show a message in the result panel (hides any previous result and its actions)
+function showMessage(title, text) {
+    const ph = el('resultPlaceholder');
+    el('resultCard')?.classList.remove('show');
+    if (!ph) return;
+    ph.style.display = '';
+    const h3 = ph.querySelector('h3');
+    const p  = ph.querySelector('p');
+    if (h3) h3.textContent = title;
+    if (p)  p.textContent  = text;
+}
+
+// `qr` (optional) = parsed QR payload from the camera, cross-checked against the record
+async function lookupRequest(refNo, qr = null) {
     const btn = el('verifyBtn');
 
     if (btn) {
@@ -376,6 +415,9 @@ async function lookupRequest(refNo) {
             currentDocId   = docSnap.id;
             currentDocData = docSnap.data();
             showResult(currentDocData, refNo);
+            if (qr?.code && currentDocData.docCode && qr.code !== currentDocData.docCode) {
+                showToast('⚠ Warning: the scanned QR code does not match this record.');
+            }
         }
 
     } catch (err) {
