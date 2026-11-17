@@ -120,6 +120,7 @@ function mk(id, type, data, o = {}, key) {
         } : undefined,
         onHover: (e, els) => { e.native.target.style.cursor = key && els.length ? 'pointer' : 'default'; } }, o) });
 }
+const shortTick = function (v) { const s = this.getLabelForValue(v); return innerWidth < 640 && s.length > 16 ? s.slice(0, 15) + '\u2026' : s; };
 const leg = { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, usePointStyle: true } } } };
 
 function render() {
@@ -160,10 +161,10 @@ function render() {
 
     const dc = top(tally(R, r => r.doc)), dl = dc.map(x => x[0]);
     mk('cDocs', 'bar', { labels: dl, datasets: [{ label: 'Requests', data: dc.map(x => x[1]), backgroundColor: '#2A5298', borderRadius: 6 }] },
-        { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } }, 'doc');
+        { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { ticks: { callback: shortTick } } } }, 'doc');
     const og = (k) => dl.map(n => R.filter(r => r.doc === n && grp(r.st) === k).length);
     mk('cOutcome', 'bar', { labels: dl, datasets: [{ label: 'Accepted', data: og('accepted'), backgroundColor: '#28A745' }, { label: 'Rejected', data: og('rejected'), backgroundColor: '#DC3545' }, { label: 'Pending', data: og('pending'), backgroundColor: '#FFC107' }] },
-        Object.assign({ indexAxis: 'y', scales: { x: { stacked: true, ticks: { precision: 0 } }, y: { stacked: true } } }, leg));
+        Object.assign({ indexAxis: 'y', scales: { x: { stacked: true, ticks: { precision: 0 } }, y: { stacked: true, ticks: { callback: shortTick } } } }, leg));
 
     const gc = top(tally(R, r => r.gender)), cc = top(tally(R, r => r.civil));
     mk('cGender', 'pie', { labels: gc.map(x => x[0]), datasets: [{ data: gc.map(x => x[1]), backgroundColor: ['#E91E8C', '#2A5298', '#7E57C2', '#9AA5BC'], borderWidth: 2 }] }, leg, 'gender');
@@ -212,11 +213,21 @@ window.exportCSV = function () {
 
 /* ---------- Page shell (same as the other admin pages) ---------- */
 let sidebarOpen = true;
+const mobile = window.matchMedia('(max-width: 640px)');
+function setDrawer(open) {
+    $('sidebar').classList.toggle('open', open);
+    $('sidebarBackdrop')?.classList.toggle('show', open);
+    document.querySelector('.hamburger-btn')?.setAttribute('aria-expanded', String(open));
+}
 window.toggleSidebar = function () {
+    if (mobile.matches) { setDrawer(!$('sidebar').classList.contains('open')); return; }
     sidebarOpen = !sidebarOpen;
     $('sidebar').classList.toggle('collapsed', !sidebarOpen);
     $('mainContent').classList.toggle('expanded', !sidebarOpen);
 };
+$('sidebarBackdrop')?.addEventListener('click', () => setDrawer(false));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setDrawer(false); });
+mobile.addEventListener('change', () => setDrawer(false));
 $('sign-out-btn')?.addEventListener('click', async () => { await signOut(auth); window.location.href = '../barangaydocs_login.html'; });
 $('period').addEventListener('change', render);
 $('doc').addEventListener('change', render);
