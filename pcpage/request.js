@@ -422,7 +422,11 @@ function listenDocumentTypes() {
 // =============================================
 // Submit Request
 // =============================================
+let isSubmittingRequest = false;
+
 async function submitRequest(user, userData, fullName) {
+    if (isSubmittingRequest) return;            // ignore double-clicks while saving
+
     const selected = document.querySelector('.doc-type-btn.selected');
     if (!selected) return alert('Please select a document type.');
 
@@ -432,6 +436,11 @@ async function submitRequest(user, userData, fullName) {
     const notes = el('notesInput')?.value.trim() || '';
     const docName = selected.dataset.name;
     const ref = generateRef();
+
+    isSubmittingRequest = true;
+    const submitBtn = el('submitRequestBtn');
+    const submitLabel = submitBtn?.textContent;
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting…'; }
 
     try {
         await addDoc(collection(db, 'requests'), {
@@ -458,6 +467,9 @@ async function submitRequest(user, userData, fullName) {
     } catch (err) {
         console.error('Submit error:', err);
         alert('Failed to submit request: ' + err.message);
+    } finally {
+        isSubmittingRequest = false;
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = submitLabel; }
     }
 }
 

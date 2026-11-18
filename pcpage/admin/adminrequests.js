@@ -111,7 +111,7 @@ function getBadgeClass(status) {
 }
 
 function getBadgeLabel(status) {
-    const map = { pending: 'Submitted', processing: 'Processing', approved: 'Approved', ready: 'Ready for Release', released: 'Released', rejected: 'Rejected' };
+    const map = { pending: 'Submitted', processing: 'Processing', approved: 'Awaiting Signature', ready: 'Ready for Pickup', released: 'Released', rejected: 'Rejected' };
     return map[status] || status;
 }
 
@@ -188,8 +188,8 @@ function daysInMonth(month, year) {
 }
 
 // Rebuild the day <select> based on chosen month + year
-function refreshDayOptions(month, year, selectedDay) {
-    const dayEl = document.getElementById('expiry-day');
+function refreshDayOptions(month, year, selectedDay, prefix = 'expiry') {
+    const dayEl = document.getElementById(prefix + '-day');
     if (!dayEl) return;
     const max     = daysInMonth(month, year);
     const current = selectedDay || parseInt(dayEl.value) || '';
@@ -230,14 +230,14 @@ function prefillExpiry() {
 }
 
 // Validate & return a Date, or null if invalid
-function getExpiryDate() {
-    const month = parseInt(document.getElementById('expiry-month')?.value);
-    const day   = parseInt(document.getElementById('expiry-day')?.value);
-    const year  = parseInt(document.getElementById('expiry-year')?.value);
-    const errEl = document.getElementById('expiry-error');
+function getExpiryDate(prefix = 'expiry', silent = false) {
+    const month = parseInt(document.getElementById(prefix + '-month')?.value);
+    const day   = parseInt(document.getElementById(prefix + '-day')?.value);
+    const year  = parseInt(document.getElementById(prefix + '-year')?.value);
+    const errEl = document.getElementById(prefix + '-error');
 
     const showErr = (msg) => {
-        if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+        if (errEl && !silent) { errEl.textContent = msg; errEl.style.display = 'block'; }
         return null;
     };
     if (errEl) errEl.style.display = 'none';
@@ -271,28 +271,30 @@ function formatExpiry(val) {
 // menu     = everything else, inside the ⋮ kebab menu
 // =============================================
 const ACTION_LABELS = {
+    viewrequest:  'View Request',
     viewdocument: 'View Document',
     preview:      'Preview',
     viewqr:       'View QR',
-    reject:       'Reject request'
+    reject:       'Reject request',
+    void:         'Void request'
 };
 
 function getActionConfig(status) {
     switch (status) {
-        case 'pending':
-            return { primary: { action: 'processing', label: 'Process',        cls: 'btn-process' },
-                     menu: ['preview', 'reject'] };
-        case 'processing':
-            return { primary: { action: 'approved',   label: 'Approve',        cls: 'btn-approve' },
-                     menu: ['preview', 'reject'] };
-        case 'approved':
-            return { primary: { action: 'ready',      label: 'Mark Ready + QR', cls: 'btn-approve' },
-                     menu: ['preview', 'reject'] };
-        case 'ready':
-            return { primary: { action: 'released',   label: 'Mark Released',  cls: 'btn-approve' },
-                     menu: ['viewqr', 'viewdocument', 'reject'] };
+        case 'pending':      // 1. View Request -> Process / Reject
+            return { primary: { action: 'viewrequest',    label: 'View Request',      cls: 'btn-process' },
+                     menu: ['reject'] };
+        case 'processing':   // 2. Preview (editable) -> Approve
+            return { primary: { action: 'previewapprove', label: 'Preview & Approve', cls: 'btn-approve' },
+                     menu: ['viewrequest', 'reject'] };
+        case 'approved':     // 3. QR + ref generated, waiting for signature -> 4. Mark as Ready
+            return { primary: { action: 'markready',      label: 'Mark as Ready',     cls: 'btn-approve' },
+                     menu: ['viewqr', 'preview', 'void'] };
+        case 'ready':        // 5. Ready for Pickup -> 6. Mark as Released
+            return { primary: { action: 'released',       label: 'Mark as Released',  cls: 'btn-approve' },
+                     menu: ['viewqr', 'viewdocument', 'void'] };
         case 'released':
-            return { primary: { action: 'viewdocument', label: 'View Document', cls: 'btn-view-doc' },
+            return { primary: { action: 'viewdocument',   label: 'View Document',     cls: 'btn-view-doc' },
                      menu: ['viewqr'] };
         default:
             return null;
@@ -314,9 +316,11 @@ function getActionButtons(docId, status) {
 // Run an action (shared by row buttons and kebab items)
 // =============================================
 function runAction(action, docId, row, data) {
-    if (action === 'reject')                              openRejectModal(docId, row);
+    if (action === 'reject' || action === 'void')        openRejectModal(docId, row);
+    else if (action === 'viewrequest')                    openRequestModal(docId, data, row);
+    else if (action === 'previewapprove')                 openDocumentModal(docId, data, { mode: 'approve', row });
+    else if (action === 'markready')                      openDocumentModal(docId, data, { mode: 'ready', row });
     else if (action === 'viewqr')                         openQRModal(docId, data);
-    else if (action === 'ready')                          openReadyModal(docId, data, row);
     else if (action === 'viewdocument' || action === 'preview') openDocumentModal(docId, data);
     else updateRequestStatus(docId, action, row, data);
 }
@@ -352,8 +356,9 @@ function openKebabMenu(btn, docId, row, data) {
     menu.className = 'kebab-menu';
     menu.dataset.for = docId;
     menu.innerHTML = cfg.menu.map(a => {
-        const sep = a === 'reject' && cfg.menu.length > 1 ? '<div class="kebab-sep"></div>' : '';
-        return `${sep}<button class="kebab-item${a === 'reject' ? ' danger' : ''}" type="button" data-kact="${a}">${a === 'reject' ? '✕ ' : ''}${ACTION_LABELS[a]}</button>`;
+        const danger = a === 'reject' || a === 'void';
+        const sep = danger && cfg.menu.length > 1 ? '<div class="kebab-sep"></div>' : '';
+        return `${sep}<button class="kebab-item${danger ? ' danger' : ''}" type="button" data-kact="${a}">${danger ? '✕ ' : ''}${ACTION_LABELS[a]}</button>`;
     }).join('');
     document.body.appendChild(menu);
 
@@ -378,7 +383,7 @@ window.addEventListener('resize', closeKebabMenu);
 // Messages sent to the resident for each status change
 const STATUS_MESSAGES = {
     processing: r => `BarangayDocs: Your request ${r.referenceNo} (${r.documentType}) is now being processed.`,
-    approved:   r => `BarangayDocs: Your request ${r.referenceNo} (${r.documentType}) has been approved.`,
+    approved:   r => `BarangayDocs: Your request ${r.referenceNo} (${r.documentType}) has been approved and is now waiting for the authorized signature. We'll notify you once it's ready for pickup.`,
     ready:      r => `BarangayDocs: Ref ${r.referenceNo} (${r.documentType}) is READY for pickup.`,
     released:   r => `BarangayDocs: Ref ${r.referenceNo} (${r.documentType}) has been released. Thank you!`,
     rejected:   r => `BarangayDocs: Request ${r.referenceNo} was rejected.${r.rejectReason ? ' Reason: ' + r.rejectReason : ' Check the app for details.'}`
@@ -400,7 +405,7 @@ async function notifyRequest(docId, status) {
     // Audit trail entry for this status change
     try {
         const extra = status === 'rejected' ? (r.rejectReason ? 'Reason: ' + r.rejectReason : '')
-                    : status === 'ready'    ? ('Doc code ' + (r.docCode || '—') + (r.expiresAt ? ', expires ' + formatExpiry(r.expiresAt) : ''))
+                    : status === 'approved' ? ('Doc code ' + (r.docCode || '—') + (r.expiresAt ? ', expires ' + formatExpiry(r.expiresAt) : ''))
                     : '';
         await addDoc(collection(db, 'auditLogs'), {
             action:       'request_' + status,
@@ -524,50 +529,59 @@ function openRejectModal(docId, row) {
 }
 
 // =============================================
-// Ready + QR Modal — generate doc code & QR
+// Approve + QR Modal (step 3)
+// Generates doc code + QR, sets expiry, saves status = 'approved'
+// (Awaiting Signature) and notifies the resident.
 // =============================================
-function openReadyModal(docId, data, row) {
+async function openApproveModal(docId, data, row) {
     const overlay = document.getElementById('qr-modal');
     if (!overlay) return;
 
-    // Generate unique doc code: BRY-DOC-YYYY-XXXXX
-    const docCode = `BRY-DOC-${new Date().getFullYear()}-${String(Math.floor(10000 + Math.random() * 90000))}`;
+    // Always use the latest saved data so preview edits (docOverrides) are included
+    let latest = data;
+    try {
+        const snap = await getDoc(doc(db, 'requests', docId));
+        if (snap.exists()) latest = snap.data();
+    } catch (err) { console.error(err); }
 
-    const resName = data.docOverrides?.residentName || data.residentName;
+    // Keep the same doc code if one was already generated
+    const docCode = latest.docCode
+        || `BRY-DOC-${new Date().getFullYear()}-${String(Math.floor(10000 + Math.random() * 90000))}`;
+    const resName = latest.docOverrides?.residentName || latest.residentName;
+
+    const titleEl = overlay.querySelector('.modal-header h3');
+    if (titleEl) titleEl.textContent = 'Generate QR Code';
 
     document.getElementById('modal-doc-code').textContent = docCode;
-    document.getElementById('modal-ref-no').textContent   = data.referenceNo;
+    document.getElementById('modal-ref-no').textContent   = latest.referenceNo;
     document.getElementById('modal-resident').textContent = resName;
-    document.getElementById('modal-doc-type').textContent = data.documentType;
+    document.getElementById('modal-doc-type').textContent = latest.documentType;
 
-    // Show expiry picker, hide expiry display row
-    const pickerEl    = document.getElementById('expiry-picker');
-    const expiryRow   = document.getElementById('modal-expiry-row');
+    const pickerEl  = document.getElementById('expiry-picker');
+    const expiryRow = document.getElementById('modal-expiry-row');
     if (pickerEl)  pickerEl.style.display  = '';
     if (expiryRow) expiryRow.style.display = 'none';
-
-    // Pre-fill expiry to 1 year from today & wire day refresh
     prefillExpiry();
 
     overlay.classList.add('show');
 
-    // Generate QR after modal is visible (no expiry in QR yet — updated on confirm)
-    const tempQr = `REF:${data.referenceNo}|CODE:${docCode}|RES:${resName}|DOC:${data.documentType}`;
+    const tempQr = `REF:${latest.referenceNo}|CODE:${docCode}|RES:${resName}|DOC:${latest.documentType}`;
     setTimeout(() => generateQRCode('qr-canvas', tempQr), 100);
 
-    // Reset confirm button
     const confirmBtn = document.getElementById('confirm-ready');
+    const cancelBtn  = document.getElementById('cancel-ready');
     confirmBtn.style.display = '';
-    confirmBtn.textContent   = 'Confirm & Mark Ready';
+    confirmBtn.disabled      = false;
+    confirmBtn.textContent   = 'Generate QR & Approve';
+    cancelBtn.style.display  = '';
+    cancelBtn.textContent    = 'Cancel';
+    cancelBtn.onclick = () => { overlay.classList.remove('show'); resetQRModal(); };
 
     confirmBtn.onclick = async () => {
         const expiry = getExpiryDate();
         if (!expiry) return; // validation failed — error shown inline
 
-        // Rebuild QR content with expiry
-        const qrContent = `REF:${data.referenceNo}|CODE:${docCode}|RES:${resName}|DOC:${data.documentType}|EXP:${expiry.toISOString().split('T')[0]}`;
-
-        // Regenerate QR with expiry baked in
+        const qrContent = `REF:${latest.referenceNo}|CODE:${docCode}|RES:${resName}|DOC:${latest.documentType}|EXP:${expiry.toISOString().split('T')[0]}`;
         generateQRCode('qr-canvas', qrContent);
 
         confirmBtn.disabled    = true;
@@ -575,36 +589,319 @@ function openReadyModal(docId, data, row) {
 
         try {
             await updateDoc(doc(db, 'requests', docId), {
-                status:     'ready',
+                status:     'approved',
                 docCode,
                 qrContent,
                 expiresAt:  expiry,
-                readyAt:    serverTimestamp(),
+                approvedAt: serverTimestamp(),
                 updatedAt:  serverTimestamp()
             });
 
-            notifyRequest(docId, 'ready');
+            notifyRequest(docId, 'approved');
 
-            renderStatusCell(row, 'ready', expiry);
+            const newData = { ...latest, status: 'approved', docCode, qrContent, expiresAt: expiry };
+            renderStatusCell(row, 'approved', expiry);
             const actionCol = row.querySelector('.col-action');
             if (actionCol) {
-                actionCol.innerHTML = `<div class="action-row">${getActionButtons(docId, 'ready')}</div>`;
-                wireRowButtons(row, docId, { ...data, status: 'ready', docCode, qrContent, expiresAt: expiry });
+                actionCol.innerHTML = `<div class="action-row">${getActionButtons(docId, 'approved')}</div>`;
+                wireRowButtons(row, docId, newData);
             }
 
-            overlay.classList.remove('show');
-            showToast('✓ QR generated. Document is ready for release.');
+            // Switch the modal into "Awaiting Signature" state (QR stays visible)
+            if (titleEl) titleEl.textContent = 'QR Generated';
+            if (pickerEl) pickerEl.style.display = 'none';
+            if (expiryRow) {
+                expiryRow.style.display = '';
+                const disp = document.getElementById('modal-expiry-display');
+                if (disp) disp.textContent = formatExpiry(expiry);
+            }
+            cancelBtn.style.display = 'none';
+            confirmBtn.disabled     = false;
+            confirmBtn.textContent  = 'Awaiting Signature';
+            confirmBtn.onclick = () => { overlay.classList.remove('show'); resetQRModal(); };
+
+            showToast('✓ Approved. Waiting for the authorized signature.');
         } catch (err) {
             console.error(err);
-            showToast('Failed to save QR. Check Firestore rules.');
-        } finally {
+            showToast('Failed to approve. Check Firestore rules.');
             confirmBtn.disabled    = false;
-            confirmBtn.textContent = 'Confirm & Mark Ready';
+            confirmBtn.textContent = 'Generate QR & Approve';
         }
     };
+}
 
-    document.getElementById('cancel-ready').textContent = 'Cancel';
-    document.getElementById('cancel-ready').onclick = () => overlay.classList.remove('show');
+// Put the shared QR modal back to its default look
+function resetQRModal() {
+    const overlay = document.getElementById('qr-modal');
+    if (!overlay) return;
+    const titleEl = overlay.querySelector('.modal-header h3');
+    if (titleEl) titleEl.textContent = 'QR Code';
+    const confirmBtn = document.getElementById('confirm-ready');
+    const cancelBtn  = document.getElementById('cancel-ready');
+    if (confirmBtn) { confirmBtn.style.display = ''; confirmBtn.disabled = false; }
+    if (cancelBtn)  { cancelBtn.style.display = ''; cancelBtn.textContent = 'Cancel'; }
+    const pickerEl  = document.getElementById('expiry-picker');
+    const expiryRow = document.getElementById('modal-expiry-row');
+    if (pickerEl)  pickerEl.style.display  = '';
+    if (expiryRow) expiryRow.style.display = 'none';
+}
+
+// =============================================
+// Mark as Ready (step 4) — runs from the preview modal after signing
+// =============================================
+async function markRequestReady(docId, row, data, btn, expiry = null) {
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+        const update = {
+            status:    'ready',
+            readyAt:   serverTimestamp(),
+            updatedAt: serverTimestamp()
+        };
+        let finalExpiry = data.expiresAt;
+        if (expiry) {                                   // expiry may have been changed in the preview
+            finalExpiry = expiry;
+            update.expiresAt = expiry;
+            update.qrContent = buildQrContent(data, data.docCode, expiry);
+        }
+        await updateDoc(doc(db, 'requests', docId), update);
+        notifyRequest(docId, 'ready');
+
+        renderStatusCell(row, 'ready', finalExpiry);
+        const actionCol = row.querySelector('.col-action');
+        if (actionCol) {
+            actionCol.innerHTML = `<div class="action-row">${getActionButtons(docId, 'ready')}</div>`;
+            wireRowButtons(row, docId, { ...data, status: 'ready', expiresAt: finalExpiry, ...(update.qrContent ? { qrContent: update.qrContent } : {}) });
+        }
+        document.getElementById('dp-expiry-bar')?.remove();
+        document.getElementById('doc-preview-modal')?.classList.remove('show');
+        showToast('✓ Document is ready for pickup.');
+    } catch (err) {
+        console.error(err);
+        showToast('Failed to update. Check Firestore rules.');
+        if (btn) { btn.disabled = false; btn.textContent = '✓ Signed — Mark as Ready'; }
+    }
+}
+
+// =============================================
+// In-page image lightbox (click anywhere or press Esc to close)
+// =============================================
+function openLightbox(src) {
+    document.getElementById('rd-lightbox')?.remove();
+    const lb = document.createElement('div');
+    lb.id = 'rd-lightbox';
+    lb.style.cssText = 'position:fixed;inset:0;background:rgba(10,20,50,0.85);z-index:1200;display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out;';
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = 'Enlarged photo';
+    img.style.cssText = 'max-width:100%;max-height:100%;border-radius:12px;background:#fff;';
+    lb.appendChild(img);
+    const onKey = e => { if (e.key === 'Escape') closeLb(); };
+    const closeLb = () => { lb.remove(); document.removeEventListener('keydown', onKey); };
+    lb.addEventListener('click', closeLb);
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(lb);
+}
+
+// =============================================
+// Expiration picker inside the "Preview & Approve" document preview.
+// Changing it updates the certificate (expiration + QR) live.
+// =============================================
+function makeDocCode() {
+    return `BRY-DOC-${new Date().getFullYear()}-${String(Math.floor(10000 + Math.random() * 90000))}`;
+}
+
+function buildQrContent(req, code, expiry) {
+    const resName = req.docOverrides?.residentName || req.residentName;
+    return `REF:${req.referenceNo}|CODE:${code}|RES:${resName}|DOC:${req.documentType}` +
+           (expiry ? `|EXP:${expiry.toISOString().split('T')[0]}` : '');
+}
+
+function setupPreviewExpiryPicker(overlay, req, docCode, initialExpiry = null) {
+    overlay.querySelector('#dp-expiry-bar')?.remove();
+
+    if (!document.getElementById('dp-expiry-style')) {
+        const st = document.createElement('style');
+        st.id = 'dp-expiry-style';
+        st.textContent = `
+          .dp-expiry-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 20px; background:#fff; border-bottom:1.5px solid #D0DCF0; flex-shrink:0; }
+          .dp-expiry-bar .dp-exp-label { font-size:11px; font-weight:800; color:#6B7A99; text-transform:uppercase; letter-spacing:.4px; margin-right:4px; }
+          .dp-expiry-bar select, .dp-expiry-bar input { height:36px; border:1.5px solid #D0DCF0; border-radius:8px; background:#fff; padding:0 10px; font-family:'Nunito',sans-serif; font-size:13px; font-weight:700; color:#1B3A6B; outline:none; }
+          .dp-expiry-bar input { width:90px; }
+          .dp-expiry-bar .dp-exp-error { display:none; width:100%; font-size:11px; font-weight:800; color:#DC3545; }
+        `;
+        document.head.appendChild(st);
+    }
+
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const bar = document.createElement('div');
+    bar.id = 'dp-expiry-bar';
+    bar.className = 'dp-expiry-bar';
+    bar.innerHTML = `
+        <span class="dp-exp-label">Expiration Date <b style="color:#DC3545">*</b></span>
+        <select id="dpx-month"><option value="">Month</option>${MONTHS.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('')}</select>
+        <select id="dpx-day"><option value="">Day</option></select>
+        <input id="dpx-year" type="number" placeholder="Year" min="2024" max="2099">
+        <span id="dpx-error" class="dp-exp-error"></span>`;
+    const scroll = overlay.querySelector('.doc-preview-scroll');
+    scroll.parentNode.insertBefore(bar, scroll);
+
+    const monthEl = bar.querySelector('#dpx-month');
+    const dayEl   = bar.querySelector('#dpx-day');
+    const yearEl  = bar.querySelector('#dpx-year');
+
+    // default: the saved expiry (Mark as Ready) or 1 year from today (Approve)
+    let next = null;
+    if (initialExpiry) {
+        const d = initialExpiry?.toDate ? initialExpiry.toDate() : new Date(initialExpiry);
+        if (!isNaN(d)) next = d;
+    }
+    if (!next) {
+        next = new Date();
+        next.setFullYear(next.getFullYear() + 1);
+    }
+    monthEl.value = next.getMonth() + 1;
+    yearEl.value  = next.getFullYear();
+    refreshDayOptions(next.getMonth() + 1, next.getFullYear(), next.getDate(), 'dpx');
+
+    // live update of the certificate
+    const refresh = () => {
+        const exp = getExpiryDate('dpx', true);
+        setText('dp-expiration', exp ? formatExpiry(exp) : '—');
+        if (exp) generateQRCode('dp-qr-canvas', buildQrContent(req, docCode, exp));
+    };
+    monthEl.addEventListener('change', () => {
+        refreshDayOptions(parseInt(monthEl.value), parseInt(yearEl.value), null, 'dpx');
+        refresh();
+    });
+    yearEl.addEventListener('input', () => {
+        refreshDayOptions(parseInt(monthEl.value), parseInt(yearEl.value), null, 'dpx');
+        refresh();
+    });
+    dayEl.addEventListener('change', refresh);
+
+    setText('dp-doc-code', docCode);
+    refresh();
+    setTimeout(refresh, 200);   // the QR canvas is created ~120ms after the preview opens
+}
+
+// Approve straight from the preview: saves expiry, doc code and QR, then closes the preview
+async function approveFromPreview(docId, rowData, row, expiry, docCode, btn, overlay) {
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    try {
+        let latest = rowData;
+        const snap = await getDoc(doc(db, 'requests', docId));   // pick up edits made in the preview
+        if (snap.exists()) latest = snap.data();
+
+        const code      = latest.docCode || docCode;
+        const qrContent = buildQrContent(latest, code, expiry);
+
+        await updateDoc(doc(db, 'requests', docId), {
+            status:     'approved',
+            docCode:    code,
+            qrContent,
+            expiresAt:  expiry,
+            approvedAt: serverTimestamp(),
+            updatedAt:  serverTimestamp()
+        });
+        notifyRequest(docId, 'approved');
+
+        const newData = { ...latest, status: 'approved', docCode: code, qrContent, expiresAt: expiry };
+        renderStatusCell(row, 'approved', expiry);
+        const actionCol = row.querySelector('.col-action');
+        if (actionCol) {
+            actionCol.innerHTML = `<div class="action-row">${getActionButtons(docId, 'approved')}</div>`;
+            wireRowButtons(row, docId, newData);
+        }
+        overlay.querySelector('#dp-expiry-bar')?.remove();
+        overlay.classList.remove('show');
+        showToast('✓ Approved. Waiting for the authorized signature.');
+    } catch (err) {
+        console.error(err);
+        showToast('Failed to approve. Check Firestore rules.');
+        btn.disabled = false;
+        btn.textContent = '✓ Approve';
+    }
+}
+
+// =============================================
+// View Request modal (step 1) — details + Process / Reject
+// Built in JS so no HTML change is needed.
+// =============================================
+async function openRequestModal(docId, data, row) {
+    let r = data, rd = {};
+    try {
+        const snap = await getDoc(doc(db, 'requests', docId));
+        if (snap.exists()) r = snap.data();
+        if (r.uid) {
+            const rs = await getDoc(doc(db, 'residents', r.uid));
+            if (rs.exists()) rd = rs.data();
+        }
+    } catch (err) { console.error(err); }
+
+    console.log('[BarangayDocs] resident fields:', Object.keys(rd));
+    document.getElementById('request-detail-modal')?.remove();
+    const esc = v => String(v ?? '—').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const field = (label, val) => `<div class="modal-field"><label>${label}</label><p>${esc(val || '—')}</p></div>`;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay show';
+    overlay.id = 'request-detail-modal';
+    const faceSrc = [rd.faceUrl, rd.photoUrl, rd.profilePhoto, rd.profileUrl, rd.photo, rd.avatar].find(isImgSrc) || '';
+    const idImgs  = findIdImages(rd, r);
+    const initial = String(r.residentName || '?').trim().charAt(0).toUpperCase();
+    const imgBox  = (src, label) =>
+        `<img class="rd-zoom" src="${src}" alt="${label}" style="display:block;width:100%;max-height:200px;object-fit:contain;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;cursor:zoom-in;">`;
+    const birthTxt = formatBirthDate(rd, r);
+    const sexTxt   = rd.sex || rd.gender;
+
+    overlay.innerHTML = `
+        <div class="modal-box" style="max-width:480px;">
+            <div class="modal-header">
+                <h3>Request Details</h3>
+                <button class="modal-close" type="button" data-rd="close">✕</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+                ${faceSrc
+                    ? `<img class="rd-zoom" src="${faceSrc}" alt="Profile" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid var(--border);flex-shrink:0;cursor:zoom-in;">`
+                    : `<div style="width:64px;height:64px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;flex-shrink:0;">${esc(initial)}</div>`}
+                <div style="min-width:0;">
+                    <div style="font-size:16px;font-weight:800;color:var(--text-main);overflow-wrap:anywhere;">${esc(r.residentName)}</div>
+                    <div style="font-size:12px;color:var(--text-sub);">${esc(rd.civilStatus || '')}${rd.civilStatus && sexTxt ? ' · ' : ''}${esc(sexTxt || '')}</div>
+                </div>
+            </div>
+            ${field('Document', r.documentType)}
+            ${field('Reference No.', r.referenceNo)}
+            ${field('Purpose', r.purpose)}
+            ${field('Submitted', formatDate(r.createdAt))}
+            ${field('Contact', rd.contactNumber || rd.phone || rd.mobile || r.contactNumber)}
+            ${field('Address', resolveAddress(rd, r))}
+            ${field('Birthday', birthTxt)}
+            ${field('Age', resolveAge(rd, r))}
+            ${idImgs.length ? `<div class="modal-field"><label>Valid ID (click to enlarge)</label>${idImgs.map((s, i) => imgBox(s, 'ID ' + (i + 1))).join('<div style="height:8px"></div>')}</div>`
+                            : `<div class="modal-field"><label>Valid ID</label><p>No ID image found on this resident</p></div>`}
+            <div class="modal-btn-row" id="rd-buttons"></div>
+        </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelectorAll('.rd-zoom').forEach(img => img.addEventListener('click', () => openLightbox(img.src)));
+
+    const close = () => overlay.remove();
+    overlay.querySelector('[data-rd="close"]').onclick = close;
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+    const btns = overlay.querySelector('#rd-buttons');
+    const mk = (text, cls, fn) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = cls; b.textContent = text; b.onclick = fn;
+        btns.appendChild(b);
+    };
+    mk('Close', 'modal-btn-cancel', close);
+    if (r.status === 'pending' || r.status === 'processing') {
+        mk('Reject', 'modal-btn-cancel', () => { close(); openRejectModal(docId, row); });
+    }
+    if (r.status === 'pending') {
+        mk('Process', 'modal-btn-save', () => { close(); updateRequestStatus(docId, 'processing', row, { ...data, ...r }); });
+    }
 }
 
 // =============================================
@@ -650,7 +947,7 @@ async function openQRModal(docId, data) {
 // =============================================
 // View Document Modal — renders the barangay certificate
 // =============================================
-async function openDocumentModal(docId, data) {
+async function openDocumentModal(docId, data, opts = {}) {
     // Always fetch latest from Firestore so all fields are current
     const snap   = await getDoc(doc(db, 'requests', docId));
     const r      = snap.exists() ? snap.data() : data;
@@ -662,15 +959,17 @@ async function openDocumentModal(docId, data) {
         if (resSnap.exists()) residentData = resSnap.data();
     }
 
-    populateAndShowDocModal(r, residentData, docId);
+    populateAndShowDocModal(r, residentData, docId, opts, data);
 }
 
-function populateAndShowDocModal(r, residentData, docId) {
+function populateAndShowDocModal(r, residentData, docId, opts = {}, rowData = {}) {
     const overlay = document.getElementById('doc-preview-modal');
     if (!overlay) return;
 
-    // Issue date — prefer readyAt (when it was finalized), else today
-    const issueDate = r.readyAt?.toDate ? r.readyAt.toDate() : new Date();
+    // Issue date — approvedAt (when QR was generated/printed), else readyAt, else today
+    const issueDate = r.approvedAt?.toDate ? r.approvedAt.toDate()
+                    : r.readyAt?.toDate    ? r.readyAt.toDate()
+                    : new Date();
     const day   = issueDate.getDate();
     const month = issueDate.toLocaleString('en-PH', { month: 'long' }).toUpperCase();
     const year  = issueDate.getFullYear();
@@ -681,7 +980,8 @@ function populateAndShowDocModal(r, residentData, docId) {
     }).toUpperCase();
 
     // Resident age — compute from dateOfBirth if available, else read age field directly
-    const age = resolveAge(residentData);
+    const age = resolveAge(residentData, r);
+    const address = resolveAddress(residentData, r);
 
     // Occupation — fall back chain
     const occupation = residentData.occupation
@@ -697,6 +997,7 @@ function populateAndShowDocModal(r, residentData, docId) {
     setText('dp-cert-title',   r.documentType  || '(CERTIFICATE NAME)');
     setText('dp-name',         fullName);
     setText('dp-age',          age);
+    if (address) setText('dp-address', address);
     setText('dp-occupation',   occupation);
     setText('dp-day',          ordinal(day));
     setText('dp-month',        month);
@@ -708,10 +1009,21 @@ function populateAndShowDocModal(r, residentData, docId) {
     setText('dp-issued-in-2',  issuedInDate);
 
     // Apply admin corrections saved on the request (docOverrides) — resident profile is untouched
-    paintDocument(effectiveValues(baseValues(r, residentData), r.docOverrides));
+    const enrichedResident = { ...residentData };
+    if (age !== '—')  { enrichedResident.age = age; enrichedResident.birthday = enrichedResident.birthday || residentData.birthDate || residentData.dateOfBirth || residentData.dob; }
+    if (address)      { enrichedResident.address = address; }
+    paintDocument(effectiveValues(baseValues(r, enrichedResident), r.docOverrides));
+    // paintDocument may blank fields it can't map — make sure age/address still show
+    if (!r.docOverrides?.age     && age !== '—') setText('dp-age', age);
+    if (!r.docOverrides?.address && address)     setText('dp-address', address);
 
     // Tell the document editor which request is being previewed
     window.BarangayDocEditor?.attach(docId, r);
+
+    // Expiration picker only exists while approving; drop any leftover from a previous open
+    overlay.querySelector('#dp-expiry-bar')?.remove();
+    const approving  = (opts.mode === 'approve' || opts.mode === 'ready') && opts.row;
+    const approveCode = r.docCode || makeDocCode();
 
     // QR code
     const qrWrap = document.getElementById('dp-qr-wrap');
@@ -724,6 +1036,7 @@ function populateAndShowDocModal(r, residentData, docId) {
     }
 
     overlay.classList.add('show');
+    if (approving) setupPreviewExpiryPicker(overlay, r, approveCode, opts.mode === 'ready' ? r.expiresAt : null);
 
     document.getElementById('dp-close')?.addEventListener('click', () => {
         overlay.classList.remove('show');
@@ -732,6 +1045,37 @@ function populateAndShowDocModal(r, residentData, docId) {
     document.getElementById('dp-print')?.addEventListener('click', () => {
         printDocument();
     }, { once: true });
+
+    // Step 2 / 4 action button (only when opened from Preview & Approve / Mark as Ready)
+    document.querySelectorAll('#dp-approve, #dp-ready').forEach(b => b.remove());
+    if (opts.mode && opts.row) {
+        const printBtn = document.getElementById('dp-print');
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'dp-btn dp-btn-primary';
+        // Block while the editor panel is open (unsaved edits would be missed)
+        const isEditing = () => !!overlay.querySelector('.doc-preview-wrapper.dp-editing');
+        if (opts.mode === 'approve') {
+            b.id = 'dp-approve';
+            b.textContent = '✓ Approve';
+            b.onclick = () => {
+                if (isEditing()) { showToast('Save or cancel your edits first.'); return; }
+                const expiry = getExpiryDate('dpx');          // validates + shows the error in the bar
+                if (!expiry) return;
+                approveFromPreview(docId, { ...rowData, ...r }, opts.row, expiry, approveCode, b, overlay);
+            };
+        } else {
+            b.id = 'dp-ready';
+            b.textContent = '✓ Signed — Mark as Ready';
+            b.onclick = () => {
+                if (isEditing()) { showToast('Save or cancel your edits first.'); return; }
+                const expiry = getExpiryDate('dpx');          // validates + shows the error in the bar
+                if (!expiry) return;
+                markRequestReady(docId, opts.row, { ...rowData, ...r }, b, expiry);
+            };
+        }
+        printBtn?.parentNode.insertBefore(b, printBtn);
+    }
 }
 
 function setText(id, value) {
@@ -745,21 +1089,126 @@ function ordinal(n) {
     return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-function resolveAge(rd) {
-    const dob = rd.birthday;
-    if (!dob) return '—';
-    return computeAge(dob);
+// Turn whatever is stored as a birth date (string, Timestamp, Date, ms) into a Date
+function parseBirthDate(v) {
+    if (!v) return null;
+    if (v?.toDate) return v.toDate();                       // Firestore Timestamp
+    if (v instanceof Date) return isNaN(v) ? null : v;
+    if (typeof v === 'object' && typeof v.seconds === 'number') return new Date(v.seconds * 1000);
+    if (typeof v === 'number') return new Date(v);
+    const s = String(v).trim();
+    let m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);          // YYYY-MM-DD
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+    m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/);             // MM/DD/YYYY
+    if (m) return new Date(+m[3], +m[1] - 1, +m[2]);
+    const d = new Date(s);                                              // "May 4, 2001" etc.
+    return isNaN(d) ? null : d;
+}
+
+const BIRTH_KEYS = ['birthday', 'birthDate', 'birthdate', 'dateOfBirth', 'dob', 'birth_date', 'date_of_birth', 'bday'];
+const AGE_KEYS   = ['age', 'Age'];
+
+// sources = resident profile first, then the request doc itself as a fallback
+function findBirthDate(...sources) {
+    for (const src of sources) {
+        if (!src) continue;
+        for (const k of BIRTH_KEYS) {
+            const d = parseBirthDate(src[k]);
+            if (d) return d;
+        }
+        for (const k of Object.keys(src)) {                      // any key that looks like a birth date
+            if (/birth|bday|dob/i.test(k) && !/place|age/i.test(k)) {
+                const d = parseBirthDate(src[k]);
+                if (d) return d;
+            }
+        }
+        const y = src.birthYear || src.birth_year, mo = src.birthMonth || src.birth_month, da = src.birthDay || src.birth_day;
+        if (y && mo && da) {
+            const mIdx = isNaN(+mo) ? new Date(`${mo} 1, 2000`).getMonth() : +mo - 1;
+            const d = new Date(+y, mIdx, +da);
+            if (!isNaN(d)) return d;
+        }
+    }
+    return null;
+}
+
+function formatBirthDate(...sources) {
+    const d = findBirthDate(...sources);
+    return d ? d.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
+}
+
+function resolveAge(...sources) {
+    const bd = findBirthDate(...sources);
+    if (bd) return computeAge(bd);
+    for (const src of sources) {
+        if (!src) continue;
+        for (const k of AGE_KEYS) {
+            if (src[k] !== undefined && src[k] !== null && String(src[k]).trim() !== '') return src[k];
+        }
+    }
+    return '—';
 }
 
 function computeAge(dob) {
-    if (!dob) return '—';
-    const [y, m, d] = String(dob).split('-').map(Number);
-    if (!y || !m || !d) return '—';
+    const d = dob instanceof Date ? dob : parseBirthDate(dob);
+    if (!d) return '—';
     const today = new Date();
-    let age = today.getFullYear() - y;
-    const mDiff = today.getMonth() + 1 - m;
-    if (mDiff < 0 || (mDiff === 0 && today.getDate() < d)) age--;
-    return age;
+    let age = today.getFullYear() - d.getFullYear();
+    const mDiff = today.getMonth() - d.getMonth();
+    if (mDiff < 0 || (mDiff === 0 && today.getDate() < d.getDate())) age--;
+    return age >= 0 ? age : '—';
+}
+
+const ID_KEYS = ['idUrl', 'idPhotoUrl', 'idImageUrl', 'validIdUrl', 'validId', 'idImage', 'idPicture',
+                 'idFront', 'idFrontUrl', 'idBack', 'idBackUrl', 'governmentIdUrl', 'govIdUrl', 'idPhoto', 'id_url'];
+const isImgSrc = v => typeof v === 'string' && /^(https?:|data:image)/i.test(v);
+
+function findIdImages(rd, r) {
+    const out = [];
+    for (const src of [rd, r]) {
+        if (!src) continue;
+        for (const k of ID_KEYS) if (isImgSrc(src[k]) && !out.includes(src[k])) out.push(src[k]);
+        for (const k of Object.keys(src)) {          // anything else that looks like an ID image
+            if (/(^|[^a-z])id([^a-z]|$)|validid|govid|idcard|idphoto|idimage|idfront|idback/i.test(k)
+                && !/face|selfie|profile|uid|docid|requestid/i.test(k)
+                && isImgSrc(src[k]) && !out.includes(src[k])) out.push(src[k]);
+        }
+    }
+    return out;
+}
+
+const ADDRESS_KEYS = ['address', 'fullAddress', 'homeAddress', 'home_address', 'residentAddress',
+                      'currentAddress', 'completeAddress', 'streetAddress', 'location'];
+
+// Full home address: a single stored string, or built from separate parts
+function resolveAddress(...sources) {
+    for (const src of sources) {
+        if (!src) continue;
+        for (const k of ADDRESS_KEYS) {
+            const v = src[k];
+            if (typeof v === 'string' && v.trim()) return v.trim();
+            if (v && typeof v === 'object') {                  // address stored as a map
+                const joined = Object.values(v).filter(x => typeof x === 'string' && x.trim()).join(', ');
+                if (joined) return joined;
+            }
+        }
+    }
+    for (const src of sources) {
+        if (!src) continue;
+        const parts = [
+            src.houseNo || src.houseNumber || src.blockLot,
+            src.street,
+            src.purok || src.zone || src.sitio,
+            src.barangay,
+            src.city || src.municipality,
+            src.province
+        ].filter(x => typeof x === 'string' ? x.trim() : x).map(x => String(x).trim());
+        if (parts.length) {
+            if (!src.barangay) parts.push('Barangay Banicain, Olongapo City, Zambales');
+            return parts.join(', ');
+        }
+    }
+    return '';
 }
 
 // =============================================

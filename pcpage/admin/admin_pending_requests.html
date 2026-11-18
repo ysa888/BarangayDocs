@@ -125,6 +125,15 @@
     .kebab-item { display: block; color: var(--text-main); }
     .kebab-item:hover { background: var(--bg); }
     .kebab-sep { height: 1px; background: var(--border); margin: 4px 2px; }
+    /* Modal field styles (used by the JS-built View Request modal) */
+    .modal-field { margin-bottom: 14px; }
+    .modal-field label { display: block; font-size: 11px; font-weight: 700; color: var(--text-sub); margin-bottom: 5px; text-transform: uppercase; }
+    .modal-field p { font-size: 14px; font-weight: 700; color: var(--text-main); background: var(--bg); border: 1.5px solid var(--border); border-radius: 10px; padding: 10px 14px; overflow-wrap: anywhere; }
+    .modal-btn-row { display: flex; gap: 10px; margin-top: 16px; }
+    .modal-btn-cancel { flex: 1; height: 44px; background: transparent; border: 1.5px solid var(--border); border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800; color: var(--text-sub); cursor: pointer; }
+    .modal-btn-save { flex: 2; height: 44px; background: var(--primary); border: none; border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800; color: #fff; cursor: pointer; }
+    .modal-close { display: flex; align-items: center; justify-content: center; }
+      .table-head-row { gap: 10px; }
   </style>
   <link rel="stylesheet" href="adminresponsive.css">
 </head>
@@ -132,9 +141,7 @@
 
 <nav class="top-navbar">
   <div class="navbar-left">
-    <button class="hamburger-btn" onclick="toggleSidebar()">
-      <span></span><span></span><span></span>
-    </button>
+    <button class="hamburger-btn" id="hamburger-btn" aria-label="Toggle menu" onclick="return __mobileNav(event)"><span></span><span></span><span></span></button>
     <div class="navbar-logo">
       <span class="logo-text">BARANGAY<span>DOCS</span></span>
       <span class="admin-badge">ADMIN</span>
@@ -150,6 +157,8 @@
     </div>
   </div>
 </nav>
+
+<div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
 <div class="layout">
   <aside class="sidebar" id="sidebar">
@@ -361,7 +370,7 @@
 <style>
   .modal-overlay { display:none; position:fixed; inset:0; background:rgba(10,20,50,0.55); backdrop-filter:blur(3px); z-index:999; align-items:center; justify-content:center; }
   .modal-overlay.show { display:flex; }
-  .modal-box { background:#fff; border-radius:20px; padding:24px; width:100%; max-width:420px; box-shadow:0 24px 60px rgba(27,58,107,0.18); }
+  .modal-box { background:#fff; border-radius:20px; padding:24px; width:100%; max-width:420px; max-height:90vh; overflow-y:auto; box-shadow:0 24px 60px rgba(27,58,107,0.18); }
   .modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
   .modal-header h3 { font-family:'Poppins',sans-serif; font-size:16px; font-weight:700; color:var(--text-main); }
   .modal-close { width:32px; height:32px; background:var(--bg); border:none; border-radius:8px; cursor:pointer; font-size:16px; }
@@ -652,6 +661,31 @@
 }
 </style>
 
+<script>
+  // Mobile/tablet: hamburger opens the sidebar as a drawer. Desktop keeps the original behaviour.
+  function __mobileNav(e) {
+    if (window.innerWidth > 900) { if (typeof window.toggleSidebar === 'function') window.toggleSidebar(); return false; }
+    if (e) { e.stopPropagation(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); }
+    var sb = document.getElementById('sidebar');
+    var bd = document.getElementById('sidebar-backdrop');
+    var open = sb.classList.toggle('open');
+    sb.classList.remove('collapsed');
+    bd.classList.toggle('show', open);
+    return false;
+  }
+  (function () {
+    var bd = document.getElementById('sidebar-backdrop');
+    function close() {
+      document.getElementById('sidebar').classList.remove('open');
+      bd.classList.remove('show');
+    }
+    bd.addEventListener('click', close);
+    document.getElementById('sidebar').addEventListener('click', function (e) {
+      if (window.innerWidth <= 900 && e.target.closest('.sidebar-item')) close();
+    });
+    window.addEventListener('resize', function () { if (window.innerWidth > 900) close(); });
+  })();
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 <script type="module" src="adminrequests.js"></script>
 <script type="module" src="walkin.js"></script>
@@ -776,6 +810,24 @@ img, canvas { max-width: 100%; }
   .table-row > .col-status { order: 4; flex: 0 0 auto; width: auto; padding-left: 48px; margin-top: 10px; }
   .table-row > .col-action { order: 4; flex: 1 1 0; min-width: 0; width: auto; margin-top: 10px; }
   .table-row > .col-validity { order: 4; flex: 0 0 auto; width: auto; margin-top: 10px; }
+}
+
+/* ---- Layout fix: let flex children shrink so nothing forces horizontal scroll ---- */
+.main, .table-card, #requests-body { min-width: 0; }
+.main { max-width: 100%; }
+
+/* ---- Off-canvas sidebar on tablet & phone ---- */
+.sidebar-backdrop { display: none; }
+@media (max-width: 900px) {
+  :root { --sidebar-w: 260px; }
+  .sidebar { transform: translateX(-100%); max-width: 82vw; box-shadow: none; }
+  .sidebar.open { transform: translateX(0); box-shadow: 6px 0 28px rgba(10,20,50,0.25); }
+  .main, .main.expanded { margin-left: 0; padding: 16px 12px 28px; }
+  .sidebar-backdrop { position: fixed; top: 60px; left: 0; right: 0; bottom: 0; background: rgba(10,20,50,0.45); z-index: 99; }
+  .sidebar-backdrop.show { display: block; }
+  .filter-bar { gap: 8px; }
+  .search-wrap { flex: 1 1 100%; min-width: 0; }
+  .filter-bar select { flex: 1 1 100%; width: 100%; }
 }
 </style>
 </body>

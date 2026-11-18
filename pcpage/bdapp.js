@@ -172,7 +172,9 @@ onAuthStateChanged(auth, async (user) => {
 
     if (page.isHome)    initHome(user, userData);
     if (page.isAccount) initAccount(user, userData);
-    if (page.isRequest) initRequest(user, userData);
+    // Request page is handled entirely by request.js. Running initRequest here too
+    // wired a second submit handler on the same button, so every request was saved twice.
+    // if (page.isRequest) initRequest(user, userData);
     if (page.isScanQR)  initScanQR(user, userData);
 });
 
