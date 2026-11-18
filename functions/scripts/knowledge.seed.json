@@ -1,0 +1,421 @@
+[
+  {
+    "id": "account-approval",
+    "category": "Account",
+    "question": "Why can't I log in or use the app after registering?",
+    "answer": "New resident accounts need approval from an admin. If your account is still pending, the app signs you out and says it is waiting for admin approval. If your account was rejected, the app tells you to contact the barangay office.",
+    "keywords": [
+      "login",
+      "log in",
+      "sign in",
+      "register",
+      "registration",
+      "account approval",
+      "pending approval",
+      "rejected account",
+      "approve",
+      "approved",
+      "approval",
+      "waiting",
+      "mag-register",
+      "rehistro",
+      "hindi makapag-login",
+      "account is pending",
+      "account pending",
+      "my account pending"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (auth guard)"
+  },
+  {
+    "id": "request-how-to",
+    "category": "Document Requests",
+    "question": "How do I request a document?",
+    "answer": "1. On the Home page, click an available document, or open the Request page and start a New Document Request.\n2. Select the document type.\n3. Choose the purpose of your request.\n4. Optionally add notes.\n5. Submit the request.\nAfter you submit, the app shows your reference number and the request appears on your Request page with the status Pending.",
+    "keywords": [
+      "request",
+      "new request",
+      "submit",
+      "apply",
+      "application",
+      "get a document",
+      "how to request",
+      "kumuha",
+      "magrequest",
+      "humingi",
+      "humiling",
+      "dokumento",
+      "clearance",
+      "certificate",
+      "permit",
+      "indigency"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (submitRequest, initHome)"
+  },
+  {
+    "id": "request-required-fields",
+    "category": "Document Requests",
+    "question": "What information is required when submitting a request?",
+    "answer": "You must select a document type and choose a purpose. Notes are optional. If a document type or purpose is missing, the app asks you to select it before the request can be submitted.",
+    "keywords": [
+      "required",
+      "required fields",
+      "mandatory",
+      "notes",
+      "purpose",
+      "form",
+      "fields",
+      "fill in",
+      "submit"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (submitRequest)"
+  },
+  {
+    "id": "request-available-documents",
+    "category": "Document Requests",
+    "question": "Which documents can I request?",
+    "answer": "The Home page lists the documents set up by the barangay admins. Documents marked active appear under Available Documents and can be requested. Other documents appear greyed out under Unavailable Documents and cannot be requested. The Home page shows up to 8 of each; all documents can be reached through View All or the New Document Request window. Admins can change this list, so what is available can change.",
+    "keywords": [
+      "available documents",
+      "unavailable documents",
+      "list of documents",
+      "document types",
+      "which documents",
+      "what documents",
+      "greyed out",
+      "view all",
+      "dokumento"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (listenHomeDocuments)"
+  },
+  {
+    "id": "request-reference-number",
+    "category": "Document Requests",
+    "question": "What is a reference number?",
+    "answer": "Every document request gets a reference number in the format BRY-YYYY-XXXXX: BRY, the year, and five digits (for example BRY-2026-12345). It is shown after you submit and on your request card.",
+    "keywords": [
+      "reference number",
+      "reference no",
+      "ref number",
+      "ref",
+      "tracking number",
+      "BRY"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (generateRef)"
+  },
+  {
+    "id": "request-statuses",
+    "category": "Tracking and Status",
+    "question": "What do the request statuses mean?",
+    "answer": "Pending: your request was submitted and the document has not been issued yet.\nProcessing: your request is being processed.\nApproved: your request was approved.\nReady for Pickup: the document is ready, and the request card shows the Ready For Pickup date.\nReleased: the document has been released (counted under Released on your Home page).\nRejected: your request was not approved; a reason is shown if staff entered one.",
+    "keywords": [
+      "status",
+      "statuses",
+      "pending",
+      "processing",
+      "approved",
+      "ready",
+      "ready for pickup",
+      "released",
+      "rejected",
+      "meaning",
+      "katayuan"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (buildRequestCard, renderNotifs, showVerifyResult)"
+  },
+  {
+    "id": "request-tracking",
+    "category": "Tracking and Status",
+    "question": "How can I track my request?",
+    "answer": "Open the Request page. Each request is a card with a Track Progress button that shows the steps Submitted, Processing, Approved and Ready. The tabs above the list filter your requests by status. The Home page also shows live counts of your requests.",
+    "keywords": [
+      "track",
+      "tracking",
+      "progress",
+      "follow up",
+      "where is my request",
+      "check request",
+      "my requests",
+      "request page",
+      "tabs",
+      "subaybayan"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (buildTrackSteps, filterByStatus)"
+  },
+  {
+    "id": "request-rejected",
+    "category": "Tracking and Status",
+    "question": "Why was my request rejected?",
+    "answer": "A rejected request shows the status Rejected. If staff entered a reason, it appears as Reason on the request card. If no reason is shown or you need more details, please contact the barangay office.",
+    "keywords": [
+      "rejected",
+      "rejection",
+      "request rejected",
+      "rejected request",
+      "reason for rejection",
+      "denied",
+      "declined",
+      "not approved",
+      "reason",
+      "tinanggihan"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (buildRequestCard)"
+  },
+  {
+    "id": "request-ready-pickup",
+    "category": "Tracking and Status",
+    "question": "My request says Ready for Pickup. What does that mean?",
+    "answer": "Ready for Pickup means the document is ready. The request card shows the Ready For Pickup date. Details such as where to pick it up or what to bring are not covered here, so please ask the barangay office.",
+    "keywords": [
+      "ready for pickup",
+      "pickup",
+      "pick up",
+      "claim",
+      "collect",
+      "ready"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (buildRequestCard)"
+  },
+  {
+    "id": "request-notifications",
+    "category": "Tracking and Status",
+    "question": "How will I know when my request status changes?",
+    "answer": "Use the notification bell on the Home page. It shows notifications from the admins (such as status changes and results of profile change requests) and your requests with their status and time. A badge shows how many notifications are unread. Clicking one opens the related page and marks it as read.",
+    "keywords": [
+      "notification",
+      "notifications",
+      "notify",
+      "bell",
+      "alert",
+      "unread",
+      "status change",
+      "abiso"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (initHome, renderNotifs)"
+  },
+  {
+    "id": "home-stats",
+    "category": "Tracking and Status",
+    "question": "What do the numbers on my Home page mean?",
+    "answer": "The Home page shows live counts of your own requests: total, pending, ready, rejected and released. The pending count includes requests that are being processed.",
+    "keywords": [
+      "home page",
+      "numbers",
+      "counts",
+      "stats",
+      "statistics",
+      "total requests",
+      "dashboard"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (initHome)"
+  },
+  {
+    "id": "profile-change-overview",
+    "category": "Account",
+    "question": "How do I change my name, birthday or other personal information?",
+    "answer": "You cannot edit these details directly. On the Account page, use Request Information Change: tick what you want to change (name, date of birth, sex, civil status, home address or years of residency), enter the new values, give a reason of at least 10 characters, and attach a photo of a supporting document when one is required. Staff review the request and nothing on your record changes until it is approved. You can have only one pending request at a time.",
+    "keywords": [
+      "change name",
+      "change birthday",
+      "date of birth",
+      "birthday",
+      "civil status",
+      "sex",
+      "gender",
+      "address",
+      "residency",
+      "personal information",
+      "information change",
+      "edit profile",
+      "update profile",
+      "correct",
+      "wrong",
+      "palitan",
+      "baguhin",
+      "pangalan",
+      "kaarawan",
+      "tirahan"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (wireInfoChangeRequest)"
+  },
+  {
+    "id": "profile-change-proof",
+    "category": "Account",
+    "question": "What supporting document do I need to change my information?",
+    "answer": "Supporting document by item:\n- Name (required): a valid ID, birth certificate or marriage certificate.\n- Date of birth (required): birth certificate or a valid ID showing your birth date.\n- Sex (required): birth certificate or valid ID.\n- Civil status (required): marriage certificate, or the death certificate of a spouse.\n- Home address (optional): a utility bill, lease or valid ID showing the new address.\n- Years of residency (optional): any document showing how long you have lived here.\nYou can attach up to 2 photos (JPG or PNG), each under 10 MB.",
+    "keywords": [
+      "supporting document",
+      "proof",
+      "valid id",
+      "birth certificate",
+      "marriage certificate",
+      "attach",
+      "upload",
+      "photo of document",
+      "utility bill",
+      "lease"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (wireInfoChangeRequest groups)"
+  },
+  {
+    "id": "profile-change-status",
+    "category": "Account",
+    "question": "How do I know if my information change request was approved?",
+    "answer": "While a request is waiting, the Account page says it is waiting for staff review, and the request button changes to Request Pending Review and is disabled. If a request is not approved, the page says so and shows the staff's reason if one was given. Results can also appear in your notifications. Nothing on your record changes until a request is approved.",
+    "keywords": [
+      "information change status",
+      "change request status",
+      "pending review",
+      "request pending review",
+      "waiting for staff review",
+      "not approved",
+      "profile change result",
+      "banner"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (wireInfoChangeRequest status listener)"
+  },
+  {
+    "id": "profile-not-changeable",
+    "category": "Account",
+    "question": "Can I change my barangay, city or province?",
+    "answer": "No. Barangay, city and province cannot be changed through the Request Information Change form. Your email and contact number have their own separate change steps.",
+    "keywords": [
+      "change barangay",
+      "change city",
+      "province",
+      "wrong barangay",
+      "transfer"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (information change header comment)"
+  },
+  {
+    "id": "contact-email-change",
+    "category": "Account",
+    "question": "How do I change my email or contact number?",
+    "answer": "On the Account page, click the Email or Contact Number row. You are asked to confirm and enter your current password first. For a contact number, enter the new number and it is saved; Philippine mobile formats such as 09XXXXXXXXX or +639XXXXXXXXX are accepted and stored in the 09 format. For an email, enter the new address: a verification link is sent to the new address and the email only changes after you open that link.",
+    "keywords": [
+      "change email",
+      "email address",
+      "change contact",
+      "contact number",
+      "mobile number",
+      "phone number",
+      "cellphone",
+      "verification link",
+      "palitan",
+      "email",
+      "numero",
+      "telepono"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (wireSecureChange, scNormalizePH)"
+  },
+  {
+    "id": "profile-photo-change",
+    "category": "Account",
+    "question": "How do I change my profile photo?",
+    "answer": "On the Account page, click the profile photo row or the pencil badge on your avatar. You must enter your password first. Then choose a JPG, PNG or WEBP photo (under 10 MB) and submit it for review; your photo changes after staff approve it. Use a clear, recent photo of your face, looking at the camera, in good light, with no sunglasses, filters or group photos. Only one request (photo or information change) can be open at a time.",
+    "keywords": [
+      "profile photo",
+      "profile picture",
+      "avatar",
+      "face photo",
+      "change photo",
+      "picture",
+      "selfie",
+      "larawan",
+      "litrato",
+      "photo",
+      "photos"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (wirePhotoChange)"
+  },
+  {
+    "id": "password-change",
+    "category": "Account",
+    "question": "How do I change my password or what if I forgot my current password?",
+    "answer": "On the Account page, open Settings and choose Change Password. If you know your current password, enter your current password, then the new one, then confirm it. If you forgot your current password, a verification link is sent to your account email; after you open and verify it, you can set a new password. A new password must be at least 8 characters. The reset link can be resent after a 60-second wait.",
+    "keywords": [
+      "password",
+      "change password",
+      "forgot password",
+      "forgot",
+      "reset password",
+      "reset link",
+      "verification link",
+      "nakalimutan",
+      "nakalimutang"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (change password module)"
+  },
+  {
+    "id": "app-legal-pages",
+    "category": "General",
+    "question": "Where can I read the Terms and Conditions and Privacy Policy?",
+    "answer": "On the Account page, open the settings menu. About, Terms & Conditions and Privacy Policy each open in a pop-up window.",
+    "keywords": [
+      "terms",
+      "terms and conditions",
+      "privacy",
+      "privacy policy",
+      "about",
+      "legal",
+      "data privacy"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (wireSettingsModals)"
+  },
+  {
+    "id": "default-barangay",
+    "category": "General",
+    "question": "Which barangay and city does the app show for residents?",
+    "answer": "When no other barangay or city is saved on the account, the app shows Barangay Banicain, Olongapo City.",
+    "keywords": [
+      "banicain",
+      "olongapo",
+      "which barangay",
+      "barangay name",
+      "city",
+      "location"
+    ],
+    "status": "approved",
+    "source": "bdapp.js (default values)"
+  },
+  {
+    "id": "verify-document",
+    "category": "Verification",
+    "question": "How do I verify a document using its reference number?",
+    "answer": "Open the Scan / Verify QR page, type the reference number under Manual Verification and click verify (or press Enter). The page shows the document type, reference number, resident name, purpose and status. Approved, ready or released documents are shown as verified; rejected ones show the reason; pending ones are shown as not yet issued. If nothing matches, it says the reference was not found. Camera scanning is not available in the app yet, so use manual verification.",
+    "keywords": [
+      "verify",
+      "verification",
+      "authentic",
+      "genuine",
+      "fake",
+      "scan",
+      "qr",
+      "qr code",
+      "check document",
+      "reference number"
+    ],
+    "status": "draft",
+    "note": "Kept as draft: the verify page queries the requests collection, which current Firestore rules only allow for the owner or admins. Confirm residents can use it, then change status to approved.",
+    "source": "bdapp.js (lookupRequest, showVerifyResult)"
+  }
+]

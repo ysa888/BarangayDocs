@@ -249,6 +249,9 @@ async function initHome(user, userData) {
     // Available / unavailable documents (live from the admin's documents list)
     listenHomeDocuments();
 
+    // Floating AI assistant (Stage 3). Isolated so a chatbot problem can never break the page.
+    try { initChatbot(user, userData); } catch (e) { console.error('Chatbot failed to start:', e); }
+
     // ── Notification button toggle ──
     const notifBtn      = el('notifBtn');
     const notifDropdown = el('notifDropdown');
@@ -472,6 +475,434 @@ function renderNotifs() {
         listEl.appendChild(row);
     });
 }
+
+// =============================================
+// =============================================
+// RESIDENT CHATBOT (Stage 3)
+// Floating assistant on the Home page. It calls the Stage 1 `aiChat`
+// Cloud Function, which answers from the approved Firestore knowledge
+// (Stage 2) and saves unanswered questions for admin review.
+// No API key lives here: the Gemini key stays in Secret Manager.
+// The Firebase app/auth above are reused (nothing is configured twice).
+// =============================================
+// =============================================
+// ===== CHATBOT START =====
+// Same project as firebaseConfig; v2 functions default to us-central1
+// (index.js sets no region). Change here only if the function URL differs.
+const AI_CHAT_URL = `https://us-central1-${app.options.projectId}.cloudfunctions.net/aiChat`;
+const CHAT_TIMEOUT_MS   = 35000;  // function timeout is 30s
+const CHAT_MAX_LEN      = 500;    // keep in sync with maxlength in the HTML
+const CHAT_HISTORY_MSGS = 8;      // earlier messages sent along as context
+const CHAT_STORE_MAX    = 40;     // messages kept in sessionStorage
+const CHAT_SUGGESTIONS  = [
+    'How do I request a document?',
+    'What are the requirements for a Barangay Clearance?',
+    'How long does processing take?'
+];
+let chatbotReady = false;
+
+/** Tiny, safe markdown: paragraphs, - / * / 1. lists and **bold**. Built from text nodes only. */
+function chatInline(parent, text) {
+    text.split(/(\*\*[^*]+\*\*)/g).forEach(part => {
+        if (!part) return;
+        if (/^\*\*[^*]+\*\*$/.test(part)) {
+            const s = document.createElement('strong');
+            s.textContent = part.slice(2, -2);
+            parent.appendChild(s);
+        } else {
+            parent.appendChild(document.createTextNode(part));
+        }
+    });
+}
+function chatRenderRich(container, text) {
+    container.replaceChildren();
+    let para = null, list = null;
+    String(text).replace(/\r\n/g, '\n').split('\n').forEach(raw => {
+        const line = raw.trimEnd();
+        if (!line.trim()) { para = null; list = null; return; }
+        const m = line.match(/^\s*([-*•]|\d+[.)])\s+(.*)$/);
+        if (m) {
+            const tag = /\d/.test(m[1]) ? 'OL' : 'UL';
+            if (!list || list.tagName !== tag) {
+                list = document.createElement(tag);
+                container.appendChild(list);
+                para = null;
+            }
+            const li = document.createElement('li');
+            chatInline(li, m[2]);
+            list.appendChild(li);
+        } else {
+            list = null;
+            if (!para) {
+                para = document.createElement('p');
+                container.appendChild(para);
+            } else {
+                para.appendChild(document.createElement('br'));
+            }
+            chatInline(para, line.trim());
+        }
+    });
+}
+
+/** `sources` shape comes from the backend; accept strings or objects, show up to 3 labels. */
+function chatSourceLabels(sources) {
+    if (!Array.isArray(sources)) return [];
+    const out = [];
+    sources.forEach(s => {
+        const label = typeof s === 'string' ? s : (s && (s.question || s.title || s.category || s.id));
+        if (label && typeof label === 'string' && !out.includes(label)) out.push(label.trim());
+    });
+    return out.slice(0, 3);
+}
+
+/** Turn a failure into a calm, resident-friendly message. */
+function chatErrorInfo(err, status, timedOut) {
+    if (timedOut) return { text: 'The assistant took too long to respond. Please try again.', retry: true };
+    if (!navigator.onLine) return { text: 'You appear to be offline. Check your internet connection and try again.', retry: true };
+    if (status === 429) return { text: 'Too many questions at once. Please wait a moment, then try again.', retry: true };
+    if (status === 400 || status === 413) return { text: 'I could not process that message. Please shorten or rephrase it.', retry: false };
+    if (status === 401 || status === 403) return { text: 'Your session may have expired. Please refresh the page or sign in again.', retry: false };
+    if (status) return { text: 'The assistant is having trouble right now. Please try again in a moment.', retry: true };
+    return { text: 'Could not reach the assistant. Check your connection and try again.', retry: true };
+}
+
+function initChatbot(user, userData) {
+    if (chatbotReady) return;
+    const root = el('chatbot');
+    const fab = el('chatFab'), win = el('chatWindow'), log = el('chatLog');
+    const form = el('chatForm'), input = el('chatInput'), sendBtn = el('chatSend');
+    const closeBtn = el('chatClose'), clearBtn = el('chatClear');
+    const confirmBar = el('chatConfirm'), confirmYes = el('chatClearYes'), confirmNo = el('chatClearNo');
+    const count = el('chatCount');
+    if (!root || !fab || !win || !log || !form || !input || !sendBtn) return;   // markup missing: stay hidden
+    chatbotReady = true;
+
+    const storeKey = 'bd_chat_' + user.uid;
+    const state = { messages: [], busy: false, reqId: 0, controller: null, failed: null };
+    let typingEl = null, errorEl = null;
+
+    // ── persistence (per resident, per browser tab) ──
+    function saveStored() {
+        try {
+            const keep = state.messages.filter(m => !m.failed).slice(-CHAT_STORE_MAX);
+            if (keep.length) sessionStorage.setItem(storeKey, JSON.stringify(keep));
+            else sessionStorage.removeItem(storeKey);
+        } catch (e) { /* storage blocked: chat still works in memory */ }
+    }
+    function loadStored() {
+        try {
+            const raw = JSON.parse(sessionStorage.getItem(storeKey) || '[]');
+            if (!Array.isArray(raw)) return [];
+            return raw.filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string');
+        } catch (e) { return []; }
+    }
+    // Wipe the saved chat when this resident signs out (listener only; logout code is untouched).
+    document.querySelectorAll('.btn-logout').forEach(b => {
+        b.addEventListener('click', () => { try { sessionStorage.removeItem(storeKey); } catch (e) {} });
+    });
+
+    // ── rendering ──
+    const fmtTime = ts => new Date(ts).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
+    const scrollDown = () => { log.scrollTop = log.scrollHeight; };
+
+    function buildMessageEl(msg) {
+        const wrap = document.createElement('div');
+        wrap.className = 'chat-msg ' + (msg.role === 'user' ? 'user' : 'bot') + (msg.failed ? ' failed' : '');
+        const bubble = document.createElement('div');
+        bubble.className = 'chat-bubble';
+        if (msg.role === 'user') bubble.textContent = msg.text;
+        else chatRenderRich(bubble, msg.text);
+        wrap.appendChild(bubble);
+
+        if (msg.role === 'assistant') {
+            const labels = chatSourceLabels(msg.sources);
+            if (msg.answered !== false && labels.length) {
+                const s = document.createElement('div');
+                s.className = 'chat-source';
+                s.textContent = 'Based on: ' + labels.join(' · ');
+                wrap.appendChild(s);
+            }
+            if (msg.answered === false && msg.saved) {
+                const n = document.createElement('div');
+                n.className = 'chat-note';
+                n.textContent = 'Your question was forwarded to the barangay staff for review.';
+                wrap.appendChild(n);
+            }
+        }
+        const meta = document.createElement('div');
+        meta.className = 'chat-meta';
+        meta.textContent = msg.failed ? 'Not sent' : fmtTime(msg.ts);
+        wrap.appendChild(meta);
+        msg.el = wrap;
+        return wrap;
+    }
+
+    // Rebuild a message's bubble in place (used when it flips to / from "Not sent")
+    function rerender(msg) {
+        const old = msg.el;
+        const fresh = buildMessageEl(msg);
+        if (old && old.isConnected) old.replaceWith(fresh);
+        else log.appendChild(fresh);
+    }
+
+    function buildWelcome() {
+        const wrap = document.createElement('div');
+        wrap.className = 'chat-msg bot';
+        const bubble = document.createElement('div');
+        bubble.className = 'chat-bubble';
+        const p = document.createElement('p');
+        const first = (userData && userData.firstName) ? ' ' + userData.firstName : '';
+        p.textContent = `Hello${first}! I'm the BarangayDocs assistant. Ask me about barangay documents, requirements, and how to request them.`;
+        bubble.appendChild(p);
+        wrap.appendChild(bubble);
+        const chips = document.createElement('div');
+        chips.className = 'chat-chips';
+        chips.id = 'chatChips';
+        CHAT_SUGGESTIONS.forEach(q => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'chat-chip';
+            b.textContent = q;
+            b.addEventListener('click', () => sendMessage(q));
+            chips.appendChild(b);
+        });
+        wrap.appendChild(chips);
+        return wrap;
+    }
+
+    function renderAll() {
+        log.replaceChildren(buildWelcome());
+        state.messages.forEach(m => log.appendChild(buildMessageEl(m)));
+        typingEl = null; errorEl = null;
+        syncChrome();
+        scrollDown();
+    }
+
+    // Send/clear buttons, suggestion chips, character counter
+    function syncChrome() {
+        const len = input.value.length;
+        sendBtn.disabled = state.busy || !input.value.trim();
+        clearBtn.disabled = state.messages.length === 0 && !state.busy;
+        const chips = el('chatChips');
+        if (chips) chips.hidden = state.messages.length > 0;
+        count.textContent = len >= CHAT_MAX_LEN - 100 ? `${len}/${CHAT_MAX_LEN}` : '';
+        log.setAttribute('aria-busy', state.busy ? 'true' : 'false');
+    }
+
+    function showTyping() {
+        typingEl = document.createElement('div');
+        typingEl.className = 'chat-msg bot chat-typing';
+        typingEl.setAttribute('role', 'status');
+        typingEl.setAttribute('aria-label', 'The assistant is typing');
+        const dots = document.createElement('div');
+        dots.className = 'chat-bubble';
+        for (let i = 0; i < 3; i++) dots.appendChild(document.createElement('span'));
+        typingEl.appendChild(dots);
+        log.appendChild(typingEl);
+        scrollDown();
+    }
+    function hideTyping() { if (typingEl) { typingEl.remove(); typingEl = null; } }
+    function clearError() { if (errorEl) { errorEl.remove(); errorEl = null; } }
+    function showError(info) {
+        clearError();
+        errorEl = document.createElement('div');
+        errorEl.className = 'chat-error';
+        errorEl.setAttribute('role', 'alert');
+        const t = document.createElement('span');
+        t.textContent = info.text;
+        errorEl.appendChild(t);
+        if (info.retry && state.failed) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = 'Try again';
+            b.addEventListener('click', () => sendMessage(state.failed.text, true));
+            errorEl.appendChild(b);
+        }
+        log.appendChild(errorEl);
+        scrollDown();
+    }
+
+    // ── open / close ──
+    const isMobile = () => window.matchMedia('(max-width: 640px)').matches;
+    function fitToViewport() {            // keeps the input above the on-screen keyboard on phones
+        const vv = window.visualViewport;
+        if (vv && isMobile() && win.classList.contains('open')) {
+            win.style.height = vv.height + 'px';
+            win.style.top = vv.offsetTop + 'px';
+            win.style.bottom = 'auto';
+        } else {
+            win.style.height = win.style.top = win.style.bottom = '';
+        }
+    }
+    function openChat() {
+        win.classList.add('open');
+        fab.classList.add('is-open');
+        fab.classList.remove('has-new');
+        fab.setAttribute('aria-expanded', 'true');
+        fab.setAttribute('aria-label', 'Close BarangayDocs assistant');
+        if (isMobile()) document.body.classList.add('chat-lock');
+        fitToViewport();
+        scrollDown();
+        if (window.matchMedia('(hover: hover)').matches) input.focus({ preventScroll: true });
+    }
+    function closeChat(returnFocus = true) {
+        win.classList.remove('open');
+        fab.classList.remove('is-open');
+        fab.setAttribute('aria-expanded', 'false');
+        fab.setAttribute('aria-label', 'Open BarangayDocs assistant');
+        document.body.classList.remove('chat-lock');
+        confirmBar.hidden = true;
+        fitToViewport();
+        if (returnFocus) fab.focus({ preventScroll: true });
+    }
+    const isOpen = () => win.classList.contains('open');
+
+    // ── sending ──
+    async function sendMessage(rawText, isRetry = false) {
+        const text = String(rawText || '').trim().slice(0, CHAT_MAX_LEN);
+        if (!text || state.busy) return;
+        clearError();
+
+        let msg;
+        if (isRetry && state.failed) {
+            msg = state.failed;
+            state.failed = null;
+            msg.failed = false;
+            rerender(msg);
+        } else {
+            msg = { role: 'user', text, ts: Date.now() };
+            state.messages.push(msg);
+            log.appendChild(buildMessageEl(msg));
+        }
+
+        // Context = earlier successful messages only (not this one, not unsent ones)
+        const idx = state.messages.indexOf(msg);
+        const history = state.messages.slice(0, idx)
+            .filter(m => !m.failed && m.text)
+            .slice(-CHAT_HISTORY_MSGS)
+            .map(m => ({ role: m.role, content: m.text }));
+
+        input.value = '';
+        input.style.height = '';
+        state.busy = true;
+        syncChrome();
+        showTyping();
+
+        const myReq = ++state.reqId;
+        const controller = new AbortController();
+        state.controller = controller;
+        let timedOut = false;
+        const timer = setTimeout(() => { timedOut = true; controller.abort(); }, CHAT_TIMEOUT_MS);
+        let status = 0;
+
+        try {
+            const headers = { 'Content-Type': 'application/json' };
+            try { headers.Authorization = 'Bearer ' + await user.getIdToken(); } catch (e) { /* endpoint also works without it */ }
+
+            const res = await fetch(AI_CHAT_URL, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ message: text, history }),
+                signal: controller.signal
+            });
+            status = res.status;
+            let data = null;
+            try { data = await res.json(); } catch (e) { /* non-JSON body */ }
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            if (!data || typeof data.reply !== 'string' || !data.reply.trim()) throw new Error('Empty reply');
+
+            if (myReq !== state.reqId) return;          // conversation was cleared while waiting
+            hideTyping();
+            const reply = {
+                role: 'assistant',
+                text: data.reply.trim(),
+                ts: Date.now(),
+                answered: data.answered !== false,
+                saved: !!data.questionSaved,
+                sources: chatSourceLabels(data.sources)
+            };
+            state.messages.push(reply);
+            log.appendChild(buildMessageEl(reply));
+            saveStored();
+            if (!isOpen()) fab.classList.add('has-new');
+            scrollDown();
+        } catch (err) {
+            if (myReq !== state.reqId) return;          // cleared / superseded
+            console.error('Chatbot request failed:', err);
+            hideTyping();
+            msg.failed = true;
+            state.failed = msg;
+            rerender(msg);
+            showError(chatErrorInfo(err, status, timedOut));
+            if (!isOpen()) fab.classList.add('has-new');
+        } finally {
+            clearTimeout(timer);
+            if (myReq === state.reqId) {
+                state.busy = false;
+                state.controller = null;
+                syncChrome();
+                if (isOpen() && window.matchMedia('(hover: hover)').matches) input.focus({ preventScroll: true });
+            }
+        }
+    }
+
+    // ── clear conversation ──
+    function clearConversation() {
+        state.reqId++;                                   // ignore any reply still on its way
+        if (state.controller) state.controller.abort();
+        state.controller = null;
+        state.busy = false;
+        state.failed = null;
+        state.messages = [];
+        saveStored();
+        confirmBar.hidden = true;
+        renderAll();
+        input.focus({ preventScroll: true });
+    }
+
+    // ── events ──
+    fab.addEventListener('click', () => (isOpen() ? closeChat() : openChat()));
+    closeBtn.addEventListener('click', () => closeChat());
+    clearBtn.addEventListener('click', () => { confirmBar.hidden = false; });
+    confirmNo.addEventListener('click', () => { confirmBar.hidden = true; });
+    confirmYes.addEventListener('click', clearConversation);
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        sendMessage(input.value);
+    });
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+            e.preventDefault();
+            sendMessage(input.value);
+        }
+    });
+    input.addEventListener('input', () => {
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight + 4, 120) + 'px';
+        syncChrome();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' || !isOpen()) return;
+        if (!confirmBar.hidden) confirmBar.hidden = true;
+        else closeChat();
+    });
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', fitToViewport);
+        window.visualViewport.addEventListener('scroll', fitToViewport);
+    }
+    window.addEventListener('resize', () => {
+        if (!isMobile()) document.body.classList.remove('chat-lock');
+        else if (isOpen()) document.body.classList.add('chat-lock');
+        fitToViewport();
+    });
+
+    // ── start ──
+    state.messages = loadStored();
+    renderAll();
+    root.hidden = false;
+}
+// ===== CHATBOT END =====
 
 // =============================================
 // =============================================
