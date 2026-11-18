@@ -156,6 +156,7 @@ textarea{resize:vertical;min-height:110px;line-height:1.45}
     <div class="tabs">
       <button class="tab on" data-tab="kb">Knowledge Base <span id="kbCount"></span></button>
       <button class="tab" data-tab="un">Unanswered <span class="n" id="unCount" hidden>0</span></button>
+      <button class="tab" data-tab="rt">Chat Ratings <span id="rtCount"></span></button>
     </div>
 
     <section id="kbPane">
@@ -165,6 +166,14 @@ textarea{resize:vertical;min-height:110px;line-height:1.45}
         <select id="kbStatus"><option value="">All statuses</option><option value="approved">Approved</option><option value="draft">Draft</option></select>
       </div>
       <div id="kbList"></div>
+    </section>
+
+    <section id="rtPane" hidden>
+      <div class="toolbar">
+        <select id="rtFilter"><option value="">All ratings</option><option value="5">5 stars</option><option value="4">4 stars</option><option value="3">3 stars</option><option value="2">2 stars</option><option value="1">1 star</option></select>
+      </div>
+      <div id="rtSummary" class="row2" style="margin-bottom:12px"></div>
+      <div id="rtList"></div>
     </section>
 
     <section id="unPane" hidden>
@@ -224,11 +233,11 @@ import {getFirestore,doc,getDoc,collection,onSnapshot,writeBatch,deleteDoc,updat
 // Reuse the default app if adminnavbar.js already created it; only initialize as a fallback
 const app=getApps().length?getApp():initializeApp({apiKey:"AIzaSyDqRAX7DEFl2r6JbDpdsEOkip3jblgRTag",authDomain:"barangaydocs-df957.firebaseapp.com",projectId:"barangaydocs-df957",storageBucket:"barangaydocs-df957.firebasestorage.app",messagingSenderId:"1006488581565",appId:"1:1006488581565:web:b1269001298ff935838ed4"});
 const auth=getAuth(app),db=getFirestore(app);
-const KB="aiKnowledge",UN="aiUnanswered";
+const KB="aiKnowledge",UN="aiUnanswered",RT="aiRatings";
 const LOGIN="../barangaydocs_login.html";
 const $=id=>document.getElementById(id);
 const REASONS={"no-match":"No match","model-no-answer":"AI had no answer",partial:"Partly answered"};
-let entries=[],unans=[],tab="kb",uid=null,editing=null,fromUn=null,kws=[],delFn=null,attachUn=null,loadErr=false;
+let entries=[],unans=[],ratings=[],tab="kb",uid=null,editing=null,fromUn=null,kws=[],delFn=null,attachUn=null,loadErr=false;
 
 // Small DOM helper: text only, never innerHTML, so admin-typed text can't inject markup
 function h(tag,props,...kids){const e=document.createElement(tag);
@@ -271,16 +280,17 @@ function start(){
   const onErr=e=>{console.error(e);loadErr=true;renderAll()};
   onSnapshot(collection(db,KB),s=>{entries=s.docs.map(d=>({id:d.id,...d.data()}));loadErr=false;renderAll()},onErr);
   onSnapshot(collection(db,UN),s=>{unans=s.docs.map(d=>({id:d.id,...d.data()}));renderAll()},onErr);
+  onSnapshot(collection(db,RT),s=>{ratings=s.docs.map(d=>({id:d.id,...d.data()}));renderAll()},e=>{console.error(e);ratings=[];renderAll()});
 }
 
 // ---- tabs / filters ----
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{tab=b.dataset.tab;
   document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t===b));
-  $("kbPane").hidden=tab!=="kb";$("unPane").hidden=tab!=="un";$("addBtn").hidden=tab!=="kb"}));
-["kbSearch","kbCat","kbStatus","unSearch","unStatus","unSort"].forEach(id=>$(id).addEventListener("input",renderAll));
+  $("kbPane").hidden=tab!=="kb";$("unPane").hidden=tab!=="un";$("rtPane").hidden=tab!=="rt";$("addBtn").hidden=tab!=="kb"}));
+["kbSearch","kbCat","kbStatus","unSearch","unStatus","unSort","rtFilter"].forEach(id=>$(id).addEventListener("input",renderAll));
 $("addBtn").addEventListener("click",()=>openEditor());
 
-function renderAll(){renderKb();renderUn();
+function renderAll(){renderKb();renderUn();renderRt();
   const n=unans.filter(u=>(u.status||"new")==="new").length;
   $("unCount").textContent=n;$("unCount").hidden=!n;
   const sbb=$("ai-unanswered-badge");sbb.textContent=n;sbb.hidden=!n;
@@ -324,6 +334,24 @@ function renderUn(){
             h("button",{class:"btn sm",type:"button",onclick:()=>openAttach(u)},"Add to existing"),
             h("button",{class:"btn sm",type:"button",onclick:()=>updateDoc(doc(db,UN,u.id),{status:"dismissed",reviewedBy:uid,reviewedAt:serverTimestamp()}).then(()=>toast("Dismissed"),fail)},"Dismiss")],
           h("button",{class:"btn sm danger",type:"button",onclick:()=>askDelete("Delete this unanswered question?",()=>deleteDoc(doc(db,UN,u.id)))},"Delete"))))}))
+}
+function renderRt(){
+  const f=$("rtFilter").value,box=$("rtList"),sum=$("rtSummary");
+  $("rtCount").textContent=ratings.length?"("+ratings.length+")":"";
+  const rated=ratings.filter(r=>+r.rating>=1&&+r.rating<=5),avg=rated.length?rated.reduce((a,r)=>a+ +r.rating,0)/rated.length:0;
+  const dist=[5,4,3,2,1].map(n=>n+"★ "+rated.filter(r=>+r.rating===n).length).join("  ·  ");
+  sum.replaceChildren(
+    h("div",{class:"card",style:"margin:0"},h("div",{class:"hint",style:"margin:0 0 4px"},"AVERAGE RATING"),h("h4",{style:"font-size:24px"},rated.length?avg.toFixed(1)+" / 5":"—")),
+    h("div",{class:"card",style:"margin:0"},h("div",{class:"hint",style:"margin:0 0 4px"},"TOTAL: "+rated.length),h("div",{style:"font-size:12px;font-weight:800;color:var(--text-main)"},dist)));
+  const list=ratings.filter(r=>!f||String(r.rating)===f).sort((a,b)=>ts(b.createdAt)-ts(a.createdAt));
+  if(!list.length){box.replaceChildren(h("div",{class:"empty"},ratings.length?"No ratings match this filter.":"No chat ratings yet. They appear when residents rate the assistant after saying thank you."));return}
+  box.replaceChildren(...list.map(r=>{const n=Math.max(0,Math.min(5,+r.rating||0));
+    return h("div",{class:"card"},
+      h("div",{class:"card-top"},h("div",{style:"min-width:0"},
+        h("h4",{style:"color:#E0A800;letter-spacing:2px"},"★".repeat(n)+"☆".repeat(5-n)),
+        r.comment?h("div",{class:"prev"},r.comment):null,
+        h("div",{class:"meta"},h("span",{},when(r.createdAt)),r.lastQuestion?h("span",{class:"chip"},"Last question: "+String(r.lastQuestion).slice(0,80)):null)),
+        h("div",{class:"actions"},h("button",{class:"btn sm danger",type:"button",onclick:()=>askDelete("Delete this rating?",()=>deleteDoc(doc(db,RT,r.id)))},"Delete"))))}))
 }
 const fail=e=>{console.error(e);toast(e&&e.code==="permission-denied"?"Not allowed: check Firestore rules for admins.":"Something went wrong. Please try again.")};
 
