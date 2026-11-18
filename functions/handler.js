@@ -38,7 +38,10 @@ const extractReply = (data) => {
       .trim();
 };
 
-// deps: {getApiKey, getModel, getEntries, logUnanswered, logger, fetchFn?, allowedOrigins?}
+// deps: {
+//   getApiKey, getModel, getEntries, logUnanswered, logger,
+//   fetchFn?, allowedOrigins?
+// }
 const createHandler = (deps) => {
   const logger = deps.logger;
   const doFetch = deps.fetchFn || fetch;
@@ -121,7 +124,8 @@ const createHandler = (deps) => {
   return async (req, res) => {
     // Handle CORS preflight requests explicitly to ensure correct headers
     // are returned for cross-origin browser requests (firebase-functions v2
-    // cors option may not reliably intercept OPTIONS without explicit handling).
+    // cors option may not reliably intercept OPTIONS
+    // without explicit handling).
     if (req.method === "OPTIONS") {
       const origin = req.headers.origin;
       if (origin && allowedOrigins.includes(origin)) {
