@@ -225,7 +225,7 @@ import {getFirestore,doc,getDoc,collection,onSnapshot,writeBatch,deleteDoc,updat
 const app=getApps().length?getApp():initializeApp({apiKey:"AIzaSyDqRAX7DEFl2r6JbDpdsEOkip3jblgRTag",authDomain:"barangaydocs-df957.firebaseapp.com",projectId:"barangaydocs-df957",storageBucket:"barangaydocs-df957.firebasestorage.app",messagingSenderId:"1006488581565",appId:"1:1006488581565:web:b1269001298ff935838ed4"});
 const auth=getAuth(app),db=getFirestore(app);
 const KB="aiKnowledge",UN="aiUnanswered";
-const LOGIN="../barangaydocs_login.html",HOME="../index.html";
+const LOGIN="../barangaydocs_login.html";
 const $=id=>document.getElementById(id);
 const REASONS={"no-match":"No match","model-no-answer":"AI had no answer",partial:"Partly answered"};
 let entries=[],unans=[],tab="kb",uid=null,editing=null,fromUn=null,kws=[],delFn=null,attachUn=null,loadErr=false;
@@ -255,10 +255,14 @@ $("sign-out-btn").addEventListener("click",async()=>{try{await signOut(auth)}cat
   try{await auth.authStateReady()}catch(e){}
   const u=auth.currentUser;
   if(!u){console.warn("[AI Knowledge] No signed-in user after auth restore; going to login");location.href=LOGIN;return}
-  try{const s=await getDoc(doc(db,"residents",u.uid));
-    const role=s.exists()?String(s.data().role||"").toLowerCase():"";
-    if(role!=="admin"){console.warn("[AI Knowledge] residents/"+u.uid+" exists="+s.exists()+" role="+role+"; not an admin");
-      $("gate").textContent="This page is for admins only. Redirecting…";setTimeout(()=>location.href=HOME,1200);return}
+  try{
+    // Admin accounts live in the "admins" collection (same check adminnavbar.js uses)
+    const a=await getDoc(doc(db,"admins",u.uid));
+    let isAdmin=a.exists();
+    if(!isAdmin){const r=await getDoc(doc(db,"residents",u.uid)).catch(()=>null);
+      isAdmin=!!(r&&r.exists()&&String(r.data().role||"").toLowerCase()==="admin")}
+    if(!isAdmin){console.warn("[AI Knowledge] uid "+u.uid+" is not in admins/ and has no admin role");
+      $("gate").textContent="This page is for admins only. Redirecting…";setTimeout(()=>location.href=LOGIN,1200);return}
     uid=u.uid;$("gate").remove();start()}
   catch(e){console.error(e);$("gate").textContent="Could not verify admin access ("+(e.code||"error")+"). Please refresh."}
 })();
