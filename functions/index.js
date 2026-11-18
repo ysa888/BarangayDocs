@@ -1,4 +1,4 @@
-/**
+﻿/**
  * BarangayDocs - Cloud Functions
  *
  * Stage 1: Gemini AI backend (endpoint `aiChat`).
@@ -42,7 +42,7 @@ const GEMINI_MODEL = defineString("GEMINI_MODEL", {
 const ALLOWED_ORIGINS = [
   "https://barangaydocs-df957.web.app",
   "https://barangaydocs-df957.firebaseapp.com",
-  "https://YOUR-APP.vercel.app",
+  "https://barangaydocs-pcpage.vercel.app",
   "http://localhost:5000",
   "http://localhost:3000",
   "http://127.0.0.1:5500",
