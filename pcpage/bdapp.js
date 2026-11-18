@@ -28,7 +28,9 @@ import {
     onSnapshot,
     serverTimestamp,
     getDocs,
-    updateDoc
+    updateDoc,
+    setDoc,
+    increment
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
 // =============================================
@@ -487,12 +489,15 @@ function renderNotifs() {
 // =============================================
 // =============================================
 // ===== CHATBOT START =====
-// Same project as firebaseConfig; v2 functions default to us-central1
-// (index.js sets no region). Change here only if the function URL differs.
-const AI_CHAT_URL = `https://us-central1-${app.options.projectId}.cloudfunctions.net/aiChat`;
-const CHAT_TIMEOUT_MS   = 35000;  // function timeout is 30s
+// The chatbot no longer calls any server or AI service. It matches the
+// resident's message in the browser (chatbot-matcher.js) against the approved
+// `aiKnowledge` entries in Firestore, and saves unanswered questions to
+// `aiUnanswered` for admin review.
+const KNOWLEDGE_COLLECTION  = 'aiKnowledge';
+const UNANSWERED_COLLECTION = 'aiUnanswered';
+const KNOWLEDGE_TTL_MS      = 5 * 60 * 1000;   // newly approved entries show up within this
+const MAX_LOGGED_QUESTION   = 500;
 const CHAT_MAX_LEN      = 500;    // keep in sync with maxlength in the HTML
-const CHAT_HISTORY_MSGS = 8;      // earlier messages sent along as context
 const CHAT_STORE_MAX    = 40;     // messages kept in sessionStorage
 const CHAT_SUGGESTIONS  = [
     'How do I request a document?',
@@ -500,6 +505,104 @@ const CHAT_SUGGESTIONS  = [
     'How long does processing take?'
 ];
 let chatbotReady = false;
+
+// ── Knowledge base: loaded from Firestore, indexed in the browser, cached ──
+// chatbot-matcher.js is imported lazily so a problem there can never break the page.
+let kbCache = null, kbLoadedAt = 0, kbPending = null;
+async function loadKnowledge() {
+    if (kbCache && Date.now() - kbLoadedAt < KNOWLEDGE_TTL_MS) return kbCache;
+    if (!kbPending) {
+        kbPending = (async () => {
+            const [matcher, snap] = await Promise.all([
+                import('./chatbot-matcher.js'),
+                getDocs(query(collection(db, KNOWLEDGE_COLLECTION), where('status', '==', 'approved')))
+            ]);
+            kbCache = { matcher, index: matcher.buildIndex(snap.docs.map(d => ({ id: d.id, data: d.data() }))) };
+            kbLoadedAt = Date.now();
+            return kbCache;
+        })().finally(() => { kbPending = null; });
+    }
+    try {
+        return await kbPending;
+    } catch (err) {
+        if (kbCache) return kbCache;   // keep serving the last good copy
+        throw err;
+    }
+}
+
+/** SHA-1 of the normalized question = document id (same scheme the old backend used) */
+async function unansweredId(key) {
+    try {
+        const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(key));
+        return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (e) {
+        let h = 5381;                                    // fallback if crypto.subtle is unavailable
+        for (let i = 0; i < key.length; i++) h = ((h << 5) + h + key.charCodeAt(i)) >>> 0;
+        return 'x' + h.toString(16);
+    }
+}
+
+/** One document per distinct question with a repeat counter. Only the question text is stored. */
+async function logUnansweredQuestion(matcher, question, reason) {
+    const text = String(question).trim().slice(0, MAX_LOGGED_QUESTION);
+    const key  = matcher.normalizeText(text).slice(0, 200);
+    const ref  = doc(db, UNANSWERED_COLLECTION, await unansweredId(key));
+    try {
+        await updateDoc(ref, { count: increment(1), lastAskedAt: serverTimestamp(), reason, status: 'new' });
+    } catch (err) {
+        if (err?.code !== 'not-found') throw err;
+        await setDoc(ref, {
+            question: text, normalized: key, reason, status: 'new', count: 1,
+            firstAskedAt: serverTimestamp(), lastAskedAt: serverTimestamp()
+        });
+    }
+}
+
+const chatPick = (list) => list.map(c => ({ id: c.id, question: c.question }));
+
+/** The reply for a typed message. Same shape the old backend returned (+ `choices`). */
+async function answerMessage(text) {
+    const { matcher, index } = await loadKnowledge();
+    const m = matcher.matchMessage(index, text);
+
+    if (m.kind === 'greeting') return { reply: matcher.GREETING_REPLY, answered: false, sources: [] };
+
+    if (m.kind === 'answer') return answerFromEntry(matcher, index, m.entry);
+
+    if (m.kind === 'choices') {
+        return {
+            reply: m.uncertain ? matcher.DID_YOU_MEAN_REPLY : matcher.CHOICES_REPLY,
+            answered: true, sources: [], choices: chatPick(m.choices), choicesLabel: ''
+        };
+    }
+
+    // nothing suitable: say so honestly and record the question for the admin
+    let saved = false;
+    try { await logUnansweredQuestion(matcher, text, 'no-match'); saved = true; }
+    catch (e) { console.warn('Could not save unanswered question:', e); }
+    return { reply: matcher.noAnswerReply(saved), answered: false, questionSaved: saved, sources: [] };
+}
+
+/** The reply for a clicked choice: that entry's own answer, no re-matching. */
+async function answerChoice(entryId) {
+    const { matcher, index } = await loadKnowledge();
+    const entry = index.byId.get(entryId);
+    if (!entry) {
+        return { reply: 'Sorry, that question is no longer available. Please type your question again.', answered: false, sources: [] };
+    }
+    return answerFromEntry(matcher, index, entry);
+}
+
+function answerFromEntry(matcher, index, entry) {
+    const related = matcher.relatedTo(index, entry.id);
+    return {
+        reply: entry.answer.trim(),
+        answered: true,
+        sources: [{ id: entry.id, category: entry.category, question: entry.question }],
+        choices: chatPick(related),
+        choicesLabel: 'You may also want to ask:'
+    };
+}
 
 /** Tiny, safe markdown: paragraphs, - / * / 1. lists and **bold**. Built from text nodes only. */
 function chatInline(parent, text) {
@@ -557,6 +660,7 @@ function chatSourceLabels(sources) {
 
 /** Turn a failure into a calm, resident-friendly message. */
 function chatErrorInfo(err, status, timedOut) {
+    if (err && err.code === 'permission-denied') return { text: 'The assistant\'s knowledge is not available right now. Please contact the barangay office.', retry: false };
     if (timedOut) return { text: 'The assistant took too long to respond. Please try again.', retry: true };
     if (!navigator.onLine) return { text: 'You appear to be offline. Check your internet connection and try again.', retry: true };
     if (status === 429) return { text: 'Too many questions at once. Please wait a moment, then try again.', retry: true };
@@ -627,6 +731,26 @@ function initChatbot(user, userData) {
                 n.className = 'chat-note';
                 n.textContent = 'Your question was forwarded to the barangay staff for review.';
                 wrap.appendChild(n);
+            }
+            // Clickable follow-up questions: close matches, or related questions after an answer
+            if (Array.isArray(msg.choices) && msg.choices.length) {
+                if (msg.choicesLabel) {
+                    const lbl = document.createElement('div');
+                    lbl.className = 'chat-source';
+                    lbl.textContent = msg.choicesLabel;
+                    wrap.appendChild(lbl);
+                }
+                const chips = document.createElement('div');
+                chips.className = 'chat-chips';
+                msg.choices.forEach(c => {
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'chat-chip';
+                    b.textContent = c.question;
+                    b.addEventListener('click', () => sendMessage(c.question, false, { entryId: c.id }));
+                    chips.appendChild(b);
+                });
+                wrap.appendChild(chips);
             }
         }
         const meta = document.createElement('div');
@@ -758,7 +882,7 @@ function initChatbot(user, userData) {
     const isOpen = () => win.classList.contains('open');
 
     // ── sending ──
-    async function sendMessage(rawText, isRetry = false) {
+    async function sendMessage(rawText, isRetry = false, opts = null) {
         const text = String(rawText || '').trim().slice(0, CHAT_MAX_LEN);
         if (!text || state.busy) return;
         clearError();
@@ -771,16 +895,10 @@ function initChatbot(user, userData) {
             rerender(msg);
         } else {
             msg = { role: 'user', text, ts: Date.now() };
+            if (opts && opts.entryId) msg.entryId = opts.entryId;   // a clicked choice: answer that exact entry
             state.messages.push(msg);
             log.appendChild(buildMessageEl(msg));
         }
-
-        // Context = earlier successful messages only (not this one, not unsent ones)
-        const idx = state.messages.indexOf(msg);
-        const history = state.messages.slice(0, idx)
-            .filter(m => !m.failed && m.text)
-            .slice(-CHAT_HISTORY_MSGS)
-            .map(m => ({ role: m.role, content: m.text }));
 
         input.value = '';
         input.style.height = '';
@@ -789,26 +907,13 @@ function initChatbot(user, userData) {
         showTyping();
 
         const myReq = ++state.reqId;
-        const controller = new AbortController();
-        state.controller = controller;
-        let timedOut = false;
-        const timer = setTimeout(() => { timedOut = true; controller.abort(); }, CHAT_TIMEOUT_MS);
-        let status = 0;
+        state.controller = null;
+        const timedOut = false;
+        const status = 0;
 
         try {
-            const headers = { 'Content-Type': 'application/json' };
-            try { headers.Authorization = 'Bearer ' + await user.getIdToken(); } catch (e) { /* endpoint also works without it */ }
-
-            const res = await fetch(AI_CHAT_URL, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ message: text, history }),
-                signal: controller.signal
-            });
-            status = res.status;
-            let data = null;
-            try { data = await res.json(); } catch (e) { /* non-JSON body */ }
-            if (!res.ok) throw new Error('HTTP ' + res.status);
+            // Matched locally against the approved knowledge: a clicked choice shows its own answer
+            const data = msg.entryId ? await answerChoice(msg.entryId) : await answerMessage(text);
             if (!data || typeof data.reply !== 'string' || !data.reply.trim()) throw new Error('Empty reply');
 
             if (myReq !== state.reqId) return;          // conversation was cleared while waiting
@@ -819,7 +924,9 @@ function initChatbot(user, userData) {
                 ts: Date.now(),
                 answered: data.answered !== false,
                 saved: !!data.questionSaved,
-                sources: chatSourceLabels(data.sources)
+                sources: chatSourceLabels(data.sources),
+                choices: Array.isArray(data.choices) ? data.choices : [],
+                choicesLabel: data.choicesLabel || ''
             };
             state.messages.push(reply);
             log.appendChild(buildMessageEl(reply));
@@ -836,7 +943,6 @@ function initChatbot(user, userData) {
             showError(chatErrorInfo(err, status, timedOut));
             if (!isOpen()) fab.classList.add('has-new');
         } finally {
-            clearTimeout(timer);
             if (myReq === state.reqId) {
                 state.busy = false;
                 state.controller = null;
