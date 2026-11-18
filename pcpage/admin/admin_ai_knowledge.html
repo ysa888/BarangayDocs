@@ -186,7 +186,7 @@ textarea{resize:vertical;min-height:110px;line-height:1.45}
     <div class="field"><label for="fQ">Question</label><input id="fQ" maxlength="300" placeholder="How do I request a Barangay Clearance?"></div>
     <div class="field"><label for="fA">Answer</label><textarea id="fA" maxlength="2000" placeholder="Write the approved answer residents will see."></textarea><div class="hint">Supports <b>**bold**</b>, “- ” bullets and “1. ” numbered steps. English or Filipino.</div></div>
     <div class="field"><label for="fAlt">Alternative questions</label><textarea id="fAlt" style="min-height:80px" placeholder="One per line, e.g.&#10;Paano kumuha ng clearance?&#10;Where do I get a clearance?"></textarea><div class="hint">Other ways residents might ask the same thing.</div></div>
-    <div class="field"><label for="kwIn">Keywords</label><div class="kw-box" id="kwBox"><input id="kwIn" placeholder="Type a keyword, press Enter"></div><div class="hint">Single words match by themselves; multi-word keywords match only as a whole phrase.</div></div>
+    <div class="field"><label for="kwIn">Keywords</label><div class="kw-box" id="kwBox"><input id="kwIn" placeholder="Type keywords, separate with commas"></div><div class="hint">Separate keywords with a comma or Enter. Single words match by themselves; multi-word keywords match only as a whole phrase.</div></div>
     <div class="row2">
       <div class="field"><label for="fCat">Category</label><input id="fCat" list="catList" maxlength="60" placeholder="General"><datalist id="catList"></datalist></div>
       <div class="field"><label for="fStatus">Status</label><select id="fStatus"><option value="approved">Approved (live)</option><option value="draft">Draft (hidden)</option></select></div>
@@ -339,6 +339,9 @@ function addKw(raw){raw.split(",").map(s=>norm(s)).filter(Boolean).forEach(k=>{i
 $("kwIn").addEventListener("keydown",e=>{const i=e.target;
   if(e.key==="Enter"||e.key===","){e.preventDefault();addKw(i.value);i.value=""}
   else if(e.key==="Backspace"&&!i.value&&kws.length){kws.pop();drawKw()}});
+// Auto-split as soon as a comma is typed or pasted (works on mobile keyboards too)
+$("kwIn").addEventListener("input",e=>{const i=e.target;
+  if(i.value.includes(",")){const parts=i.value.split(",");const rest=parts.pop();addKw(parts.join(","));i.value=rest}});
 $("kwIn").addEventListener("blur",e=>{if(e.target.value.trim()){addKw(e.target.value);e.target.value=""}});
 
 function openEditor(e,u){editing=e||null;fromUn=u||null;$("editErr").style.display="none";
