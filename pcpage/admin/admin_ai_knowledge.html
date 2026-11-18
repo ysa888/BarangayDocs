@@ -58,7 +58,7 @@ textarea{resize:vertical;min-height:110px;line-height:1.45}
 .card{background:var(--card-bg);border:1.5px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px}
 .card-top{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
 .card h4{font-size:14px;font-weight:800;color:var(--text-main);overflow-wrap:anywhere}
-.card .prev{font-size:12px;color:var(--text-sub);margin-top:5px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card .prev{font-size:12px;color:var(--text-sub);margin-top:5px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:9px;font-size:11px;color:var(--text-sub);font-weight:700}
 .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:800}
 .badge.approved,.badge.resolved{background:var(--green-bg);color:var(--green-text)}
@@ -85,7 +85,6 @@ textarea{resize:vertical;min-height:110px;line-height:1.45}
 .modal-foot{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e1e2e;color:#fff;border-radius:12px;padding:12px 20px;font-size:13px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .3s;z-index:999;max-width:92vw}
 .toast.show{opacity:1}
-#gate{position:fixed;inset:0;background:var(--bg);z-index:900;display:flex;align-items:center;justify-content:center;color:var(--text-sub);font-weight:800}
 @media (max-width:640px){
 .top-navbar{padding:0 14px}.logo-text{font-size:16px}
 .sidebar{transform:translateX(-100%);box-shadow:12px 0 30px rgba(27,58,107,.18)}.sidebar.open{transform:translateX(0)}
@@ -98,7 +97,6 @@ textarea{resize:vertical;min-height:110px;line-height:1.45}
 <link rel="stylesheet" href="adminresponsive.css">
 </head>
 <body>
-<div id="gate">Checking admin access…</div>
 <nav class="top-navbar">
   <div class="navbar-left">
     <button class="hamburger-btn" type="button" aria-label="Toggle navigation" onclick="toggleSidebar()"><span></span><span></span><span></span></button>
@@ -237,7 +235,7 @@ const KB="aiKnowledge",UN="aiUnanswered",RT="aiRatings";
 const LOGIN="../barangaydocs_login.html";
 const $=id=>document.getElementById(id);
 const REASONS={"no-match":"No match","model-no-answer":"AI had no answer",partial:"Partly answered"};
-let entries=[],unans=[],ratings=[],tab="kb",uid=null,editing=null,fromUn=null,kws=[],delFn=null,attachUn=null,loadErr=false;
+let entries=[],unans=[],ratings=[],names={},nameErr={},tab="kb",uid=null,editing=null,fromUn=null,kws=[],delFn=null,attachUn=null,loadErr=false;
 
 // Small DOM helper: text only, never innerHTML, so admin-typed text can't inject markup
 function h(tag,props,...kids){const e=document.createElement(tag);
@@ -245,8 +243,8 @@ function h(tag,props,...kids){const e=document.createElement(tag);
   kids.flat().forEach(c=>{if(c!=null&&c!==false)e.append(c.nodeType?c:document.createTextNode(c))});return e}
 const norm=s=>String(s||"").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim();
 const ts=v=>v&&v.toMillis?v.toMillis():0;
-const when=v=>{const m=ts(v);if(!m)return"—";const d=Date.now()-m,mi=Math.floor(d/6e4),hr=Math.floor(mi/60),dy=Math.floor(hr/24);
-  return mi<1?"Just now":mi<60?mi+"m ago":hr<24?hr+"h ago":dy<7?dy+"d ago":new Date(m).toLocaleDateString("en-PH",{year:"numeric",month:"short",day:"numeric"})};
+const when=v=>{const m=ts(v);if(!m)return"—";
+  return new Date(m).toLocaleString("en-PH",{year:"numeric",month:"short",day:"numeric",hour:"numeric",minute:"2-digit",hour12:true})};
 let tt;const toast=m=>{const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(tt);tt=setTimeout(()=>t.classList.remove("show"),2600)};
 const open=id=>$(id).classList.add("show"),close=id=>$(id).classList.remove("show");
 document.querySelectorAll(".modal-overlay").forEach(o=>{o.addEventListener("click",e=>{if(e.target===o||e.target.hasAttribute("data-close"))o.classList.remove("show")})});
@@ -259,28 +257,27 @@ bd.addEventListener("click",()=>{sb.classList.remove("open");bd.classList.remove
 $("sign-out-btn").addEventListener("click",async()=>{try{await signOut(auth)}catch(e){}location.href=LOGIN});
 
 // ---- auth: admins only (Firestore rules are the real enforcement) ----
+// Runs silently: nothing is loaded until the account is confirmed as an admin.
 (async()=>{
-  // Wait until Firebase has restored the saved session before deciding anything
   try{await auth.authStateReady()}catch(e){}
   const u=auth.currentUser;
-  if(!u){console.warn("[AI Knowledge] No signed-in user after auth restore; going to login");location.href=LOGIN;return}
+  if(!u){location.href=LOGIN;return}
   try{
     // Admin accounts live in the "admins" collection (same check adminnavbar.js uses)
     const a=await getDoc(doc(db,"admins",u.uid));
     let isAdmin=a.exists();
     if(!isAdmin){const r=await getDoc(doc(db,"residents",u.uid)).catch(()=>null);
       isAdmin=!!(r&&r.exists()&&String(r.data().role||"").toLowerCase()==="admin")}
-    if(!isAdmin){console.warn("[AI Knowledge] uid "+u.uid+" is not in admins/ and has no admin role");
-      $("gate").textContent="This page is for admins only. Redirecting…";setTimeout(()=>location.href=LOGIN,1200);return}
-    uid=u.uid;$("gate").remove();start()}
-  catch(e){console.error(e);$("gate").textContent="Could not verify admin access ("+(e.code||"error")+"). Please refresh."}
+    if(!isAdmin){location.href=LOGIN;return}
+    uid=u.uid;start()}
+  catch(e){console.error(e);toast("Could not verify admin access. Please refresh.")}
 })();
 
 function start(){
   const onErr=e=>{console.error(e);loadErr=true;renderAll()};
   onSnapshot(collection(db,KB),s=>{entries=s.docs.map(d=>({id:d.id,...d.data()}));loadErr=false;renderAll()},onErr);
   onSnapshot(collection(db,UN),s=>{unans=s.docs.map(d=>({id:d.id,...d.data()}));renderAll()},onErr);
-  onSnapshot(collection(db,RT),s=>{ratings=s.docs.map(d=>({id:d.id,...d.data()}));renderAll()},e=>{console.error(e);ratings=[];renderAll()});
+  onSnapshot(collection(db,RT),s=>{ratings=s.docs.map(d=>({id:d.id,...d.data()}));renderAll();loadNames()},e=>{console.error(e);renderAll()});
 }
 
 // ---- tabs / filters ----
@@ -335,6 +332,30 @@ function renderUn(){
             h("button",{class:"btn sm",type:"button",onclick:()=>updateDoc(doc(db,UN,u.id),{status:"dismissed",reviewedBy:uid,reviewedAt:serverTimestamp()}).then(()=>toast("Dismissed"),fail)},"Dismiss")],
           h("button",{class:"btn sm danger",type:"button",onclick:()=>askDelete("Delete this unanswered question?",()=>deleteDoc(doc(db,UN,u.id)))},"Delete"))))}))
 }
+// ---- who rated: use a name saved on the rating, else look the resident up by uid (cached) ----
+const nameOf=o=>{if(!o)return"";
+  const direct=o.residentName||o.userName||o.fullName||o.displayName||o.name;
+  if(direct&&String(direct).trim())return String(direct).trim();
+  return[o.firstName,o.middleName,o.lastName].filter(Boolean).join(" ").trim()};
+const raterUid=r=>r.uid||r.userId||r.residentId||r.residentUid||r.createdBy||"";
+function raterName(r){const n=nameOf(r);if(n)return n;const k=raterUid(r);return k&&names[k]?names[k]:""}
+function raterLabel(r){const n=raterName(r);if(n)return n;const k=raterUid(r);
+  if(!k)return"Anonymous resident (old rating, no user ID saved)";
+  const e=nameErr[k];
+  if(e==="loading")return"Loading name\u2026";
+  if(e==="missing")return"Resident record not found";
+  if(e==="noname")return"Resident has no name on record";
+  if(e==="error")return"Could not load name (check console)";
+  return"Anonymous resident"}
+async function loadNames(){
+  const need=[...new Set(ratings.filter(r=>!nameOf(r)).map(raterUid).filter(k=>k&&!(k in names)))];
+  if(!need.length)return;
+  need.forEach(k=>{names[k]="";nameErr[k]="loading"});
+  await Promise.all(need.map(async k=>{try{const d=await getDoc(doc(db,"residents",k));
+    if(d.exists()){names[k]=nameOf(d.data());nameErr[k]=names[k]?"":"noname"}
+    else{nameErr[k]="missing";console.warn("No resident record for",k)}}
+    catch(e){nameErr[k]="error";console.warn("Name lookup failed for",k,e)}}));
+  renderRt()}
 function renderRt(){
   const f=$("rtFilter").value,box=$("rtList"),sum=$("rtSummary");
   $("rtCount").textContent=ratings.length?"("+ratings.length+")":"";
@@ -348,6 +369,7 @@ function renderRt(){
   box.replaceChildren(...list.map(r=>{const n=Math.max(0,Math.min(5,+r.rating||0));
     return h("div",{class:"card"},
       h("div",{class:"card-top"},h("div",{style:"min-width:0"},
+        h("div",{style:"font-size:13px;font-weight:800;color:var(--text-main);margin-bottom:2px"},raterLabel(r)),
         h("h4",{style:"color:#E0A800;letter-spacing:2px"},"★".repeat(n)+"☆".repeat(5-n)),
         r.comment?h("div",{class:"prev"},r.comment):null,
         h("div",{class:"meta"},h("span",{},when(r.createdAt)),r.lastQuestion?h("span",{class:"chip"},"Last question: "+String(r.lastQuestion).slice(0,80)):null)),

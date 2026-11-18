@@ -49,9 +49,32 @@ export function noAnswerReply(saved) {
         ' Sa ngayon, makipag-ugnayan po sa opisina ng barangay.';
 }
 
-export const THANKS_REPLY =
+// Several friendly replies so the bot doesn't repeat the same line every time.
+export const THANKS_REPLIES = [
     "You're welcome! Happy to help. If you have more questions, just ask.\n\n" +
-    'Walang anuman po! Magtanong lang po kung may iba pa kayong gustong malaman.';
+        'Walang anuman po! Magtanong lang po kung may iba pa kayong gustong malaman.',
+    "We're glad we could help! Feel free to ask anything else about BarangayDocs.\n\n" +
+        'Natutuwa po kaming makatulong! Magtanong lang po kung may iba pa kayong kailangan.',
+    "Our pleasure! I'm here whenever you need me.\n\n" +
+        'Walang problema po! Nandito lang po ako kung may kailangan pa kayo.',
+    "Glad that was useful! Let me know if there's anything else you'd like to ask.\n\n" +
+        'Masaya po akong nakatulong! Sabihin lang po kung may iba pa kayong itatanong.',
+    "Anytime! Thank you for using BarangayDocs.\n\n" +
+        'Maraming salamat din po sa paggamit ng BarangayDocs!'
+];
+
+// Picks a random reply, never the same one twice in a row.
+let lastThanks = -1;
+export function thanksReply() {
+    let i;
+    do { i = Math.floor(Math.random() * THANKS_REPLIES.length); }
+    while (i === lastThanks && THANKS_REPLIES.length > 1);
+    lastThanks = i;
+    return THANKS_REPLIES[i];
+}
+
+// Kept so existing imports don't break; prefer thanksReply().
+export const THANKS_REPLY = THANKS_REPLIES[0];
 
 export const CHOICES_REPLY =
     'I found a few questions that might match. Which one do you mean?\n\n' +

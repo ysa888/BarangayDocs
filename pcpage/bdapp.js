@@ -569,7 +569,7 @@ async function answerMessage(text) {
     if (m.kind === 'greeting') return { reply: matcher.GREETING_REPLY, answered: false, sources: [] };
 
     // "thank you" / "salamat": friendly reply, and the chat may follow it with a star rating
-    if (m.kind === 'thanks') return { reply: matcher.THANKS_REPLY, answered: true, thanks: true, sources: [] };
+    if (m.kind === 'thanks') return { reply: matcher.thanksReply(), answered: true, thanks: true, sources: [] };
 
     if (m.kind === 'answer') return answerFromEntry(matcher, index, m.entry);
 
@@ -780,6 +780,32 @@ function initChatbot(user, userData) {
     // ── 1-5 star rating, offered after the resident says thank you ──
     const ratingSaving = new WeakSet(), ratingFailed = new WeakSet();   // transient, never stored
 
+    // ── once-a-day limit ──
+    // localStorage is a fast hint; Firestore is the real check (storage can be cleared).
+    const todayKey = () => {
+        const d = new Date();
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    };
+    const ratedKey = 'bd_rated_' + user.uid;
+    const markRatedToday = () => { try { localStorage.setItem(ratedKey, todayKey()); } catch (e) {} };
+    async function hasRatedToday() {
+        try { if (localStorage.getItem(ratedKey) === todayKey()) return true; } catch (e) {}
+        try {
+            // Single equality filter only (no composite index needed); today's date is checked here.
+            const snap = await getDocs(query(collection(db, RATINGS_COLLECTION), where('uid', '==', user.uid)));
+            const start = new Date(); start.setHours(0, 0, 0, 0);
+            const found = snap.docs.some(d => {
+                const t = d.data().createdAt;
+                return t && t.toMillis && t.toMillis() >= start.getTime();
+            });
+            if (found) markRatedToday();
+            return found;
+        } catch (e) {
+            console.warn('Could not check today\'s rating (check Firestore rules):', e);
+            return false;   // do not block the resident because of a failed check
+        }
+    }
+
     // Ask only if the bot answered something since the last rating prompt
     function canAskRating() {
         let last = -1;
@@ -866,10 +892,13 @@ function initChatbot(user, userData) {
         try {
             await addDoc(collection(db, RATINGS_COLLECTION), {
                 rating: n,
+                uid: user.uid,
+                residentName: [userData.firstName, userData.middleName, userData.lastName].filter(Boolean).join(' '),
                 lastQuestion: String(r.question || '').slice(0, MAX_LOGGED_QUESTION),   // question text only
                 createdAt: serverTimestamp()
             });
             r.value = n;
+            markRatedToday();
         } catch (err) {
             console.warn('Could not save rating:', err);
             ratingFailed.add(msg);
@@ -1027,6 +1056,9 @@ function initChatbot(user, userData) {
             const data = msg.entryId ? await answerChoice(msg.entryId) : await answerMessage(text);
             if (!data || typeof data.reply !== 'string' || !data.reply.trim()) throw new Error('Empty reply');
 
+            // Rating card: only after "thank you", only if useful, and only once per day
+            const askRating = !!data.thanks && canAskRating() && !(await hasRatedToday());
+
             if (myReq !== state.reqId) return;          // conversation was cleared while waiting
             hideTyping();
             const reply = {
@@ -1039,7 +1071,7 @@ function initChatbot(user, userData) {
                 choices: Array.isArray(data.choices) ? data.choices : [],
                 choicesLabel: data.choicesLabel || ''
             };
-            if (data.thanks && canAskRating()) {
+            if (askRating) {
                 const prev = [...state.messages].reverse().find(m => m.role === 'user' && m !== msg);
                 reply.rating = { value: 0, question: prev ? prev.text : '' };
             }
