@@ -49,6 +49,10 @@ export function noAnswerReply(saved) {
         ' Sa ngayon, makipag-ugnayan po sa opisina ng barangay.';
 }
 
+export const THANKS_REPLY =
+    "You're welcome! Happy to help. If you have more questions, just ask.\n\n" +
+    'Walang anuman po! Magtanong lang po kung may iba pa kayong gustong malaman.';
+
 export const CHOICES_REPLY =
     'I found a few questions that might match. Which one do you mean?\n\n' +
     'May nakita akong ilang posibleng tanong. Alin po ang tinutukoy ninyo?';
@@ -90,6 +94,26 @@ function stem(word) {
     else if (w.length > 4 && w.endsWith('ed')) w = w.slice(0, -2);
     if (w.length > 3 && w.endsWith('e')) w = w.slice(0, -1);
     return w;
+}
+
+// ── "Thank you" detection ──
+// Thanks words are also stopwords, so a bare "thank you" would otherwise look empty.
+// A message counts as thanks only when nothing else is left once the thanks
+// words and polite filler are removed ("thanks, how long does it take?" is a question).
+const THANKS_RE = /\b(thank\s*(?:you|u|yous)?|thanks|thankyou|thnx|thx|tnx|tysm|ty|salamat|pasalamat|salamuch)\b/;
+const THANKS_FILLER = new Set(words(`
+  so much lot lots again help helped helping answer answers info information
+  maraming marami assistant bot sir ma maam madam ate kuya tulong sobra sobrang talaga sige cge
+  great awesome nice
+`));
+
+export function isThanks(message) {
+    const n = normalizeText(message);
+    if (!n || n.length > 80 || !THANKS_RE.test(n)) return false;
+    const rest = n.replace(new RegExp(THANKS_RE.source, 'g'), ' ')
+        .split(' ')
+        .filter(w => w && !STOPWORDS.has(w) && !THANKS_FILLER.has(w));
+    return rest.length === 0;
 }
 
 // Very common words in this app: they count for little on their own.
@@ -233,8 +257,9 @@ const idf = (index, token) => {
 };
 
 // ── Matching ──
-// Returns { kind: 'greeting' | 'answer' | 'choices' | 'none', ... }
+// Returns { kind: 'thanks' | 'greeting' | 'answer' | 'choices' | 'none', ... }
 export function matchMessage(index, message) {
+    if (isThanks(message)) return { kind: 'thanks' };
     const qTokens = tokenize(message);
     if (qTokens.length === 0) return { kind: 'greeting' };
     if (!index.entries.length) return { kind: 'none' };

@@ -495,6 +495,7 @@ function renderNotifs() {
 // `aiUnanswered` for admin review.
 const KNOWLEDGE_COLLECTION  = 'aiKnowledge';
 const UNANSWERED_COLLECTION = 'aiUnanswered';
+const RATINGS_COLLECTION    = 'aiRatings';       // 1-5 star ratings given after "thank you"
 const KNOWLEDGE_TTL_MS      = 5 * 60 * 1000;   // newly approved entries show up within this
 const MAX_LOGGED_QUESTION   = 500;
 const CHAT_MAX_LEN      = 500;    // keep in sync with maxlength in the HTML
@@ -566,6 +567,9 @@ async function answerMessage(text) {
     const m = matcher.matchMessage(index, text);
 
     if (m.kind === 'greeting') return { reply: matcher.GREETING_REPLY, answered: false, sources: [] };
+
+    // "thank you" / "salamat": friendly reply, and the chat may follow it with a star rating
+    if (m.kind === 'thanks') return { reply: matcher.THANKS_REPLY, answered: true, thanks: true, sources: [] };
 
     if (m.kind === 'answer') return answerFromEntry(matcher, index, m.entry);
 
@@ -753,6 +757,10 @@ function initChatbot(user, userData) {
                 wrap.appendChild(chips);
             }
         }
+        if (msg.role === 'assistant' && msg.rating) {
+            const rateEl = buildRatingEl(msg);
+            if (rateEl) wrap.appendChild(rateEl);
+        }
         const meta = document.createElement('div');
         meta.className = 'chat-meta';
         meta.textContent = msg.failed ? 'Not sent' : fmtTime(msg.ts);
@@ -767,6 +775,109 @@ function initChatbot(user, userData) {
         const fresh = buildMessageEl(msg);
         if (old && old.isConnected) old.replaceWith(fresh);
         else log.appendChild(fresh);
+    }
+
+    // ── 1-5 star rating, offered after the resident says thank you ──
+    const ratingSaving = new WeakSet(), ratingFailed = new WeakSet();   // transient, never stored
+
+    // Ask only if the bot answered something since the last rating prompt
+    function canAskRating() {
+        let last = -1;
+        state.messages.forEach((m, i) => { if (m.rating) last = i; });
+        return state.messages.slice(last + 1).some(m =>
+            m.role === 'assistant' && m.answered !== false && Array.isArray(m.sources) && m.sources.length);
+    }
+
+    function buildRatingEl(msg) {
+        const r = msg.rating;
+        if (!r || r.skipped) return null;
+        const box = document.createElement('div');
+        box.className = 'chat-rate';
+        const label = document.createElement('div');
+        label.className = 'chat-rate-label';
+
+        if (r.value) {                                   // already rated: show the stars given
+            box.classList.add('done');
+            label.textContent = `Thank you for rating us ${r.value} out of 5! Salamat po!`;
+            const row = document.createElement('div');
+            row.className = 'chat-stars';
+            row.setAttribute('aria-hidden', 'true');
+            for (let i = 1; i <= 5; i++) {
+                const s = document.createElement('span');
+                s.className = 'chat-star' + (i <= r.value ? ' on' : '');
+                s.textContent = '★';
+                row.appendChild(s);
+            }
+            box.append(label, row);
+            return box;
+        }
+
+        label.textContent = 'How would you rate your experience with this assistant? Paano po ninyo ire-rate ang karanasan ninyo?';
+        const row = document.createElement('div');
+        row.className = 'chat-stars';
+        row.setAttribute('role', 'group');
+        row.setAttribute('aria-label', 'Rate from 1 to 5 stars');
+        const busy = ratingSaving.has(msg);
+        const stars = [];
+        const paint = n => stars.forEach((b, i) => b.classList.toggle('on', i < n));
+        for (let i = 1; i <= 5; i++) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'chat-star';
+            b.textContent = '★';
+            b.disabled = busy;
+            b.setAttribute('aria-label', i + (i === 1 ? ' star' : ' stars'));
+            b.addEventListener('mouseenter', () => paint(i));
+            b.addEventListener('focus', () => paint(i));
+            b.addEventListener('click', () => submitRating(msg, i));
+            stars.push(b);
+            row.appendChild(b);
+        }
+        row.addEventListener('mouseleave', () => paint(0));
+        row.addEventListener('focusout', () => paint(0));
+        box.append(label, row);
+
+        if (ratingFailed.has(msg)) {
+            const err = document.createElement('div');
+            err.className = 'chat-rate-err';
+            err.setAttribute('role', 'alert');
+            err.textContent = 'Could not save your rating. Please tap a star to try again.';
+            box.appendChild(err);
+        }
+        const skip = document.createElement('button');
+        skip.type = 'button';
+        skip.className = 'chat-rate-skip';
+        skip.textContent = 'Not now';
+        skip.disabled = busy;
+        skip.addEventListener('click', () => {
+            r.skipped = true;
+            saveStored();
+            if (state.messages.includes(msg)) rerender(msg);
+        });
+        box.appendChild(skip);
+        return box;
+    }
+
+    async function submitRating(msg, n) {
+        const r = msg.rating;
+        if (!r || r.value || ratingSaving.has(msg) || !(n >= 1 && n <= 5)) return;
+        ratingSaving.add(msg); ratingFailed.delete(msg);
+        rerender(msg);
+        try {
+            await addDoc(collection(db, RATINGS_COLLECTION), {
+                rating: n,
+                lastQuestion: String(r.question || '').slice(0, MAX_LOGGED_QUESTION),   // question text only
+                createdAt: serverTimestamp()
+            });
+            r.value = n;
+        } catch (err) {
+            console.warn('Could not save rating:', err);
+            ratingFailed.add(msg);
+        } finally {
+            ratingSaving.delete(msg);
+        }
+        saveStored();
+        if (state.messages.includes(msg)) rerender(msg);   // skip if the chat was cleared meanwhile
     }
 
     function buildWelcome() {
@@ -928,6 +1039,10 @@ function initChatbot(user, userData) {
                 choices: Array.isArray(data.choices) ? data.choices : [],
                 choicesLabel: data.choicesLabel || ''
             };
+            if (data.thanks && canAskRating()) {
+                const prev = [...state.messages].reverse().find(m => m.role === 'user' && m !== msg);
+                reply.rating = { value: 0, question: prev ? prev.text : '' };
+            }
             state.messages.push(reply);
             log.appendChild(buildMessageEl(reply));
             saveStored();
