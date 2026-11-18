@@ -70,6 +70,7 @@ const handler = createHandler({
     return logUnanswered(getFirestore(), FieldValue, question, reason);
   },
   logger: logger,
+  allowedOrigins: ALLOWED_ORIGINS,
 });
 
 const options = {

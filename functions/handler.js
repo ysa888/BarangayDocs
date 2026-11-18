@@ -38,10 +38,11 @@ const extractReply = (data) => {
       .trim();
 };
 
-// deps: {getApiKey, getModel, getEntries, logUnanswered, logger, fetchFn?}
+// deps: {getApiKey, getModel, getEntries, logUnanswered, logger, fetchFn?, allowedOrigins?}
 const createHandler = (deps) => {
   const logger = deps.logger;
   const doFetch = deps.fetchFn || fetch;
+  const allowedOrigins = deps.allowedOrigins || [];
 
   // Call Gemini; returns reply text or throws an httpError.
   const askGemini = async (systemPrompt, userText) => {
@@ -118,6 +119,20 @@ const createHandler = (deps) => {
   };
 
   return async (req, res) => {
+    // Handle CORS preflight requests explicitly to ensure correct headers
+    // are returned for cross-origin browser requests (firebase-functions v2
+    // cors option may not reliably intercept OPTIONS without explicit handling).
+    if (req.method === "OPTIONS") {
+      const origin = req.headers.origin;
+      if (origin && allowedOrigins.includes(origin)) {
+        res.set("Access-Control-Allow-Origin", origin);
+      }
+      res.set("Access-Control-Allow-Methods", "POST");
+      res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      res.set("Access-Control-Max-Age", "3600");
+      return res.status(204).send();
+    }
+
     // CORS preflight (OPTIONS) is answered automatically before this runs.
     if (req.method !== "POST") {
       res.set("Allow", "POST");
