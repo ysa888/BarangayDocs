@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BarangayDocs - AI Knowledge</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--primary:#1B3A6B;--primary-light:#2A5298;--accent:#4FC3F7;--bg:#F0F4FA;--card-bg:#fff;--border:#D0DCF0;--text-main:#1B3A6B;--text-sub:#6B7A99;--text-light:#9AA5BC;--green-bg:#D4EDDA;--green-text:#155724;--yellow-bg:#FFF3CD;--yellow-text:#856404;--red:#DC3545;--red-bg:#F8D7DA;--red-text:#721C24;--blue-bg:#CCE5FF;--blue-text:#004085;--sidebar-w:220px}
+body{font-family:'Nunito',sans-serif;background:var(--bg);min-height:100vh}
+.top-navbar{background:var(--primary);height:60px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:fixed;top:0;left:0;right:0;z-index:200;box-shadow:0 2px 12px rgba(27,58,107,.3)}
+.navbar-left{display:flex;align-items:center;gap:14px}
+.hamburger-btn{width:36px;height:36px;background:rgba(255,255,255,.12);border:none;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-direction:column;gap:4px}
+.hamburger-btn span{display:block;width:18px;height:2px;background:#fff;border-radius:2px}
+.logo-text{font-family:'Poppins',sans-serif;font-size:18px;font-weight:800;color:#fff}
+.logo-text span{color:var(--accent)}
+.admin-badge{background:var(--accent);color:var(--primary);font-size:9px;font-weight:800;padding:2px 7px;border-radius:10px;margin-left:8px}
+.admin-avatar{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.2);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:14px}
+.layout{display:flex;margin-top:60px;min-height:calc(100vh - 60px)}
+.sidebar{width:var(--sidebar-w);background:var(--card-bg);border-right:1.5px solid var(--border);position:fixed;top:60px;left:0;bottom:0;overflow-y:auto;transition:transform .25s;z-index:100}
+.sidebar.collapsed{transform:translateX(calc(-1*var(--sidebar-w)))}
+.sidebar-section{padding:16px 12px 8px}
+.sidebar-section-label{font-size:10px;font-weight:800;color:var(--text-light);letter-spacing:.8px;text-transform:uppercase;margin-bottom:6px;padding:0 8px}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;margin-bottom:2px}
+.sidebar-item svg{width:18px;height:18px;stroke:var(--text-sub);flex-shrink:0}
+.sidebar-item span{font-size:13px;font-weight:700;color:var(--text-sub)}
+.sidebar-item:hover{background:var(--bg)}
+.sidebar-item.active{background:#EBF0FB}
+.sidebar-item.active svg{stroke:var(--primary)}
+.sidebar-item.active span,.sidebar-item:hover span{color:var(--primary)}
+.sidebar-badge{margin-left:auto;color:#000;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;min-width:20px;text-align:center}
+.sidebar-badge.yellow{background:#FFC107}.sidebar-badge.red{background:var(--red)}
+.sidebar-divider{height:1px;background:var(--border);margin:4px 12px}
+.sidebar-backdrop{display:none}
+.main{margin-left:var(--sidebar-w);flex:1;padding:24px;min-width:0;transition:margin-left .25s}
+.main.expanded{margin-left:0}
+.page-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.page-header h1{font-family:'Poppins',sans-serif;font-size:22px;font-weight:700;color:var(--text-main)}
+.page-header p{font-size:13px;color:var(--text-sub);margin-top:3px}
+.note{background:var(--blue-bg);color:var(--blue-text);border-radius:10px;padding:9px 13px;font-size:12px;font-weight:700;margin-bottom:14px}
+.tabs{display:flex;gap:6px;margin-bottom:14px;border-bottom:1.5px solid var(--border)}
+.tab{background:none;border:none;font:800 13px 'Nunito',sans-serif;color:var(--text-sub);padding:10px 14px;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1.5px}
+.tab.on{color:var(--primary);border-color:var(--primary)}
+.tab .n{background:var(--red);color:#fff;border-radius:10px;font-size:10px;padding:1px 7px;margin-left:5px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+input,select,textarea{font:600 13px 'Nunito',sans-serif;color:var(--text-main);background:#fff;border:1.5px solid var(--border);border-radius:9px;padding:9px 11px;outline:none;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--primary-light)}
+.toolbar input{flex:1;min-width:180px}.toolbar select{width:auto;min-width:130px}
+textarea{resize:vertical;min-height:110px;line-height:1.45}
+.btn{font:800 12px 'Nunito',sans-serif;border-radius:9px;padding:9px 15px;cursor:pointer;border:1.5px solid var(--border);background:var(--bg);color:var(--text-sub)}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+.btn.primary:hover{background:var(--primary-light)}
+.btn.danger{background:var(--red-bg);border-color:#F5C6CB;color:var(--red-text)}
+.btn.ok{background:var(--green-bg);border-color:#C3E6CB;color:var(--green-text)}
+.btn.sm{padding:5px 10px;font-size:11px;border-radius:7px}
+.btn:disabled{opacity:.55;cursor:default}
+.card{background:var(--card-bg);border:1.5px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px}
+.card-top{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.card h4{font-size:14px;font-weight:800;color:var(--text-main);overflow-wrap:anywhere}
+.card .prev{font-size:12px;color:var(--text-sub);margin-top:5px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:9px;font-size:11px;color:var(--text-sub);font-weight:700}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:800}
+.badge.approved,.badge.resolved{background:var(--green-bg);color:var(--green-text)}
+.badge.draft,.badge.dismissed{background:var(--yellow-bg);color:var(--yellow-text)}
+.badge.new{background:var(--red-bg);color:var(--red-text)}
+.badge.cat{background:#EBF0FB;color:var(--primary)}
+.chip{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;color:var(--text-sub)}
+.actions{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.empty{padding:34px 16px;text-align:center;color:var(--text-sub);font-size:13px;font-weight:700}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;align-items:center;justify-content:center;padding:12px}
+.modal-overlay.show{display:flex}
+.modal-box{background:#fff;border-radius:18px;padding:22px;width:560px;max-width:100%;max-height:92vh;overflow-y:auto}
+.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.modal-head h3{font-family:'Poppins',sans-serif;font-size:16px;color:var(--text-main)}
+.x{width:32px;height:32px;background:var(--bg);border:none;border-radius:8px;cursor:pointer;font-size:16px}
+.field{margin-bottom:13px}
+.field label{display:block;font-size:11px;font-weight:800;color:var(--text-sub);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px}
+.hint{font-size:11px;color:var(--text-light);margin-top:4px;font-weight:600}
+.err{color:var(--red-text);font-size:12px;font-weight:700;margin-bottom:10px;display:none}
+.kw-box{display:flex;flex-wrap:wrap;gap:6px;border:1.5px solid var(--border);border-radius:9px;padding:6px}
+.kw-box input{border:none;flex:1;min-width:120px;padding:4px 6px;width:auto}
+.kw-box .chip button{background:none;border:none;margin-left:5px;cursor:pointer;color:var(--text-sub);font-weight:800}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal-foot{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e1e2e;color:#fff;border-radius:12px;padding:12px 20px;font-size:13px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .3s;z-index:999;max-width:92vw}
+.toast.show{opacity:1}
+#gate{position:fixed;inset:0;background:var(--bg);z-index:900;display:flex;align-items:center;justify-content:center;color:var(--text-sub);font-weight:800}
+@media (max-width:640px){
+.top-navbar{padding:0 14px}.logo-text{font-size:16px}
+.sidebar{transform:translateX(-100%);box-shadow:12px 0 30px rgba(27,58,107,.18)}.sidebar.open{transform:translateX(0)}
+.sidebar-backdrop{display:block;position:fixed;inset:60px 0 0;background:rgba(15,32,58,.42);opacity:0;pointer-events:none;transition:opacity .25s;z-index:90}
+.sidebar-backdrop.show{opacity:1;pointer-events:auto}
+.main{margin-left:0;padding:18px 14px 28px}
+.card-top{flex-direction:column}.actions{justify-content:flex-start}.row2{grid-template-columns:1fr}
+}
+</style>
+<link rel="stylesheet" href="adminresponsive.css">
+</head>
+<body>
+<div id="gate">Checking admin access…</div>
+<nav class="top-navbar">
+  <div class="navbar-left">
+    <button class="hamburger-btn" type="button" aria-label="Toggle navigation" onclick="toggleSidebar()"><span></span><span></span><span></span></button>
+    <div><span class="logo-text">BARANGAY<span>DOCS</span></span><span class="admin-badge">ADMIN</span></div>
+  </div>
+  <div class="admin-avatar">A</div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Overview</div>
+      <div class="sidebar-item" onclick="location.href='admin_dashboard.html'"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Dashboard</span></div>
+      <div class="sidebar-item" onclick="location.href='admin_analytics.html'"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Analytics</span></div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Requests</div>
+      <div class="sidebar-item" onclick="location.href='admin_pending_requests.html'"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span>Pending Requests</span><span class="sidebar-badge yellow" id="pending-requests-badge">—</span></div>
+      <div class="sidebar-item" onclick="location.href='admin_all_requests.html'"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"/></svg><span>All Requests</span></div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Users</div>
+      <div class="sidebar-item" onclick="location.href='admin_pending_users.html'"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg><span>Pending Users</span><span class="sidebar-badge red" id="pending-users-badge">—</span></div>
+      <div class="sidebar-item" onclick="location.href='admin_profile_changes.html'"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span>Profile Changes</span><span class="sidebar-badge red" id="profile-changes-badge">—</span></div>
+      <div class="sidebar-item" onclick="location.href='admin_all_users.html'"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>All Users</span></div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Tools</div>
+      <div class="sidebar-item" onclick="location.href='admin_scanqr.html'"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M14 14h.01M14 17h3M17 14v7"/></svg><span>Scan QR</span></div>
+      <div class="sidebar-item" onclick="location.href='admin_documents.html'"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg><span>Documents</span></div>
+      <div class="sidebar-item" onclick="location.href='admin_templates.html'"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg><span>Document Templates</span></div>
+      <div class="sidebar-item active" onclick="location.href='admin_ai_knowledge.html'"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9 9h6M9 13h4"/></svg><span>AI Knowledge</span><span class="sidebar-badge red" id="ai-unanswered-badge" hidden>0</span></div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Audit Logs</div>
+      <div class="sidebar-item" onclick="location.href='admin_audit_log.html'"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg><span>Audit Log</span></div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-item" id="sign-out-btn"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke="#DC3545"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span style="color:#DC3545">Sign Out</span></div>
+    </div>
+  </aside>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+
+  <main class="main" id="mainContent">
+    <div class="page-header">
+      <div><h1>AI Knowledge</h1><p>Manage what the resident chatbot can answer</p></div>
+      <button class="btn primary" id="addBtn" type="button">+ Add Q&amp;A</button>
+    </div>
+    <div class="note">Only <b>Approved</b> entries are used by the chatbot. Residents see changes within about 5 minutes.</div>
+    <div class="tabs">
+      <button class="tab on" data-tab="kb">Knowledge Base <span id="kbCount"></span></button>
+      <button class="tab" data-tab="un">Unanswered <span class="n" id="unCount" hidden>0</span></button>
+    </div>
+
+    <section id="kbPane">
+      <div class="toolbar">
+        <input id="kbSearch" type="search" placeholder="Search questions, answers, keywords…">
+        <select id="kbCat"><option value="">All categories</option></select>
+        <select id="kbStatus"><option value="">All statuses</option><option value="approved">Approved</option><option value="draft">Draft</option></select>
+      </div>
+      <div id="kbList"></div>
+    </section>
+
+    <section id="unPane" hidden>
+      <div class="toolbar">
+        <input id="unSearch" type="search" placeholder="Search unanswered questions…">
+        <select id="unStatus"><option value="new">New</option><option value="resolved">Resolved</option><option value="dismissed">Dismissed</option><option value="">All</option></select>
+        <select id="unSort"><option value="count">Most asked</option><option value="recent">Most recent</option></select>
+      </div>
+      <div id="unList"></div>
+    </section>
+  </main>
+</div>
+
+<!-- Add / edit entry -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal-box" role="dialog" aria-modal="true">
+    <div class="modal-head"><h3 id="editTitle">Add Q&amp;A</h3><button class="x" type="button" data-close>✕</button></div>
+    <div class="err" id="editErr"></div>
+    <div class="field"><label for="fQ">Question</label><input id="fQ" maxlength="300" placeholder="How do I request a Barangay Clearance?"></div>
+    <div class="field"><label for="fA">Answer</label><textarea id="fA" maxlength="2000" placeholder="Write the approved answer residents will see."></textarea><div class="hint">Supports <b>**bold**</b>, “- ” bullets and “1. ” numbered steps. English or Filipino.</div></div>
+    <div class="field"><label for="fAlt">Alternative questions</label><textarea id="fAlt" style="min-height:80px" placeholder="One per line, e.g.&#10;Paano kumuha ng clearance?&#10;Where do I get a clearance?"></textarea><div class="hint">Other ways residents might ask the same thing.</div></div>
+    <div class="field"><label for="kwIn">Keywords</label><div class="kw-box" id="kwBox"><input id="kwIn" placeholder="Type a keyword, press Enter"></div><div class="hint">Single words match by themselves; multi-word keywords match only as a whole phrase.</div></div>
+    <div class="row2">
+      <div class="field"><label for="fCat">Category</label><input id="fCat" list="catList" maxlength="60" placeholder="General"><datalist id="catList"></datalist></div>
+      <div class="field"><label for="fStatus">Status</label><select id="fStatus"><option value="approved">Approved (live)</option><option value="draft">Draft (hidden)</option></select></div>
+    </div>
+    <div class="modal-foot"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="button" id="saveBtn">Save</button></div>
+  </div>
+</div>
+
+<!-- Attach unanswered question to an existing entry -->
+<div class="modal-overlay" id="attachModal">
+  <div class="modal-box" role="dialog" aria-modal="true">
+    <div class="modal-head"><h3>Add as alternative question</h3><button class="x" type="button" data-close>✕</button></div>
+    <p id="attachQ" style="font-weight:800;color:var(--text-main);font-size:13px;margin-bottom:12px;overflow-wrap:anywhere"></p>
+    <div class="field"><label for="attachSel">Existing entry</label><select id="attachSel"></select></div>
+    <div class="modal-foot"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="button" id="attachBtn">Add</button></div>
+  </div>
+</div>
+
+<!-- Confirm delete -->
+<div class="modal-overlay" id="delModal">
+  <div class="modal-box" style="width:400px" role="dialog" aria-modal="true">
+    <div class="modal-head"><h3>Delete permanently?</h3><button class="x" type="button" data-close>✕</button></div>
+    <p id="delMsg" style="font-size:13px;color:var(--text-sub);margin-bottom:16px;overflow-wrap:anywhere"></p>
+    <div class="modal-foot"><button class="btn" type="button" data-close>Cancel</button><button class="btn danger" type="button" id="delBtn">Delete</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script type="module" src="adminnavbar.js"></script>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
+import {getAuth,onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
+import {getFirestore,doc,getDoc,collection,onSnapshot,writeBatch,deleteDoc,updateDoc,arrayUnion,serverTimestamp} from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+const app=initializeApp({apiKey:"AIzaSyDqRAX7DEFl2r6JbDpdsEOkip3jblgRTag",authDomain:"barangaydocs-df957.firebaseapp.com",projectId:"barangaydocs-df957",storageBucket:"barangaydocs-df957.firebasestorage.app",messagingSenderId:"1006488581565",appId:"1:1006488581565:web:b1269001298ff935838ed4"});
+const auth=getAuth(app),db=getFirestore(app);
+const KB="aiKnowledge",UN="aiUnanswered";
+const LOGIN="../barangaydocs_login.html",HOME="../index.html";
+const $=id=>document.getElementById(id);
+const REASONS={"no-match":"No match","model-no-answer":"AI had no answer",partial:"Partly answered"};
+let entries=[],unans=[],tab="kb",uid=null,editing=null,fromUn=null,kws=[],delFn=null,attachUn=null,loadErr=false;
+
+// Small DOM helper: text only, never innerHTML, so admin-typed text can't inject markup
+function h(tag,props,...kids){const e=document.createElement(tag);
+  for(const[k,v]of Object.entries(props||{})){if(k==="class")e.className=v;else if(k.startsWith("on"))e.addEventListener(k.slice(2),v);else e.setAttribute(k,v)}
+  kids.flat().forEach(c=>{if(c!=null&&c!==false)e.append(c.nodeType?c:document.createTextNode(c))});return e}
+const norm=s=>String(s||"").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim();
+const ts=v=>v&&v.toMillis?v.toMillis():0;
+const when=v=>{const m=ts(v);if(!m)return"—";const d=Date.now()-m,mi=Math.floor(d/6e4),hr=Math.floor(mi/60),dy=Math.floor(hr/24);
+  return mi<1?"Just now":mi<60?mi+"m ago":hr<24?hr+"h ago":dy<7?dy+"d ago":new Date(m).toLocaleDateString("en-PH",{year:"numeric",month:"short",day:"numeric"})};
+let tt;const toast=m=>{const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(tt);tt=setTimeout(()=>t.classList.remove("show"),2600)};
+const open=id=>$(id).classList.add("show"),close=id=>$(id).classList.remove("show");
+document.querySelectorAll(".modal-overlay").forEach(o=>{o.addEventListener("click",e=>{if(e.target===o||e.target.hasAttribute("data-close"))o.classList.remove("show")})});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")document.querySelectorAll(".modal-overlay.show").forEach(o=>o.classList.remove("show"))});
+
+// ---- sidebar (adminnavbar.js may already define these; only fill gaps) ----
+const sb=$("sidebar"),bd=$("sidebarBackdrop"),mq=matchMedia("(max-width:640px)");
+if(typeof window.toggleSidebar!=="function"){window.toggleSidebar=()=>{if(mq.matches){sb.classList.toggle("open");bd.classList.toggle("show",sb.classList.contains("open"))}else{sb.classList.toggle("collapsed");$("mainContent").classList.toggle("expanded")}}}
+bd.addEventListener("click",()=>{sb.classList.remove("open");bd.classList.remove("show")});
+$("sign-out-btn").addEventListener("click",async()=>{try{await signOut(auth)}catch(e){}location.href=LOGIN});
+
+// ---- auth: admins only (Firestore rules are the real enforcement) ----
+onAuthStateChanged(auth,async u=>{
+  if(!u){location.href=LOGIN;return}
+  try{const s=await getDoc(doc(db,"residents",u.uid));
+    if(!s.exists()||s.data().role!=="admin"){location.href=HOME;return}
+    uid=u.uid;$("gate").remove();start()}
+  catch(e){$("gate").textContent="Could not verify admin access. Please refresh."}
+});
+
+function start(){
+  const onErr=e=>{console.error(e);loadErr=true;renderAll()};
+  onSnapshot(collection(db,KB),s=>{entries=s.docs.map(d=>({id:d.id,...d.data()}));loadErr=false;renderAll()},onErr);
+  onSnapshot(collection(db,UN),s=>{unans=s.docs.map(d=>({id:d.id,...d.data()}));renderAll()},onErr);
+}
+
+// ---- tabs / filters ----
+document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{tab=b.dataset.tab;
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t===b));
+  $("kbPane").hidden=tab!=="kb";$("unPane").hidden=tab!=="un";$("addBtn").hidden=tab!=="kb"}));
+["kbSearch","kbCat","kbStatus","unSearch","unStatus","unSort"].forEach(id=>$(id).addEventListener("input",renderAll));
+$("addBtn").addEventListener("click",()=>openEditor());
+
+function renderAll(){renderKb();renderUn();
+  const n=unans.filter(u=>(u.status||"new")==="new").length;
+  $("unCount").textContent=n;$("unCount").hidden=!n;
+  const sbb=$("ai-unanswered-badge");sbb.textContent=n;sbb.hidden=!n;
+  $("kbCount").textContent=entries.length?"("+entries.length+")":"";
+  const cats=[...new Set(entries.map(e=>e.category||"General"))].sort(),cur=$("kbCat").value;
+  $("kbCat").replaceChildren(h("option",{value:""},"All categories"),...cats.map(c=>h("option",{value:c},c)));$("kbCat").value=cats.includes(cur)?cur:"";
+  $("catList").replaceChildren(...cats.map(c=>h("option",{value:c})));
+}
+
+function renderKb(){
+  const q=norm($("kbSearch").value),c=$("kbCat").value,st=$("kbStatus").value,box=$("kbList");
+  if(loadErr){box.replaceChildren(h("div",{class:"empty"},"Could not load knowledge entries. Check your connection and that your account has admin access in the Firestore rules."));return}
+  const list=entries.filter(e=>(!c||(e.category||"General")===c)&&(!st||(e.status||"draft")===st)&&
+    (!q||norm([e.question,e.answer,...(e.keywords||[]),...(e.alternativeQuestions||[])].join(" ")).includes(q)))
+    .sort((a,b)=>(a.category||"").localeCompare(b.category||"")||(a.question||"").localeCompare(b.question||""));
+  if(!list.length){box.replaceChildren(h("div",{class:"empty"},entries.length?"No entries match your filters.":"No entries yet. Click “+ Add Q&A” or answer an unanswered question."));return}
+  box.replaceChildren(...list.map(e=>{const alts=e.alternativeQuestions||[],kw=e.keywords||[],stt=e.status||"draft";
+    return h("div",{class:"card"},
+      h("div",{class:"card-top"},
+        h("div",{style:"min-width:0"},h("h4",{},e.question),h("div",{class:"prev"},e.answer)),
+        h("div",{class:"actions"},h("button",{class:"btn sm",type:"button",onclick:()=>openEditor(e)},"Edit"),
+          h("button",{class:"btn sm danger",type:"button",onclick:()=>askDelete("Delete the entry “"+e.question+"”? The chatbot will stop answering it.",()=>deleteDoc(doc(db,KB,e.id)))},"Delete"))),
+      h("div",{class:"meta"},h("span",{class:"badge "+stt},stt==="approved"?"Approved":"Draft"),h("span",{class:"badge cat"},e.category||"General"),
+        alts.length?h("span",{},alts.length+" alt question"+(alts.length>1?"s":"")):null,kw.slice(0,8).map(k=>h("span",{class:"chip"},k)),kw.length>8?h("span",{},"+"+(kw.length-8)):null))}))
+}
+
+function renderUn(){
+  const q=norm($("unSearch").value),st=$("unStatus").value,box=$("unList");
+  if(loadErr){box.replaceChildren(h("div",{class:"empty"},"Could not load unanswered questions."));return}
+  const list=unans.filter(u=>(!st||(u.status||"new")===st)&&(!q||norm(u.question).includes(q)))
+    .sort($("unSort").value==="recent"?(a,b)=>ts(b.lastAskedAt)-ts(a.lastAskedAt):(a,b)=>(b.count||1)-(a.count||1)||ts(b.lastAskedAt)-ts(a.lastAskedAt));
+  if(!list.length){box.replaceChildren(h("div",{class:"empty"},unans.length?"Nothing here for this filter.":"No unanswered questions yet. 🎉"));return}
+  box.replaceChildren(...list.map(u=>{const s=u.status||"new",done=s!=="new";
+    return h("div",{class:"card"},
+      h("div",{class:"card-top"},
+        h("div",{style:"min-width:0"},h("h4",{},u.question),
+          h("div",{class:"meta"},h("span",{class:"badge "+s},s[0].toUpperCase()+s.slice(1)),h("span",{},"Asked "+(u.count||1)+"×"),h("span",{},"Last: "+when(u.lastAskedAt)),h("span",{class:"chip"},REASONS[u.reason]||u.reason||"—"))),
+        h("div",{class:"actions"},
+          done?h("button",{class:"btn sm",type:"button",onclick:()=>updateDoc(doc(db,UN,u.id),{status:"new"}).then(()=>toast("Reopened"),fail)},"Reopen"):[
+            h("button",{class:"btn sm ok",type:"button",onclick:()=>openEditor(null,u)},"Answer it"),
+            h("button",{class:"btn sm",type:"button",onclick:()=>openAttach(u)},"Add to existing"),
+            h("button",{class:"btn sm",type:"button",onclick:()=>updateDoc(doc(db,UN,u.id),{status:"dismissed",reviewedBy:uid,reviewedAt:serverTimestamp()}).then(()=>toast("Dismissed"),fail)},"Dismiss")],
+          h("button",{class:"btn sm danger",type:"button",onclick:()=>askDelete("Delete this unanswered question?",()=>deleteDoc(doc(db,UN,u.id)))},"Delete"))))}))
+}
+const fail=e=>{console.error(e);toast(e&&e.code==="permission-denied"?"Not allowed: check Firestore rules for admins.":"Something went wrong. Please try again.")};
+
+// ---- delete ----
+function askDelete(msg,fn){$("delMsg").textContent=msg;delFn=fn;open("delModal")}
+$("delBtn").addEventListener("click",async()=>{const b=$("delBtn");b.disabled=true;
+  try{await delFn();close("delModal");toast("Deleted")}catch(e){fail(e)}b.disabled=false});
+
+// ---- editor ----
+function drawKw(){$("kwBox").querySelectorAll(".chip").forEach(c=>c.remove());
+  kws.forEach((k,i)=>$("kwBox").insertBefore(h("span",{class:"chip"},k,h("button",{type:"button","aria-label":"Remove "+k,onclick:()=>{kws.splice(i,1);drawKw()}},"×")),$("kwIn")))}
+function addKw(raw){raw.split(",").map(s=>norm(s)).filter(Boolean).forEach(k=>{if(k.length<=60&&kws.length<40&&!kws.includes(k))kws.push(k)});drawKw()}
+$("kwIn").addEventListener("keydown",e=>{const i=e.target;
+  if(e.key==="Enter"||e.key===","){e.preventDefault();addKw(i.value);i.value=""}
+  else if(e.key==="Backspace"&&!i.value&&kws.length){kws.pop();drawKw()}});
+$("kwIn").addEventListener("blur",e=>{if(e.target.value.trim()){addKw(e.target.value);e.target.value=""}});
+
+function openEditor(e,u){editing=e||null;fromUn=u||null;$("editErr").style.display="none";
+  $("editTitle").textContent=e?"Edit Q&A":u?"Answer unanswered question":"Add Q&A";
+  $("fQ").value=e?e.question:u?u.question:"";$("fA").value=e?e.answer:"";
+  $("fAlt").value=e?(e.alternativeQuestions||[]).join("\n"):"";
+  $("fCat").value=e?(e.category||""):"";$("fStatus").value=e?(e.status||"draft"):"approved";
+  kws=e?[...(e.keywords||[])]:[];$("kwIn").value="";drawKw();open("editModal");$("fQ").focus()}
+
+$("saveBtn").addEventListener("click",async()=>{
+  const q=$("fQ").value.trim(),a=$("fA").value.trim(),err=$("editErr");
+  if($("kwIn").value.trim()){addKw($("kwIn").value);$("kwIn").value=""}
+  const alts=[...new Set($("fAlt").value.split("\n").map(s=>s.trim()).filter(Boolean))].slice(0,20).map(s=>s.slice(0,300));
+  const bad=m=>{err.textContent=m;err.style.display="block";err.scrollIntoView({block:"nearest"})};
+  if(!q)return bad("Please enter the question.");
+  if(!a)return bad("Please enter the answer.");
+  const dup=entries.find(x=>x.id!==(editing&&editing.id)&&norm(x.question)===norm(q));
+  if(dup)return bad("Another entry already uses this exact question. Edit that one instead.");
+  const data={question:q,answer:a,alternativeQuestions:alts.filter(x=>norm(x)!==norm(q)),keywords:[...kws],
+    category:$("fCat").value.trim()||"General",status:$("fStatus").value,updatedAt:serverTimestamp(),updatedBy:uid};
+  const ref=editing?doc(db,KB,editing.id):doc(collection(db,KB)),batch=writeBatch(db);
+  if(editing)batch.update(ref,data);else batch.set(ref,{...data,createdAt:serverTimestamp(),createdBy:uid});
+  if(fromUn)batch.update(doc(db,UN,fromUn.id),{status:"resolved",resolvedEntryId:ref.id,reviewedBy:uid,reviewedAt:serverTimestamp()});
+  const b=$("saveBtn");b.disabled=true;
+  try{await batch.commit();close("editModal");toast(editing?"Entry updated":"Entry saved")}catch(e){fail(e)}b.disabled=false});
+
+// ---- attach unanswered question to existing entry ----
+function openAttach(u){attachUn=u;$("attachQ").textContent="“"+u.question+"”";
+  $("attachSel").replaceChildren(...[...entries].sort((a,b)=>(a.question||"").localeCompare(b.question||"")).map(e=>h("option",{value:e.id},e.question)));
+  if(!entries.length)return toast("No entries yet. Use “Answer it” to create one.");open("attachModal")}
+$("attachBtn").addEventListener("click",async()=>{const id=$("attachSel").value;if(!id)return;
+  const batch=writeBatch(db);
+  batch.update(doc(db,KB,id),{alternativeQuestions:arrayUnion(attachUn.question),updatedAt:serverTimestamp(),updatedBy:uid});
+  batch.update(doc(db,UN,attachUn.id),{status:"resolved",resolvedEntryId:id,reviewedBy:uid,reviewedAt:serverTimestamp()});
+  const b=$("attachBtn");b.disabled=true;
+  try{await batch.commit();close("attachModal");toast("Added as alternative question")}catch(e){fail(e)}b.disabled=false});
+</script>
+</body>
+</html>
