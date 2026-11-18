@@ -559,6 +559,16 @@ async function logUnansweredQuestion(matcher, question, reason) {
     }
 }
 
+/** Anonymous daily counter for the admin analytics page: one doc per day, only totals, no user info. */
+function logChatUsage(kind) {
+    if (!['answer', 'choices', 'no-match'].includes(kind)) return;          // greetings and thanks are not questions
+    const d = new Date();
+    const day = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    setDoc(doc(db, 'aiUsage', day), {
+        day, asked: increment(1), answered: increment(kind === 'no-match' ? 0 : 1), updatedAt: serverTimestamp()
+    }, { merge: true }).catch(e => console.warn('Could not count chat usage:', e));
+}
+
 const chatPick = (list) => list.map(c => ({ id: c.id, question: c.question }));
 
 /** The reply for a typed message. Same shape the old backend returned (+ `choices`). */
@@ -566,17 +576,17 @@ async function answerMessage(text) {
     const { matcher, index } = await loadKnowledge();
     const m = matcher.matchMessage(index, text);
 
-    if (m.kind === 'greeting') return { reply: matcher.GREETING_REPLY, answered: false, sources: [] };
+    if (m.kind === 'greeting') return { reply: matcher.GREETING_REPLY, answered: false, sources: [], kind: 'greeting' };
 
     // "thank you" / "salamat": friendly reply, and the chat may follow it with a star rating
-    if (m.kind === 'thanks') return { reply: matcher.thanksReply(), answered: true, thanks: true, sources: [] };
+    if (m.kind === 'thanks') return { reply: matcher.thanksReply(), answered: true, thanks: true, sources: [], kind: 'thanks' };
 
-    if (m.kind === 'answer') return answerFromEntry(matcher, index, m.entry);
+    if (m.kind === 'answer') return { ...answerFromEntry(matcher, index, m.entry), kind: 'answer' };
 
     if (m.kind === 'choices') {
         return {
             reply: m.uncertain ? matcher.DID_YOU_MEAN_REPLY : matcher.CHOICES_REPLY,
-            answered: true, sources: [], choices: chatPick(m.choices), choicesLabel: ''
+            answered: true, sources: [], choices: chatPick(m.choices), choicesLabel: '', kind: 'choices'
         };
     }
 
@@ -584,7 +594,7 @@ async function answerMessage(text) {
     let saved = false;
     try { await logUnansweredQuestion(matcher, text, 'no-match'); saved = true; }
     catch (e) { console.warn('Could not save unanswered question:', e); }
-    return { reply: matcher.noAnswerReply(saved), answered: false, questionSaved: saved, sources: [] };
+    return { reply: matcher.noAnswerReply(saved), answered: false, questionSaved: saved, sources: [], kind: 'no-match' };
 }
 
 /** The reply for a clicked choice: that entry's own answer, no re-matching. */
@@ -1055,6 +1065,7 @@ function initChatbot(user, userData) {
             // Matched locally against the approved knowledge: a clicked choice shows its own answer
             const data = msg.entryId ? await answerChoice(msg.entryId) : await answerMessage(text);
             if (!data || typeof data.reply !== 'string' || !data.reply.trim()) throw new Error('Empty reply');
+            if (!msg.entryId) logChatUsage(data.kind);      // typed questions only, clicks on suggestions are not counted
 
             // Rating card: only after "thank you", only if useful, and only once per day
             const askRating = !!data.thanks && canAskRating() && !(await hasRatedToday());

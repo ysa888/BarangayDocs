@@ -122,19 +122,23 @@
     .kebab-item { width: 100%; text-align: left; padding: 9px 12px; border: none; background: transparent; border-radius: 7px; font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 800; cursor: pointer; }
     .kebab-item.danger { color: var(--red-text); }
     .kebab-item.danger:hover { background: var(--red-bg); }
-    /* Status badges */
-    .col-status { width: 110px; flex-shrink: 0; }
-    .status-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 96px; }
-    .status-stack .badge { box-sizing: border-box; width: 100%; text-align: center; white-space: nowrap; line-height: 1.2; }
+    /* Status + Validity columns */
+    .col-status { width: 120px; flex-shrink: 0; }
+    .col-validity { width: 80px; flex-shrink: 0; }
+    .col-action { width: 170px; flex-shrink: 0; text-align: right; }
+    .col-status .badge, .col-validity .badge { white-space: nowrap; line-height: 1.2; }
     .badge.approved { background: #D6EEF5; color: #0B5566; }
     .badge.released { background: #E2DAF3; color: #3F2A7A; }
-    .status-stack .badge:not(.validity) { font-size: 9px; padding: 3px 4px; }
-    .badge.validity { font-size: 8px; padding: 2px 4px; display: flex; align-items: center; justify-content: center; gap: 3px; }
+    .badge.validity { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; }
     .badge.validity.active { border: 1px solid #28A745; color: var(--green-text); background: var(--green-bg); }
     .badge.validity.expired { border: 1px solid #DC3545; color: var(--red-text); background: var(--red-bg); }
     .badge.validity::before { content: ''; width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
     .badge.validity.active::before { background: #28A745; }
     .badge.validity.expired::before { background: #DC3545; }
+    .no-validity { font-size: 12px; color: var(--text-light); }
+    .kebab-item { display: block; color: var(--text-main); }
+    .kebab-item:hover { background: var(--bg); }
+    .kebab-sep { height: 1px; background: var(--border); margin: 4px 2px; }
   </style>
   <link rel="stylesheet" href="adminresponsive.css">
 </head>
@@ -282,6 +286,7 @@
         <span class="col-date">Date</span>
         <span class="col-purpose">Purpose</span>
         <span class="col-status">Status</span>
+        <span class="col-validity">Validity</span>
         <span class="col-action">Action</span>
       </div>
       <div id="requests-body"></div>
@@ -872,7 +877,7 @@ img, canvas { max-width: 100%; }
   .table-row > .col-date   { order: 2; flex: 0 0 auto; width: auto; margin-top: 6px; }
   .table-row > .col-status { order: 4; flex: 0 0 auto; width: auto; padding-left: 48px; margin-top: 10px; }
   .table-row > .col-action { order: 4; flex: 1 1 0; min-width: 0; width: auto; margin-top: 10px; }
-  .status-stack { width: auto; min-width: 96px; }
+  .table-row > .col-validity { order: 4; flex: 0 0 auto; width: auto; margin-top: 10px; }
 }
 </style>
 </body>

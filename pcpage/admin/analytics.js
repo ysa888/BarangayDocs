@@ -50,8 +50,17 @@ function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.
 
 Chart.defaults.font.family = "'Nunito',sans-serif";
 Chart.defaults.color = '#6B7A99';
+Chart.register({ id: 'emptyMsg', afterDraw(ch) {   // "no data" text for the AI charts
+    if (!ch.canvas.id.startsWith('cAi') || !ch.chartArea) return;
+    if (ch.data.datasets.some(d => (d.data || []).some(v => +v > 0))) return;
+    const { ctx, chartArea: a } = ch;
+    ctx.save(); ctx.fillStyle = '#9AA5BC'; ctx.font = "700 13px Nunito, sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('No data for this period', (a.left + a.right) / 2, (a.top + a.bottom) / 2); ctx.restore();
+} });
 
 const state = { reqs: [], res: [] };
+const AI = { ratings: [], unans: [], kb: [], usage: [] };   // anonymous fields only, no names or uids
+let AIS = null;                                           // last AI summary, used by the CSV export
 const S = { gender: null, civil: null, st: null };
 const C = {};
 let ALL = [], CUR = [], usingDemo = false;
@@ -201,13 +210,105 @@ function render() {
     const bm = top(tally(R, r => r.created.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })))[0]; if (bm) I.push(`Peak month: ${bm[0]} (${bm[1]} requests)`);
     if (gc.length && gc[0][0] !== 'Unknown') I.push(`${gc[0][0]} residents file ${pct(gc[0][1], R.length)}% of requests`);
     const ins = $('ins'); ins.innerHTML = ''; I.forEach(t => ins.appendChild(el('span', '', t)));
+    renderAI();
+}
+
+/* ---------- AI Assistant section (anonymous: ratings, unanswered, usage, knowledge base) ---------- */
+const REASONS = { 'no-match': 'No match', 'model-no-answer': 'AI had no answer', partial: 'Partly answered' };
+const clip = (s, n) => { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '\u2026' : s; };
+const bucketer = (dates) => {
+    const t = dates.map(Number), span = t.length ? (Math.max(...t) - Math.min(...t)) / 864e5 : 0, mode = span <= 45 ? 'd' : span <= 180 ? 'w' : 'm';
+    const key = (dt) => { const x = new Date(dt); x.setHours(0, 0, 0, 0); if (mode === 'm') x.setDate(1); if (mode === 'w') x.setDate(x.getDate() - (x.getDay() + 6) % 7); return ymd(x); };
+    const label = (k) => new Date(k + 'T00:00:00').toLocaleDateString('en-PH', mode === 'm' ? { month: 'short', year: '2-digit' } : { month: 'short', day: 'numeric' });
+    return { key, label };
+};
+function renderAI() {
+    if (!$('aiKpis')) return;
+    const p = +$('period').value, now = Date.now(), cutoff = p ? now - p * 864e5 : 0;
+    const inP = (d) => !p || (d && +d >= cutoff);
+    const RT = AI.ratings.filter(r => r.n >= 1 && r.n <= 5 && inP(r.at));
+    const UN = AI.unans.filter(u => inP(u.at));
+    const US = AI.usage.filter(u => !p || (u.date && +u.date >= cutoff - 864e5));
+    const KB = AI.kb;
+
+    const avg = RT.length ? RT.reduce((a, r) => a + r.n, 0) / RT.length : 0;
+    const sat = RT.filter(r => r.n >= 4).length;
+    const asked = US.reduce((a, u) => a + u.asked, 0), answered = US.reduce((a, u) => a + u.answered, 0);
+    const waiting = AI.unans.filter(u => (u.status || 'new') === 'new').length;
+    $('aiNoUsage').hidden = AI.usage.length > 0;
+
+    AIS = [['Ratings', RT.length], ['Average rating', avg ? avg.toFixed(2) : ''], ['Rated 4-5 stars (%)', RT.length ? pct(sat, RT.length) : ''],
+        ['Questions asked', asked], ['Questions answered', answered], ['Answer rate (%)', asked ? pct(answered, asked) : ''], ['Unanswered questions waiting', waiting]];
+
+    const kp = $('aiKpis'); kp.innerHTML = '';
+    [['Average rating', RT.length ? avg.toFixed(1) + ' / 5' : '\u2014', ''],
+     ['Rated 4-5 stars', RT.length ? pct(sat, RT.length) + '%' : '\u2014', 'g'],
+     ['Questions asked', asked ? asked : '\u2014', ''],
+     ['Answer rate', asked ? pct(answered, asked) + '%' : '\u2014', 'g'],
+     ['Unanswered, waiting', waiting, waiting ? 'r' : '']].forEach(([l, v, c]) => {
+        const k = el('div', 'kpi ' + c); k.append(el('small', '', l), el('b', '', v)); kp.appendChild(k);
+    });
+
+    /* ratings over time: bars = count, line = average */
+    const rb = bucketer(RT.map(r => r.at)), RB = {};
+    RT.forEach(r => { const k = rb.key(r.at); (RB[k] = RB[k] || []).push(r.n); });
+    const rk = Object.keys(RB).sort();
+    mk('cAiTrend', 'bar', { labels: rk.map(rb.label), datasets: [
+        { type: 'line', label: 'Average stars', order: 0, data: rk.map(k => +(RB[k].reduce((a, b) => a + b, 0) / RB[k].length).toFixed(2)), borderColor: '#1B3A6B', backgroundColor: '#1B3A6B', yAxisID: 'y', tension: .35, pointRadius: 4, pointHoverRadius: 6 },
+        { label: 'Ratings', order: 1, data: rk.map(k => RB[k].length), backgroundColor: 'rgba(79,195,247,.45)', borderRadius: 6, maxBarThickness: 40, yAxisID: 'y1' }] },
+        Object.assign({ scales: { y: { min: 0, max: 5, ticks: { stepSize: 1 } }, y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { precision: 0 } } } }, leg));
+
+    const dist = [5, 4, 3, 2, 1].map(n => RT.filter(r => r.n === n).length);
+    mk('cAiDist', 'bar', { labels: ['5 stars', '4 stars', '3 stars', '2 stars', '1 star'], datasets: [{ label: 'Ratings', data: dist, backgroundColor: '#2A5298', borderRadius: 6, maxBarThickness: 28 }] },
+        { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.parsed.x + ' rating' + (c.parsed.x === 1 ? '' : 's') + (RT.length ? ' (' + pct(c.parsed.x, RT.length) + '%)' : '') } } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { grid: { display: false } } } });
+
+    /* chat activity per day / week / month */
+    const ub = bucketer(US.map(u => u.date).filter(Boolean)), UB = {};
+    US.filter(u => u.date).forEach(u => { const k = ub.key(u.date); (UB[k] = UB[k] || [0, 0]); UB[k][0] += u.asked; UB[k][1] += u.answered; });
+    const uk = Object.keys(UB).sort();
+    mk('cAiUse', 'bar', { labels: uk.map(ub.label), datasets: [
+        { label: 'Asked', data: uk.map(k => UB[k][0]), backgroundColor: '#2A5298', borderRadius: 4, maxBarThickness: 32 },
+        { label: 'Answered', data: uk.map(k => UB[k][1]), backgroundColor: '#28A745', borderRadius: 4, maxBarThickness: 32 }] },
+        Object.assign({ scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }, leg));
+
+    /* unanswered: ranked list (wraps long questions, shows reason + status) */
+    const tq = [...UN].sort((a, b) => b.count - a.count).slice(0, 10);
+    const list = $('aiTopList'); list.innerHTML = '';
+    if (!tq.length) list.appendChild(el('div', 'empty', 'No unanswered questions for this period.'));
+    tq.forEach((u, i) => {
+        const row = el('div', 'uitem'), body = el('div', 'ubody'), meta = el('div', 'umeta'), cnt = el('div', 'ucount'), bar = el('div', 'ubar'), fill = document.createElement('i');
+        fill.style.width = Math.max(4, Math.round(u.count / tq[0].count * 100)) + '%'; bar.appendChild(fill);
+        meta.append(el('span', 'pill', REASONS[u.reason] || cap(u.reason)), el('span', '', (u.status || 'new') === 'new' ? 'Waiting for a knowledge entry' : cap(u.status)));
+        body.append(el('div', 'uq', u.q || '(no text)'), meta, bar);
+        cnt.append(el('b', '', u.count + '\u00D7'), el('small', '', 'asked'));
+        row.append(el('div', 'rank', String(i + 1)), body, cnt); list.appendChild(row);
+    });
+
+    /* knowledge base coverage: category x status */
+    const cats = [...new Set(KB.map(k => k.cat))].sort();
+    const cs = (s) => cats.map(c => KB.filter(k => k.cat === c && k.status === s).length);
+    mk('cAiKb', 'bar', { labels: cats, datasets: [
+        { label: 'Approved', data: cs('approved'), backgroundColor: '#28A745', maxBarThickness: 28 },
+        { label: 'Draft', data: cs('draft'), backgroundColor: '#FFC107' },
+        { label: 'Archived', data: cs('archived'), backgroundColor: '#9AA5BC' }] },
+        Object.assign({ indexAxis: 'y', scales: { x: { stacked: true, ticks: { precision: 0 } }, y: { stacked: true, ticks: { callback: shortTick } } } }, leg));
+
+    /* insights */
+    const I = [];
+    if (RT.length) I.push(`Residents rate the assistant ${avg.toFixed(1)} / 5 on average (${RT.length} rating${RT.length === 1 ? '' : 's'})`);
+    if (asked) I.push(`${pct(answered, asked)}% of questions were answered from the knowledge base`);
+    if (tq.length) I.push(`Most repeated unanswered question: "${clip(tq[0].q, 60)}" (${tq[0].count}x)`);
+    if (waiting) I.push(`${waiting} unanswered question${waiting === 1 ? '' : 's'} still waiting for a knowledge entry`);
+    const ap = KB.filter(k => k.status === 'approved').length; if (KB.length) I.push(`${ap} of ${KB.length} knowledge entries are approved and live`);
+    const ins = $('aiIns'); ins.innerHTML = ''; I.forEach(t => ins.appendChild(el('span', '', t)));
 }
 
 window.exportCSV = function () {
     const h = 'Reference,Document,Status,Gender,Age,Civil status,Requested,Decided\n';
     const b = CUR.map(r => [r.id, r.doc, r.st, r.gender, r.age ?? '', r.civil, r.created.toISOString(), r.decided ? r.decided.toISOString() : '']
         .map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([h + b], { type: 'text/csv' })); a.download = 'barangaydocs-analytics.csv'; a.click();
+    const aiRows = AIS ? '\n\nAI Assistant (selected period),\n' + AIS.map(([k, v]) => `"${k}","${v}"`).join('\n') : '';
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([h + b + aiRows], { type: 'text/csv' })); a.download = 'barangaydocs-analytics.csv'; a.click();
     const t = $('toast'); t.textContent = 'CSV exported'; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2000);
 };
 
@@ -243,6 +344,14 @@ onAuthStateChanged(auth, async (user) => {
         (s) => { state[key] = s.docs.map(d => ({ id: d.id, ...d.data() })); build(); render(); },
         (err) => { console.error('Analytics listener failed:', name, err); if (key === 'reqs') { build(); render(); } });
     sub('requests', 'reqs'); sub('residents', 'res');
+    // AI assistant data: only anonymous fields are copied (never residentName or uid)
+    const subAi = (name, key, map) => onSnapshot(collection(db, name),
+        (s) => { AI[key] = s.docs.map(d => map(d.data(), d.id)); renderAI(); },
+        (err) => { console.warn('AI analytics listener failed:', name, err); AI[key] = []; renderAI(); });
+    subAi('aiRatings',    'ratings', (d) => ({ n: +d.rating, at: toD(d.createdAt) }));
+    subAi('aiUnanswered', 'unans',   (d) => ({ q: d.question, count: +d.count || 1, reason: d.reason, status: d.status, at: toD(d.lastAskedAt || d.firstAskedAt) }));
+    subAi('aiKnowledge',  'kb',      (d) => ({ cat: d.category || 'General', status: d.status || 'draft' }));
+    subAi('aiUsage',      'usage',   (d, id) => ({ date: new Date(String(d.day || id) + 'T00:00:00'), asked: +d.asked || 0, answered: +d.answered || 0 }));
 
     onSnapshot(query(collection(db, 'requests'), where('status', 'in', ['pending', 'processing', 'approved'])),
         (s) => { const b = $('pending-requests-badge'); if (b) b.textContent = s.size; });

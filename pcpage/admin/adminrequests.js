@@ -125,18 +125,24 @@ function getValidity(status, expiresAt) {
     return d.getTime() < Date.now() ? 'expired' : 'active';
 }
 
-// Status cell = main status badge + (ready/released only) Active/Expired badge
-function statusCellHTML(status, expiresAt) {
+// Status column = just the process badge (Submitted, Processing, ...)
+function statusCellHTML(status) {
+    return `<span class="badge ${getBadgeClass(status)}">${getBadgeLabel(status)}</span>`;
+}
+
+// Validity column = Active / Expired (only ready/released docs), else a dash
+function validityCellHTML(status, expiresAt) {
     const v = getValidity(status, expiresAt);
-    const validity = v
+    return v
         ? `<span class="badge validity ${v}">${v === 'active' ? 'Active' : 'Expired'}</span>`
-        : '';
-    return `<div class="status-stack"><span class="badge ${getBadgeClass(status)}">${getBadgeLabel(status)}</span>${validity}</div>`;
+        : `<span class="no-validity">—</span>`;
 }
 
 function renderStatusCell(row, status, expiresAt) {
     const cell = row.querySelector('.col-status');
-    if (cell) cell.innerHTML = statusCellHTML(status, expiresAt);
+    if (cell) cell.innerHTML = statusCellHTML(status);
+    const vcell = row.querySelector('.col-validity');   // only exists on All Requests
+    if (vcell) vcell.innerHTML = validityCellHTML(status, expiresAt);
     row.dataset.status = status;
 }
 
@@ -260,53 +266,67 @@ function formatExpiry(val) {
 }
 
 // =============================================
-// Build action buttons based on status
-// Reject now lives in the ⋮ kebab menu and is
-// available at every active stage (not released).
+// Action layout per status
+// primary  = the one button always visible in the row
+// menu     = everything else, inside the ⋮ kebab menu
 // =============================================
-function getActionButtons(docId, status) {
-    const kebab = `<button class="kebab-btn" data-id="${docId}" data-action="kebab" title="More actions">&#8942;</button>`;
+const ACTION_LABELS = {
+    viewdocument: 'View Document',
+    preview:      'Preview',
+    viewqr:       'View QR',
+    reject:       'Reject request'
+};
 
-    if (status === 'pending') {
-        return `<button class="btn-process" data-id="${docId}" data-action="processing">Process</button><button class="btn-view-doc" data-id="${docId}" data-action="viewdocument">Preview</button>${kebab}`;
+function getActionConfig(status) {
+    switch (status) {
+        case 'pending':
+            return { primary: { action: 'processing', label: 'Process',        cls: 'btn-process' },
+                     menu: ['preview', 'reject'] };
+        case 'processing':
+            return { primary: { action: 'approved',   label: 'Approve',        cls: 'btn-approve' },
+                     menu: ['preview', 'reject'] };
+        case 'approved':
+            return { primary: { action: 'ready',      label: 'Mark Ready + QR', cls: 'btn-approve' },
+                     menu: ['preview', 'reject'] };
+        case 'ready':
+            return { primary: { action: 'released',   label: 'Mark Released',  cls: 'btn-approve' },
+                     menu: ['viewqr', 'viewdocument', 'reject'] };
+        case 'released':
+            return { primary: { action: 'viewdocument', label: 'View Document', cls: 'btn-view-doc' },
+                     menu: ['viewqr'] };
+        default:
+            return null;
     }
-    if (status === 'processing') {
-        return `<button class="btn-approve" data-id="${docId}" data-action="approved">Approve</button><button class="btn-view-doc" data-id="${docId}" data-action="viewdocument">Preview</button>${kebab}`;
+}
+
+function getActionButtons(docId, status) {
+    const cfg = getActionConfig(status);
+    if (!cfg) {
+        return status === 'rejected'
+            ? `<span style="font-size:11px;color:var(--red-text);">Rejected</span>` : '';
     }
-    if (status === 'approved') {
-        return `<button class="btn-approve" data-id="${docId}" data-action="ready">Mark Ready + QR</button><button class="btn-view-doc" data-id="${docId}" data-action="viewdocument">Preview</button>${kebab}`;
-    }
-    if (status === 'ready') {
-        return `
-            <button class="btn-approve"  data-id="${docId}" data-action="released">Mark Released</button>
-            <button class="btn-view"     data-id="${docId}" data-action="viewqr">View QR</button>
-            <button class="btn-view-doc" data-id="${docId}" data-action="viewdocument">View Document</button>
-            ${kebab}`;
-    }
-    if (status === 'released') {
-        return `
-            <button class="btn-view"     data-id="${docId}" data-action="viewqr">View QR</button>
-            <button class="btn-view-doc" data-id="${docId}" data-action="viewdocument">View Document</button>`;
-    }
-    if (status === 'rejected') {
-        return `<span style="font-size:11px;color:var(--red-text);">Rejected</span>`;
-    }
-    return '';
+    const kebab = cfg.menu.length
+        ? `<button class="kebab-btn" data-id="${docId}" data-action="kebab" title="More actions">&#8942;</button>` : '';
+    return `<button class="${cfg.primary.cls}" data-id="${docId}" data-action="${cfg.primary.action}">${cfg.primary.label}</button>${kebab}`;
 }
 
 // =============================================
-// Wire action buttons on a row
+// Run an action (shared by row buttons and kebab items)
 // =============================================
+function runAction(action, docId, row, data) {
+    if (action === 'reject')                              openRejectModal(docId, row);
+    else if (action === 'viewqr')                         openQRModal(docId, data);
+    else if (action === 'ready')                          openReadyModal(docId, data, row);
+    else if (action === 'viewdocument' || action === 'preview') openDocumentModal(docId, data);
+    else updateRequestStatus(docId, action, row, data);
+}
+
 function wireRowButtons(row, docId, data) {
     row.querySelectorAll('[data-action]').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const action = btn.dataset.action;
-            if (action === 'kebab')              { e.stopPropagation(); openKebabMenu(btn, docId, row); }
-            else if (action === 'reject')        openRejectModal(docId, row);
-            else if (action === 'viewqr')        openQRModal(docId, data);
-            else if (action === 'ready')         openReadyModal(docId, data, row);
-            else if (action === 'viewdocument')  openDocumentModal(docId, data);
-            else updateRequestStatus(docId, action, row, data);
+            if (action === 'kebab') { e.stopPropagation(); openKebabMenu(btn, docId, row, data); }
+            else runAction(action, docId, row, data);
         });
     });
 }
@@ -314,30 +334,38 @@ function wireRowButtons(row, docId, data) {
 // =============================================
 // Kebab (⋮) menu
 // Attached to <body> so the table card's
-// overflow:hidden can't clip it.
+// overflow can't clip it.
 // =============================================
 function closeKebabMenu() {
     document.querySelectorAll('.kebab-menu').forEach(m => m.remove());
 }
 
-function openKebabMenu(btn, docId, row) {
+function openKebabMenu(btn, docId, row, data) {
     const alreadyOpen = document.querySelector('.kebab-menu');
     closeKebabMenu();
     if (alreadyOpen && alreadyOpen.dataset.for === docId) return; // second click toggles it closed
 
+    const cfg = getActionConfig(row.dataset.status);
+    if (!cfg) return;
+
     const menu = document.createElement('div');
     menu.className = 'kebab-menu';
     menu.dataset.for = docId;
-    menu.innerHTML = `<button class="kebab-item danger" type="button">✕ Reject request</button>`;
+    menu.innerHTML = cfg.menu.map(a => {
+        const sep = a === 'reject' && cfg.menu.length > 1 ? '<div class="kebab-sep"></div>' : '';
+        return `${sep}<button class="kebab-item${a === 'reject' ? ' danger' : ''}" type="button" data-kact="${a}">${a === 'reject' ? '✕ ' : ''}${ACTION_LABELS[a]}</button>`;
+    }).join('');
     document.body.appendChild(menu);
 
     const r = btn.getBoundingClientRect();
     menu.style.top  = `${r.bottom + 4}px`;
     menu.style.left = `${Math.max(8, r.right - menu.offsetWidth)}px`;
 
-    menu.querySelector('.kebab-item').addEventListener('click', () => {
-        closeKebabMenu();
-        openRejectModal(docId, row);
+    menu.querySelectorAll('.kebab-item').forEach(item => {
+        item.addEventListener('click', () => {
+            closeKebabMenu();
+            runAction(item.dataset.kact, docId, row, data);
+        });
     });
 }
 
@@ -999,9 +1027,8 @@ function buildRow(docId, data) {
         <div class="col-user"><span>${data.residentName || '—'}</span></div>
         <div class="col-date"><span>${formatDate(data.createdAt)}</span></div>
         <div class="col-purpose"><span>${data.purpose || '—'}</span></div>
-        <div class="col-status">
-            ${statusCellHTML(data.status, data.expiresAt)}
-        </div>
+        <div class="col-status">${statusCellHTML(data.status)}</div>
+        ${isAllPage ? `<div class="col-validity">${validityCellHTML(data.status, data.expiresAt)}</div>` : ''}
         <div class="col-action">
             <div class="action-row">${getActionButtons(docId, data.status)}</div>
         </div>

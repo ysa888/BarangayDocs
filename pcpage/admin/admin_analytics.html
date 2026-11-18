@@ -104,6 +104,23 @@
       .sr{font-size:12.5px}
     }
     @media(max-width:380px){.top-navbar{padding:0 10px}.logo-text{font-size:14px}.admin-badge{display:none}.main,.main.expanded{padding-right:10px;padding-left:10px}.cv{height:220px}}
+    .sec-head{margin:26px 0 14px;padding-top:6px}.sec-head h2{font:700 18px 'Poppins',sans-serif;color:var(--text-main)}.sec-head p{font-size:12px;color:var(--text-sub);margin-top:2px}
+    .nodata{font-size:12px;font-weight:700;color:var(--text-sub);background:#FFF8E1;border-radius:10px;padding:8px 12px;margin-bottom:14px}
+    .ulist{display:flex;flex-direction:column}
+    .uitem{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--border)}
+    .uitem:last-child{border-bottom:none}
+    .rank{width:26px;height:26px;border-radius:8px;background:#EBF0FB;color:var(--primary);font:800 12px 'Nunito',sans-serif;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .ubody{flex:1;min-width:0}
+    .uq{font-size:13px;font-weight:700;color:var(--text-main);overflow-wrap:anywhere;line-height:1.4}
+    .umeta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:5px;font-size:11.5px;color:var(--text-sub);font-weight:700}
+    .pill{background:#EBF0FB;color:var(--primary);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:800}
+    .ubar{height:5px;border-radius:5px;background:#EBF0FB;margin-top:8px;overflow:hidden}
+    .ubar i{display:block;height:100%;background:var(--primary-light);border-radius:5px}
+    .ucount{text-align:right;flex-shrink:0}
+    .ucount b{display:block;font:700 16px 'Poppins',sans-serif;color:var(--text-main)}
+    .ucount small{font-size:10.5px;color:var(--text-sub);font-weight:700}
+    .empty{font-size:12.5px;font-weight:700;color:var(--text-sub);padding:22px 0;text-align:center}
+    @media(max-width:640px){.uitem{gap:10px;padding:10px 0}.uq{font-size:12.5px}}
     @media print{.top-navbar,.sidebar,.bar,.btn{display:none!important}.main{margin:0}.layout{margin:0}.card,.kpi{break-inside:avoid}}
   </style>
   <link rel="stylesheet" href="adminresponsive.css">
@@ -253,6 +270,23 @@
       <div class="card"><h3>Age distribution</h3><p>Bars show requests per 5-year age band, the line shows cumulative share</p><div class="cv"><canvas id="cAge"></canvas></div></div>
       <div class="card"><h3>Age statistics</h3><p>Descriptive summary of requesting residents</p><div id="stats"></div></div>
     </div>
+
+    <div class="sec-head">
+      <h2>AI Assistant</h2>
+      <p>Chatbot satisfaction and usage. Follows the period filter above. Anonymous: no resident names or accounts are used here.</p>
+    </div>
+    <div class="nodata" id="aiNoUsage" hidden>No chat usage has been counted yet. Questions asked and answer rate will fill in as residents use the assistant.</div>
+    <div class="kpis" id="aiKpis"></div>
+    <div class="ins" id="aiIns"></div>
+    <div class="grid g21">
+      <div class="card"><h3>Ratings over time</h3><p>Average stars (line) and number of ratings (bars)</p><div class="cv"><canvas id="cAiTrend"></canvas></div></div>
+      <div class="card"><h3>Rating distribution</h3><p>How many residents gave each score</p><div class="cv"><canvas id="cAiDist"></canvas></div></div>
+    </div>
+    <div class="grid g11">
+      <div class="card"><h3>Chat activity</h3><p>Questions asked and answered by the assistant</p><div class="cv"><canvas id="cAiUse"></canvas></div></div>
+      <div class="card"><h3>Knowledge base coverage</h3><p>Entries per category and status</p><div class="cv"><canvas id="cAiKb"></canvas></div></div>
+    </div>
+    <div class="card" style="margin-bottom:16px"><h3>Most asked unanswered questions</h3><p>Write knowledge entries for these first. Repeat counts are all-time.</p><div class="ulist" id="aiTopList"></div></div>
   </main>
 </div>
 <div class="toast" id="toast"></div>
