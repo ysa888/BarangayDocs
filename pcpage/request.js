@@ -19,10 +19,7 @@ import {
     serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 import { baseValues, effectiveValues, paintDocument } from "./admin/docoverrides.js";
-import {
-    buildValues, renderTemplateHtml, makeQrDataUrl, normalizePageSettings,
-    paperStyleString, baseCss, printTemplateHtml
-} from "./admin/templateengine.js";
+import { loadTemplateForType, createTemplateView } from "./admin/doctemplate.js";
 
 // =============================================
 // Firebase Config & Init
@@ -49,37 +46,10 @@ const docsIconMap = {};
 // Home page cards link here with ?doc=<document id>; used once to preselect + open the modal
 let deepLinkDocId = new URLSearchParams(location.search).get('doc');
 
-// Page settings of the admin-made template currently shown in the preview
-// (null → the built-in hardcoded certificate is being shown)
-let activeTemplateSettings = null;
-
-// =============================================
-// Admin-made templates (documentTemplates/{documentId})
-// Returns null when the document type has no saved template, so the
-// built-in certificate keeps working exactly as before.
-// =============================================
-async function loadTemplateForType(typeName) {
-    if (!typeName) return null;
-    try {
-        const dSnap = await getDocs(query(collection(db, 'documents'), where('name', '==', typeName)));
-        if (dSnap.empty) return null;
-        const tSnap = await getDoc(doc(db, 'documentTemplates', dSnap.docs[0].id));
-        if (!tSnap.exists()) return null;
-        const t = tSnap.data();
-        return t && t.html ? t : null;
-    } catch (err) {
-        console.warn('Template lookup failed — using built-in layout:', err);
-        return null;
-    }
-}
-
-function ensureTemplateCss() {
-    if (document.getElementById('tpl-base-css')) return;
-    const s = document.createElement('style');
-    s.id = 'tpl-base-css';
-    s.textContent = baseCss('.tpl-paper');
-    document.head.appendChild(s);
-}
+// Shows the admin-made template (documentTemplates/{documentId}) through the shared
+// doctemplate.js — the SAME renderer the admin preview/print uses.
+// null → no template for this document type, the built-in certificate is shown.
+let templateView = null;
 
 // =============================================
 // Helpers
@@ -496,7 +466,16 @@ async function openDocumentPreview(requestId, cachedData) {
     const legacyEl = el('doc-preview-content');
     const wrapEl   = overlay.querySelector('.doc-preview-wrapper');
     let tplEl      = el('doc-preview-template');
-    const tpl      = await loadTemplateForType(r.documentType);
+    // Always read the latest saved template straight from Firestore each time the preview opens
+    // (falls back to the shared loader if nothing is found or the read fails)
+    let tpl = null;
+    try {
+        const tSnap = await getDocs(query(collection(db, 'documentTemplates'), where('documentName', '==', r.documentType)));
+        if (!tSnap.empty) tpl = { id: tSnap.docs[0].id, ...tSnap.docs[0].data() };
+    } catch (err) {
+        console.warn('Could not fetch latest template:', err);
+    }
+    if (!tpl) tpl = await loadTemplateForType(db, r.documentType);
 
     if (tpl && legacyEl) {
         if (!tplEl) {
@@ -504,30 +483,29 @@ async function openDocumentPreview(requestId, cachedData) {
             tplEl.id = 'doc-preview-template';
             legacyEl.parentNode.insertBefore(tplEl, legacyEl);
         }
-        ensureTemplateCss();
-        const settings = normalizePageSettings(tpl.pageSettings);
-        const values   = buildValues(r, residentData);
-        const qrUrl    = makeQrDataUrl(r.qrContent || r.referenceNo || 'NO-QR', 100);
-
-        tplEl.className = 'tpl-paper';
-        tplEl.setAttribute('style', paperStyleString(settings));
-        tplEl.innerHTML = renderTemplateHtml(tpl.html, values, { qrDataUrl: qrUrl, baseUrl: location.href });
-        tplEl.style.display = '';
+        if (!templateView || templateView.container !== tplEl) {
+            templateView = createTemplateView(tplEl);
+            templateView.container = tplEl;
+        }
         legacyEl.style.display = 'none';
         if (wrapEl) wrapEl.style.maxWidth = '1000px';
-        activeTemplateSettings = settings;
 
         overlay.classList.add('show');
         el('dp-close').onclick = () => overlay.classList.remove('show');
         el('dp-print').onclick = () => printDocument();
+
+        // fixed-size pages, header/footer/background, and the admin's corrections (docOverrides)
+        await templateView.show({
+            template: tpl, request: r, resident: residentData, overrides: r.docOverrides
+        });
         return;
     }
 
     // No template → make sure the built-in certificate is the one visible
+    if (templateView) templateView.hide();
     if (tplEl) tplEl.style.display = 'none';
     legacyEl.style.display = '';
     if (wrapEl) wrapEl.style.maxWidth = '';
-    activeTemplateSettings = null;
 
     const issueDate = r.readyAt?.toDate ? r.readyAt.toDate() : new Date();
     const day    = issueDate.getDate();
@@ -605,13 +583,10 @@ async function openDocumentPreview(requestId, cachedData) {
 // canvas to a static <img> so it prints correctly
 // =============================================
 function printDocument() {
-    // Admin-made template: print the rendered paper with its own page size/margins
-    if (activeTemplateSettings) {
-        const tplEl = el('doc-preview-template');
-        if (tplEl) {
-            printTemplateHtml(tplEl.innerHTML, activeTemplateSettings, 'Barangay Document');
-            return;
-        }
+    // Admin-made template: print the exact same pages that are shown in the preview
+    if (templateView && templateView.active) {
+        templateView.print('Barangay Document');
+        return;
     }
 
     const content = el('doc-preview-content');

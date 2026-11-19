@@ -106,8 +106,15 @@ export function formatDob(val) {
     });
 }
 
+// When an admin-made template is being shown instead of the built-in certificate,
+// doctemplate.js registers a painter here so every paintDocument() call (including the
+// live edits from docedit.js) re-renders the template too.
+let templatePainter = null;
+export function setTemplatePainter(fn) { templatePainter = typeof fn === 'function' ? fn : null; }
+
 /** Paint effective values into the certificate DOM */
 export function paintDocument(values) {
+    if (templatePainter) templatePainter(values);
     const set = (id, v) => {
         const n = document.getElementById(id);
         if (n) n.textContent = (v !== undefined && v !== null && v !== '') ? String(v) : '—';
