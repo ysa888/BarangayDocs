@@ -507,10 +507,57 @@ async function updateRequestStatus(docId, newStatus, row, data) {
         }
 
         showToast(`✓ Request marked as ${getBadgeLabel(newStatus)}`);
+        return true;
 
     } catch (err) {
         console.error('Update error:', err);
         showToast('Failed to update. Check Firestore rules.');
+        return false;
+    }
+}
+
+// Re-draw a row's status + action buttons after a status change
+function refreshRow(row, docId, status, data) {
+    if (!row) return;
+    renderStatusCell(row, status, data.expiresAt);
+    const actionCol = row.querySelector('.col-action');
+    if (actionCol) {
+        actionCol.innerHTML = `<div class="action-row">${getActionButtons(docId, status)}</div>`;
+        wireRowButtons(row, docId, { ...data, status });
+    }
+}
+
+// "Back" — move a request one step back if the admin misclicked.
+// No SMS / in-app notification is sent for a step back (only an audit-log entry).
+async function revertStatus(docId, row, data, toStatus) {
+    try {
+        await updateDoc(doc(db, 'requests', docId), {
+            status: toStatus,
+            updatedAt: serverTimestamp()
+        });
+        try {
+            await addDoc(collection(db, 'auditLogs'), {
+                action:       'request_reverted_to_' + toStatus,
+                targetType:   'request',
+                targetId:     docId,
+                referenceNo:  data.referenceNo || '',
+                residentName: data.residentName || '',
+                residentUid:  data.uid || '',
+                documentType: data.documentType || '',
+                details:      'Moved back from ' + (data.status || '—') + ' to ' + toStatus,
+                adminUid:     auth.currentUser?.uid || '',
+                adminEmail:   auth.currentUser?.email || '',
+                createdAt:    serverTimestamp()
+            });
+        } catch (err) { console.error('Audit log failed:', err); }
+
+        refreshRow(row, docId, toStatus, data);
+        showToast(`↩ Moved back to ${getBadgeLabel(toStatus)}`);
+        return true;
+    } catch (err) {
+        console.error('Revert error:', err);
+        showToast('Failed to go back. Check Firestore rules.');
+        return false;
     }
 }
 
@@ -698,9 +745,9 @@ async function markRequestReady(docId, row, data, btn, expiry = null) {
             actionCol.innerHTML = `<div class="action-row">${getActionButtons(docId, 'ready')}</div>`;
             wireRowButtons(row, docId, { ...data, status: 'ready', expiresAt: finalExpiry, ...(update.qrContent ? { qrContent: update.qrContent } : {}) });
         }
-        document.getElementById('dp-expiry-bar')?.remove();
-        document.getElementById('doc-preview-modal')?.classList.remove('show');
-        showToast('✓ Document is ready for pickup.');
+        showToast('✓ Ready for pickup. Next: mark as released once handed over.');
+        // auto-open the next step: Mark as Released
+        openDocumentModal(docId, { ...data, status: 'ready', expiresAt: finalExpiry }, { mode: 'release', row });
     } catch (err) {
         console.error(err);
         showToast('Failed to update. Check Firestore rules.');
@@ -839,9 +886,9 @@ async function approveFromPreview(docId, rowData, row, expiry, docCode, btn, ove
             actionCol.innerHTML = `<div class="action-row">${getActionButtons(docId, 'approved')}</div>`;
             wireRowButtons(row, docId, newData);
         }
-        overlay.querySelector('#dp-expiry-bar')?.remove();
-        overlay.classList.remove('show');
-        showToast('✓ Approved. Waiting for the authorized signature.');
+        showToast('✓ Approved. Next: get it signed, then mark it as ready.');
+        // auto-open the next step: Signed — Mark as Ready
+        openDocumentModal(docId, newData, { mode: 'ready', row });
     } catch (err) {
         console.error(err);
         showToast('Failed to approve. Check Firestore rules.');
@@ -961,7 +1008,13 @@ async function openRequestModal(docId, data, row) {
         mk('Reject', 'modal-btn-cancel', () => { close(); openRejectModal(docId, row); });
     }
     if (r.status === 'pending') {
-        mk('Process', 'modal-btn-save', () => { close(); updateRequestStatus(docId, 'processing', row, { ...data, ...r }); });
+        mk('Process', 'modal-btn-save', async () => {
+            close();
+            const nd = { ...data, ...r };
+            const ok = await updateRequestStatus(docId, 'processing', row, nd);
+            // auto-open the next step: Preview & Approve
+            if (ok) openDocumentModal(docId, { ...nd, status: 'processing' }, { mode: 'approve', row });
+        });
     }
 }
 
@@ -1140,7 +1193,8 @@ async function populateAndShowDocModal(r, residentData, docId, opts = {}, rowDat
     }, { once: true });
 
     // Step 2 / 4 action button (only when opened from Preview & Approve / Mark as Ready)
-    document.querySelectorAll('#dp-approve, #dp-ready').forEach(b => b.remove());
+    document.querySelectorAll('#dp-approve, #dp-ready, #dp-release').forEach(b => b.remove());
+    overlay.querySelector('#dp-step-bar')?.remove();
     if (opts.mode && opts.row) {
         const printBtn = document.getElementById('dp-print');
         const b = document.createElement('button');
@@ -1148,26 +1202,66 @@ async function populateAndShowDocModal(r, residentData, docId, opts = {}, rowDat
         b.className = 'dp-btn dp-btn-primary';
         // Block while the editor panel is open (unsaved edits would be missed)
         const isEditing = () => !!overlay.querySelector('.doc-preview-wrapper.dp-editing');
-        if (opts.mode === 'approve') {
-            b.id = 'dp-approve';
-            b.textContent = '✓ Approve';
-            b.onclick = () => {
+        const cur = { ...rowData, ...r };
+
+        // Each step: its main button, and where "Back" goes
+        const STEPS = {
+            approve: { label: '✓ Approve',                 back: { to: 'pending',    label: '← Back to Request' } },
+            ready:   { label: '✓ Signed — Mark as Ready',  back: { to: 'processing', label: '← Back to Preview & Approve' } },
+            release: { label: '✓ Mark as Released',        back: { to: 'approved',   label: '← Back to Awaiting Signature' } }
+        };
+        const step = STEPS[opts.mode];
+        if (step) {
+            b.id = 'dp-' + (opts.mode === 'approve' ? 'approve' : opts.mode === 'ready' ? 'ready' : 'release');
+            b.textContent = step.label;
+            b.onclick = async () => {
                 if (isEditing()) { showToast('Save or cancel your edits first.'); return; }
+                if (opts.mode === 'release') {
+                    b.disabled = true;
+                    const ok = await updateRequestStatus(docId, 'released', opts.row, cur);
+                    if (ok) overlay.classList.remove('show'); else b.disabled = false;
+                    return;
+                }
                 const expiry = getExpiryDate('dpx');          // validates + shows the error in the bar
                 if (!expiry) return;
-                approveFromPreview(docId, { ...rowData, ...r }, opts.row, expiry, approveCode, b, overlay);
+                if (opts.mode === 'approve') approveFromPreview(docId, cur, opts.row, expiry, approveCode, b, overlay);
+                else                         markRequestReady(docId, opts.row, cur, b, expiry);
             };
-        } else {
-            b.id = 'dp-ready';
-            b.textContent = '✓ Signed — Mark as Ready';
-            b.onclick = () => {
+            printBtn?.parentNode.insertBefore(b, printBtn);
+
+            // Bottom bar: Back (left) + Next (right) so the next click is always in the same spot
+            const bar = document.createElement('div');
+            bar.id = 'dp-step-bar';
+            bar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 20px;background:#fff;border-top:1.5px solid #D0DCF0;flex-shrink:0;';
+            const backBtn = document.createElement('button');
+            backBtn.type = 'button';
+            backBtn.className = 'dp-btn';
+            backBtn.textContent = step.back.label;
+            const nextBtn = document.createElement('button');
+            nextBtn.type = 'button';
+            nextBtn.className = 'dp-btn dp-btn-primary';
+            nextBtn.textContent = step.label;
+            nextBtn.onclick = () => b.click();               // same action as the header button
+            bar.append(backBtn, nextBtn);
+
+            backBtn.onclick = async () => {
                 if (isEditing()) { showToast('Save or cancel your edits first.'); return; }
-                const expiry = getExpiryDate('dpx');          // validates + shows the error in the bar
-                if (!expiry) return;
-                markRequestReady(docId, opts.row, { ...rowData, ...r }, b, expiry);
+                backBtn.disabled = true;
+                const ok = await revertStatus(docId, opts.row, cur, step.back.to);
+                if (!ok) { backBtn.disabled = false; return; }
+                const prev = { ...cur, status: step.back.to };
+                overlay.querySelector('#dp-expiry-bar')?.remove();
+                if (opts.mode === 'approve') {
+                    overlay.classList.remove('show');
+                    openRequestModal(docId, prev, opts.row);   // back to step 1
+                } else {
+                    openDocumentModal(docId, prev, { mode: opts.mode === 'ready' ? 'approve' : 'ready', row: opts.row });
+                }
             };
+
+            const scrollEl = overlay.querySelector('.doc-preview-scroll');
+            if (scrollEl) scrollEl.parentNode.insertBefore(bar, scrollEl.nextSibling);
         }
-        printBtn?.parentNode.insertBefore(b, printBtn);
     }
 
     // fixed-size pages + the admin's corrections (docOverrides); docedit.js live edits re-render via paintDocument
