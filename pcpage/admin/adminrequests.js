@@ -1525,9 +1525,9 @@ function initPendingRequests() {
         }
 
         const sorted = snapshot.docs.slice().sort((a, b) => {
-            const aTime = a.data().createdAt?.toMillis?.() || 0;
-            const bTime = b.data().createdAt?.toMillis?.() || 0;
-            return aTime - bTime; // oldest first (FIFO)
+            const aTime = a.data().createdAt?.toMillis?.() ?? Date.now();
+            const bTime = b.data().createdAt?.toMillis?.() ?? Date.now();
+            return bTime - aTime; // newest first
         });
 
         sorted.forEach(docSnap => {
@@ -1557,9 +1557,9 @@ function initAllRequests() {
         }
 
         const sorted = snapshot.docs.slice().sort((a, b) => {
-            const aTime = a.data().createdAt?.toMillis?.() || 0;
-            const bTime = b.data().createdAt?.toMillis?.() || 0;
-            return aTime - bTime; // oldest first (FIFO)
+            const aTime = a.data().createdAt?.toMillis?.() ?? Date.now();
+            const bTime = b.data().createdAt?.toMillis?.() ?? Date.now();
+            return bTime - aTime; // newest first
         });
 
         sorted.forEach(docSnap => {
