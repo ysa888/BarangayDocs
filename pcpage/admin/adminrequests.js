@@ -1227,22 +1227,30 @@ async function populateAndShowDocModal(r, residentData, docId, opts = {}, rowDat
                 if (opts.mode === 'approve') approveFromPreview(docId, cur, opts.row, expiry, approveCode, b, overlay);
                 else                         markRequestReady(docId, opts.row, cur, b, expiry);
             };
-            printBtn?.parentNode.insertBefore(b, printBtn);
+            // One set of step buttons only (bottom bar): Back (left) + blue Next (right)
+            if (!document.getElementById('dp-step-style')) {
+                const st = document.createElement('style');
+                st.id = 'dp-step-style';
+                st.textContent = `
+                  .dp-step-btn { height:40px; padding:0 20px; border-radius:10px; font-family:'Nunito',sans-serif; font-size:14px; font-weight:800; cursor:pointer; border:1.5px solid #1B3A6B; transition:background .15s, color .15s; }
+                  .dp-step-back { background:#fff; color:#1B3A6B; }
+                  .dp-step-back:hover:not(:disabled) { background:#EEF2F9; }
+                  .dp-step-next { background:#1B3A6B; color:#fff; }
+                  .dp-step-next:hover:not(:disabled) { background:#142C52; }
+                  .dp-step-btn:disabled { opacity:.55; cursor:not-allowed; }
+                `;
+                document.head.appendChild(st);
+            }
+            b.className = 'dp-step-btn dp-step-next';
 
-            // Bottom bar: Back (left) + Next (right) so the next click is always in the same spot
             const bar = document.createElement('div');
             bar.id = 'dp-step-bar';
             bar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 20px;background:#fff;border-top:1.5px solid #D0DCF0;flex-shrink:0;';
             const backBtn = document.createElement('button');
             backBtn.type = 'button';
-            backBtn.className = 'dp-btn';
+            backBtn.className = 'dp-step-btn dp-step-back';
             backBtn.textContent = step.back.label;
-            const nextBtn = document.createElement('button');
-            nextBtn.type = 'button';
-            nextBtn.className = 'dp-btn dp-btn-primary';
-            nextBtn.textContent = step.label;
-            nextBtn.onclick = () => b.click();               // same action as the header button
-            bar.append(backBtn, nextBtn);
+            bar.append(backBtn, b);
 
             backBtn.onclick = async () => {
                 if (isEditing()) { showToast('Save or cancel your edits first.'); return; }
