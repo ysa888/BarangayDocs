@@ -1190,8 +1190,130 @@ async function populateAndShowDocModal(r, residentData, docId, opts = {}, rowDat
 
     // "Edited details" comparison — only appears when the admin has actually changed something
     const baseForCompare = baseValues(r, enrichedResident);
-    renderChangesBar(overlay, baseForCompare, r.docOverrides);
-    watchChanges(overlay, docId, baseForCompare);
+    let compareOn = false;
+    let latestOverrides = r.docOverrides;
+    let lastKey = JSON.stringify(r.docOverrides || null);
+    let prevMaxWidth = '';
+    overlay.querySelector('#dp-compare-view')?.remove();
+    const scrollNode = overlay.querySelector('.doc-preview-scroll');
+    if (scrollNode) scrollNode.style.display = '';
+
+    // Copy of a rendered document: canvases (QR) become images, ids are dropped so nothing clashes
+    const cloneForCompare = (node) => {
+        const clone = node.cloneNode(true);
+        const src = node.querySelectorAll('canvas'), dst = clone.querySelectorAll('canvas');
+        src.forEach((c, i) => {
+            try {
+                const img = document.createElement('img');
+                img.src = c.toDataURL('image/png');
+                img.style.cssText = `width:${c.style.width || c.width + 'px'};height:${c.style.height || c.height + 'px'};display:block;`;
+                dst[i]?.replaceWith(img);
+            } catch (e) { /* tainted canvas — skip */ }
+        });
+        clone.querySelectorAll('[id]').forEach(e => e.removeAttribute('id'));
+        clone.removeAttribute('id');
+        clone.style.display = '';
+        clone.style.maxWidth = 'none';
+        return clone;
+    };
+
+    const paintLive = (ov) => {
+        paintDocument(effectiveValues(baseForCompare, ov));
+        if (!ov?.age     && age !== '—') setText('dp-age', age);
+        if (!ov?.address && address)     setText('dp-address', address);
+    };
+
+    // Render the document with the given overrides, copy it, and leave the live view as it was
+    const snapshotDoc = async (ov) => {
+        const usingTpl = tpl && templateView && tplEl && tplEl.style.display !== 'none';
+        if (usingTpl) {
+            await templateView.show({ template: tpl, request: r, resident: residentData, overrides: ov });
+            return cloneForCompare(tplEl);
+        }
+        paintLive(ov);
+        return cloneForCompare(legacyEl);
+    };
+
+    const renderCompare = async () => {
+        const had = overlay.querySelector('#dp-compare-view');
+        had?.remove();
+        const sc = overlay.querySelector('.doc-preview-scroll');
+        if (!compareOn) {
+            if (had) {
+                if (sc) sc.style.display = '';
+                if (wrapEl) wrapEl.style.maxWidth = prevMaxWidth;
+            }
+            return;
+        }
+        try {
+            const orig   = await snapshotDoc(undefined);        // without the admin's corrections
+            const edited = await snapshotDoc(latestOverrides);  // with them (live view ends in this state)
+
+            if (!document.getElementById('dp-compare-style')) {
+                const st = document.createElement('style');
+                st.id = 'dp-compare-style';
+                st.textContent = `
+                  #dp-compare-view { display:grid; grid-template-columns:1fr 1fr; gap:14px; padding:14px 20px; background:#E8EEF8; flex:1; min-height:0; overflow:auto; font-family:'Nunito',sans-serif; }
+                  .dp-cmp-col { min-width:0; }
+                  .dp-cmp-label { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:#6B7A99; margin-bottom:6px; }
+                  .dp-cmp-new .dp-cmp-label { color:#146C43; }
+                  .dp-cmp-doc { overflow:hidden; background:#fff; border:2px solid #D0DCF0; border-radius:8px; padding:8px; }
+                  .dp-cmp-new .dp-cmp-doc { border-color:#146C43; }
+                  @media (max-width:900px) { #dp-compare-view { grid-template-columns:1fr; } }
+                `;
+                document.head.appendChild(st);
+            }
+
+            const view = document.createElement('div');
+            view.id = 'dp-compare-view';
+            const mkCol = (label, cls, node) => {
+                const col = document.createElement('div');
+                col.className = 'dp-cmp-col ' + cls;
+                col.innerHTML = `<div class="dp-cmp-label">${label}</div><div class="dp-cmp-doc"></div>`;
+                col.querySelector('.dp-cmp-doc').appendChild(node);
+                return col;
+            };
+            view.append(mkCol('Original', '', orig), mkCol('Edited — current', 'dp-cmp-new', edited));
+
+            if (wrapEl) wrapEl.style.maxWidth = '1500px';
+            if (sc) { sc.parentNode.insertBefore(view, sc); sc.style.display = 'none'; }
+
+            // shrink each certificate to fit its column
+            view.querySelectorAll('.dp-cmp-doc').forEach(d => {
+                const inner = d.firstElementChild;
+                const natural = inner.scrollWidth || inner.offsetWidth;
+                const avail = d.clientWidth - 16;
+                d.style.zoom = natural > avail && natural > 0 ? String(avail / natural) : '1';
+            });
+        } catch (err) {
+            console.warn('Comparison failed:', err);
+            showToast('Could not build the comparison.');
+            compareOn = false;
+            if (sc) sc.style.display = '';
+            if (wrapEl) wrapEl.style.maxWidth = prevMaxWidth;
+            renderChangesBar(overlay, baseForCompare, latestOverrides, cmpCtl());
+        }
+    };
+
+    const toggleCompare = () => {
+        if (overlay.querySelector('.doc-preview-wrapper.dp-editing')) { showToast('Save or cancel your edits first.'); return; }
+        if (!compareOn) prevMaxWidth = wrapEl ? wrapEl.style.maxWidth : '';
+        compareOn = !compareOn;
+        renderChangesBar(overlay, baseForCompare, latestOverrides, cmpCtl());
+        renderCompare();
+    };
+    const cmpCtl = () => ({ on: compareOn, toggle: toggleCompare });
+
+    renderChangesBar(overlay, baseForCompare, r.docOverrides, cmpCtl());
+    watchChanges(overlay, docId, (ov) => {
+        const key = JSON.stringify(ov || null);
+        if (key === lastKey) return;                     // nothing about the edits changed
+        lastKey = key;
+        latestOverrides = ov;
+        const n = renderChangesBar(overlay, baseForCompare, ov, cmpCtl());
+        if (!n) compareOn = false;                       // no edits left → leave comparison
+        renderCompare();
+    });
 
     if (approving) setupPreviewExpiryPicker(overlay, r, approveCode, opts.mode === 'ready' ? r.expiresAt : null);
 
@@ -1322,21 +1444,23 @@ function showVal(v) {
     return String(v);
 }
 
-function renderChangesBar(overlay, base, overrides) {
+function renderChangesBar(overlay, base, overrides, cmp) {
     overlay.querySelector('#dp-changes-bar')?.remove();
 
     const isPrim = v => v === null || ['string', 'number', 'boolean'].includes(typeof v);
     const changed = Object.keys(overrides || {}).filter(k =>
         isPrim(overrides[k]) && showVal(overrides[k]) !== showVal(base?.[k])
     );
-    if (!changed.length) return;                       // nothing edited → nothing shown
+    if (!changed.length) return 0;                     // nothing edited → nothing shown
 
     if (!document.getElementById('dp-changes-style')) {
         const st = document.createElement('style');
         st.id = 'dp-changes-style';
         st.textContent = `
           .dp-changes-bar { padding:10px 20px; background:#FFF8E6; border-bottom:1.5px solid #F0D9A0; flex-shrink:0; max-height:180px; overflow:auto; font-family:'Nunito',sans-serif; }
-          .dp-changes-bar .dp-chg-title { font-size:11px; font-weight:800; color:#8A6200; text-transform:uppercase; letter-spacing:.4px; margin-bottom:6px; }
+          .dp-changes-bar .dp-chg-title { display:flex; justify-content:space-between; align-items:center; gap:10px; font-size:11px; font-weight:800; color:#8A6200; text-transform:uppercase; letter-spacing:.4px; margin-bottom:6px; }
+          .dp-changes-bar .dp-chg-cmp { height:30px; padding:0 12px; border-radius:8px; border:1.5px solid #1B3A6B; background:#fff; color:#1B3A6B; font-family:'Nunito',sans-serif; font-size:12px; font-weight:800; cursor:pointer; text-transform:none; letter-spacing:0; white-space:nowrap; }
+          .dp-changes-bar .dp-chg-cmp:hover { background:#EEF2F9; }
           .dp-changes-bar table { width:100%; border-collapse:collapse; font-size:12px; }
           .dp-changes-bar th { text-align:left; font-size:10px; font-weight:800; color:#6B7A99; text-transform:uppercase; padding:2px 8px 4px 0; }
           .dp-changes-bar td { padding:3px 8px 3px 0; vertical-align:top; color:#1B3A6B; font-weight:700; overflow-wrap:anywhere; }
@@ -1351,20 +1475,25 @@ function renderChangesBar(overlay, base, overrides) {
     bar.id = 'dp-changes-bar';
     bar.className = 'dp-changes-bar';
     bar.innerHTML = `
-        <div class="dp-chg-title">✎ Edited details (${changed.length}) — original vs. changed</div>
+        <div class="dp-chg-title">
+            <span>✎ Edited details (${changed.length}) — original vs. changed</span>
+            <button type="button" class="dp-chg-cmp">${cmp?.on ? '✕ Close comparison' : '⇄ Compare side by side'}</button>
+        </div>
         <table>
             <tr><th>Field</th><th>Original</th><th>Changed to</th></tr>
             ${changed.map(k => `<tr><td>${esc(prettyKey(k))}</td><td class="dp-old">${esc(showVal(base?.[k]))}</td><td class="dp-new">${esc(showVal(overrides[k]))}</td></tr>`).join('')}
         </table>`;
     const scroll = overlay.querySelector('.doc-preview-scroll');
     if (scroll) scroll.parentNode.insertBefore(bar, scroll);
+    bar.querySelector('.dp-chg-cmp').onclick = () => cmp?.toggle();
+    return changed.length;
 }
 
-function watchChanges(overlay, docId, base) {
+function watchChanges(overlay, docId, onData) {
     stopChangesWatch();
     changesUnsub = onSnapshot(doc(db, 'requests', docId), (snap) => {
         if (!overlay.classList.contains('show')) { stopChangesWatch(); return; }
-        renderChangesBar(overlay, base, snap.exists() ? snap.data().docOverrides : null);
+        onData(snap.exists() ? snap.data().docOverrides : null);
     }, (err) => console.warn('Changes watch failed:', err));
 }
 
