@@ -61,7 +61,8 @@ const S = {
     base: null,
     saved: {},          // overrides currently stored in Firestore
     editing: false,
-    snapshot: ''        // JSON of overrides when edit mode started (dirty check)
+    snapshot: '',       // JSON of overrides when edit mode started (dirty check)
+    usedKeys: null      // FIELDS keys the saved template uses (null = no template → show all)
 };
 
 // ---------------------------------------------
@@ -89,6 +90,12 @@ function injectUI() {
                  font-family:'Nunito',sans-serif; font-size:10px; font-weight:800; letter-spacing:.5px; text-transform:uppercase; vertical-align:middle; }
     .dpe-badge.show { display:inline-block; }
     .dpe-panel { background:#fff; border-bottom:1.5px solid var(--border,#D0DCF0); padding:14px 20px; flex-shrink:0; max-height:42vh; overflow-y:auto; }
+    /* Side by side: form on the left, live document on the right */
+    .dpe-split { display:flex; flex:1; min-height:0; align-items:stretch; }
+    .dpe-split > .doc-preview-scroll { flex:1; min-width:0; }
+    .dpe-split > .dpe-panel { flex:0 0 340px; width:340px; max-height:none; border-bottom:0; border-right:1.5px solid var(--border,#D0DCF0); }
+    .dpe-split .dpe-grid { grid-template-columns:1fr; }
+    .dpe-field[hidden] { display:none; }
     .dpe-panel[hidden] { display:none; }
     .dpe-note { font-size:12px; font-weight:700; color:#664D03; background:#FFF3CD; border-radius:8px; padding:8px 12px; margin-bottom:12px; }
     .dpe-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 12px; }
@@ -111,6 +118,7 @@ function injectUI() {
     .dpe-msg { font-size:12px; font-weight:800; color:var(--red,#DC3545); margin-top:8px; display:none; }
     /* Highlight corrected values — scoped to the modal wrapper so it never reaches the print window */
     .dp-editing #doc-preview-content .dp-changed { background:#FFF3B0; outline:1px dashed #B26A00; }
+    @media (max-width:760px) { .dpe-split { flex-direction:column; } .dpe-split > .dpe-panel { flex:0 0 auto; width:auto; max-height:42vh; border-right:0; border-bottom:1.5px solid var(--border,#D0DCF0); } }
     @media (max-width:560px) { .dpe-grid { grid-template-columns:1fr; } .dpe-actions { flex-wrap:wrap; } }
     `;
     document.head.appendChild(style);
@@ -140,10 +148,10 @@ function injectUI() {
     panel.className = 'dpe-panel';
     panel.hidden = true;
     panel.innerHTML = `
-        <div class="dpe-note">Changes apply to this document only. The resident's profile is not modified.</div>
+        <div class="dpe-note">Changes apply to this document only. The resident's profile is not modified.<div id="dpe-usednote" style="font-weight:600;margin-top:3px;"></div></div>
         <div class="dpe-grid">
             ${FIELDS.map(f => `
-            <div class="dpe-field${f.wide ? ' wide' : ''}">
+            <div class="dpe-field${f.wide ? ' wide' : ''}" data-key="${f.key}">
                 <label for="dpe-${f.key}">${f.label}</label>
                 <input id="dpe-${f.key}" type="${f.type}" ${f.max ? `maxlength="${f.max}"` : ''} autocomplete="off">
                 <div class="dpe-hint" id="dpe-hint-${f.key}"></div>
@@ -151,7 +159,7 @@ function injectUI() {
                     <input type="checkbox" id="dpe-${f.toggle}"> Show on document</label>` : ''}
                 ${f.key === 'address' ? `<button type="button" class="dpe-link" id="dpe-use-profile-address" style="display:none;">Use address from resident profile</button>` : ''}
             </div>`).join('')}
-            <div class="dpe-field wide">
+            <div class="dpe-field wide" data-key="remarks">
                 <label for="dpe-remarks">Additional Remarks (printed on the document)</label>
                 <textarea id="dpe-remarks" maxlength="500" placeholder="Optional"></textarea>
             </div>
@@ -192,6 +200,62 @@ function injectUI() {
     }).observe(modal, { attributes: true, attributeFilter: ['class'] });
 }
 
+
+// ---------------------------------------------
+// Which fields does the saved template use?
+// Reads documentTemplates/{docId}.html and looks at its {placeholders} / data-field spans.
+// Only those fields are offered in the edit form (no template → all fields, as before).
+// ---------------------------------------------
+const FIELD_ALIASES = {
+    residentName:  ['residentname', 'fullname', 'name', 'resident.name', 'resident.fullname', 'resident'],
+    age:           ['age', 'resident.age'],
+    occupation:    ['occupation', 'work', 'job', 'jobtitle', 'resident.occupation'],
+    address:       ['address', 'resident.address', 'residentaddress'],
+    birthday:      ['birthday', 'birthdate', 'dateofbirth', 'dob', 'resident.birthday', 'resident.birthdate', 'resident.dateofbirth'],
+    contactNumber: ['contactnumber', 'contact', 'phone', 'mobile', 'resident.contactnumber', 'resident.contact', 'resident.phone'],
+    remarks:       ['remarks', 'additionalremarks', 'note', 'notes']
+};
+const normKey = (k) => String(k || '').toLowerCase().replace(/[\s_\-]/g, '');
+
+function extractTemplateKeys(html) {
+    const keys = new Set();
+    const addAll = (re, str) => { let m; while ((m = re.exec(str))) keys.add(normKey(m[1])); };
+    addAll(/data-field="([^"]+)"/g, html);
+    addAll(/\{\{?\s*([A-Za-z0-9_.\-]+)\s*\}?\}/g, html.replace(/<[^>]+>/g, ''));
+    return keys;
+}
+
+async function loadUsedFields(documentType) {
+    try {
+        const snap = await getDocs(query(collection(db, 'documentTemplates'), where('documentName', '==', documentType), limit(1)));
+        if (snap.empty) return null;
+        const html = snap.docs[0].data().html || '';
+        if (!html) return null;
+        const keys = extractTemplateKeys(html);
+        const used = new Set();
+        Object.entries(FIELD_ALIASES).forEach(([fieldKey, aliases]) => {
+            if (aliases.some(a => keys.has(normKey(a)))) used.add(fieldKey);
+        });
+        // Placeholders matched nothing we can edit → don't hide everything
+        const editable = [...used].filter(k => k !== 'remarks');
+        return editable.length ? used : null;
+    } catch (e) {
+        console.warn('docedit: could not read template fields', e);
+        return null;
+    }
+}
+
+function applyFieldVisibility() {
+    const used = S.usedKeys;
+    document.querySelectorAll('#dp-edit-panel .dpe-field[data-key]').forEach(n => {
+        const k = n.dataset.key;
+        // remarks is always available; "show on document" toggles live inside their field
+        n.hidden = !!used && k !== 'remarks' && !used.has(k);
+    });
+    const note = document.getElementById('dpe-usednote');
+    if (note) note.textContent = used ? 'Showing only the fields used by this document\\u2019s template.' : '';
+}
+
 // ---------------------------------------------
 // Attach to a request
 // ---------------------------------------------
@@ -224,6 +288,8 @@ async function attach(requestId, cachedData) {
     S.resident = resident;
     S.base     = baseValues(r, resident);
     S.saved    = r.docOverrides || {};
+    S.usedKeys = await loadUsedFields(r.documentType);
+    if (S.requestId !== requestId || !S.active) return;
 
     // If the profile couldn't be read, trust what the page already painted for age/occupation
     if (!residentOk) {
@@ -323,6 +389,8 @@ function enterEdit() {
     S.editing = true;
 
     $('doc-preview-modal').querySelector('.doc-preview-wrapper').classList.add('dp-editing');
+    applyFieldVisibility();
+    enterSplit();
     $('dp-edit-panel').hidden = false;
     $('dp-edit').style.display = 'none';
     const p = $('dp-print');
@@ -332,7 +400,29 @@ function enterEdit() {
     refreshPreview();
 }
 
+// Put the form and the document next to each other (moved back on exit so other code is unaffected)
+function enterSplit() {
+    const panel = $('dp-edit-panel');
+    const scroll = $('doc-preview-modal').querySelector('.doc-preview-scroll');
+    if (!panel || !scroll || document.getElementById('dpe-split')) return;
+    const split = document.createElement('div');
+    split.id = 'dpe-split';
+    split.className = 'dpe-split';
+    scroll.parentNode.insertBefore(split, scroll);
+    split.append(panel, scroll);
+}
+function exitSplit() {
+    const split = document.getElementById('dpe-split');
+    if (!split) return;
+    const panel = $('dp-edit-panel');
+    const scroll = split.querySelector('.doc-preview-scroll');
+    split.parentNode.insertBefore(panel, split);
+    if (scroll) split.parentNode.insertBefore(scroll, split);
+    split.remove();
+}
+
 function exitEditUI() {
+    exitSplit();
     S.editing = false;
     $('doc-preview-modal').querySelector('.doc-preview-wrapper').classList.remove('dp-editing');
     $('dp-edit-panel').hidden = true;
