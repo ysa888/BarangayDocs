@@ -26,7 +26,7 @@ import {
 
 import {
     DEFAULT_ADDRESS, FIELD_EL, baseValues, effectiveValues, buildOverrides,
-    paintDocument, profileAddress
+    paintDocument, profileAddress, setTemplatePainter
 } from "./docoverrides.js";
 
 // ---------------------------------------------
@@ -267,6 +267,10 @@ async function attachFromDom() {
 function teardown() {
     S.active = false;
     S.requestId = null;
+    // Drop the template painter registered for this preview, so a later preview (or one with no
+    // template) can never be repainted with an older/stale template. The next preview that shows a
+    // template registers its own painter again when it renders.
+    setTemplatePainter(null);
     if (S.editing) exitEditUI();
     resetExtras();
     $('dpe-badge')?.classList.remove('show');
