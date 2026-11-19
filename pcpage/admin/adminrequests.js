@@ -1488,17 +1488,156 @@ function buildRow(docId, data) {
 }
 
 // =============================================
-// Search & Filter
+// List Controller  (sort toggle + filters + pagination)
 // =============================================
-function applyFilters(tbody) {
-    const search    = document.getElementById('search-input')?.value.toLowerCase() || '';
-    const docFilter = document.getElementById('doc-filter')?.value.toLowerCase() || 'all';
+const PAGE_SIZE = 10;
 
-    tbody.querySelectorAll('.table-row').forEach(row => {
-        const nameMatch = row.dataset.name?.includes(search) || row.dataset.doc?.includes(search);
-        const docMatch  = docFilter === 'all' || row.dataset.doc?.includes(docFilter);
-        row.style.display = (nameMatch && docMatch) ? '' : 'none';
+function injectListStyles() {
+    if (document.getElementById('list-controller-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'list-controller-styles';
+    s.textContent = `
+        .sort-toggle-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 14px; border-radius: 8px; cursor: pointer;
+            border: 1px solid #1B3A6B; background: #fff; color: #1B3A6B;
+            font-size: 13px; font-weight: 600; font-family: inherit;
+            margin-left: 8px; white-space: nowrap;
+        }
+        .sort-toggle-btn:hover { background: #1B3A6B; color: #fff; }
+        .list-pager {
+            display: flex; align-items: center; justify-content: space-between;
+            flex-wrap: wrap; gap: 10px; padding: 14px 4px; font-size: 13px;
+        }
+        .list-pager .pager-info { color: var(--text-sub, #6b7280); }
+        .list-pager .pager-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+        .list-pager button {
+            min-width: 34px; padding: 6px 10px; border-radius: 6px; cursor: pointer;
+            border: 1px solid #d1d5db; background: #fff; color: #1B3A6B;
+            font-size: 13px; font-family: inherit;
+        }
+        .list-pager button:hover:not(:disabled) { background: #eef2f9; }
+        .list-pager button.active { background: #1B3A6B; color: #fff; border-color: #1B3A6B; }
+        .list-pager button:disabled { opacity: .4; cursor: not-allowed; }
+    `;
+    document.head.appendChild(s);
+}
+
+function createListController(tbody, { emptyMsg, getTab }) {
+    injectListStyles();
+
+    const state = { docs: [], sort: 'newest', page: 1 };
+
+    // ---- Sort button (placed next to the filter dropdown, else above the list) ----
+    const sortBtn = document.createElement('button');
+    sortBtn.type = 'button';
+    sortBtn.className = 'sort-toggle-btn';
+    const anchor = document.getElementById('doc-filter') || document.getElementById('search-input');
+    if (anchor) anchor.insertAdjacentElement('afterend', sortBtn);
+    else tbody.parentNode.insertBefore(sortBtn, tbody);
+
+    // ---- Pager (below the list) ----
+    const pager = document.createElement('div');
+    pager.className = 'list-pager';
+    tbody.insertAdjacentElement('afterend', pager);
+
+    const timeOf = (d) => d.data().createdAt?.toMillis?.() ?? Date.now();
+
+    function getFiltered() {
+        const search    = document.getElementById('search-input')?.value.toLowerCase() || '';
+        const docFilter = document.getElementById('doc-filter')?.value.toLowerCase() || 'all';
+        const tab       = getTab ? getTab() : 'all';
+
+        return state.docs.filter(d => {
+            const data = d.data();
+            const name = (data.residentName || '').toLowerCase();
+            const type = (data.documentType || '').toLowerCase();
+            const searchOk = name.includes(search) || type.includes(search);
+            const docOk    = docFilter === 'all' || type.includes(docFilter);
+            const tabOk    = tab === 'all' || data.status === tab;
+            return searchOk && docOk && tabOk;
+        });
+    }
+
+    function renderPager(total, totalPages) {
+        pager.innerHTML = '';
+        if (total === 0) return;
+
+        const start = (state.page - 1) * PAGE_SIZE + 1;
+        const end   = Math.min(state.page * PAGE_SIZE, total);
+
+        const info = document.createElement('div');
+        info.className = 'pager-info';
+        info.textContent = `Showing ${start}–${end} of ${total}`;
+        pager.appendChild(info);
+
+        if (totalPages <= 1) return;
+
+        const btns = document.createElement('div');
+        btns.className = 'pager-btns';
+
+        const mk = (label, page, { disabled = false, active = false } = {}) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = label;
+            b.disabled = disabled;
+            if (active) b.classList.add('active');
+            b.addEventListener('click', () => { state.page = page; render(); });
+            btns.appendChild(b);
+        };
+
+        mk('‹ Prev', state.page - 1, { disabled: state.page === 1 });
+
+        // window of up to 5 page numbers around the current page
+        let from = Math.max(1, state.page - 2);
+        let to   = Math.min(totalPages, from + 4);
+        from     = Math.max(1, to - 4);
+        for (let p = from; p <= to; p++) mk(String(p), p, { active: p === state.page });
+
+        mk('Next ›', state.page + 1, { disabled: state.page === totalPages });
+
+        pager.appendChild(btns);
+    }
+
+    function render() {
+        sortBtn.textContent = state.sort === 'newest' ? '↓ Newest first' : '↑ Oldest first';
+        sortBtn.title = 'Click to switch sort order';
+
+        const filtered = getFiltered().sort((a, b) =>
+            state.sort === 'newest' ? timeOf(b) - timeOf(a) : timeOf(a) - timeOf(b)
+        );
+
+        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+        if (state.page > totalPages) state.page = totalPages;
+
+        tbody.innerHTML = '';
+
+        if (filtered.length === 0) {
+            const msg = state.docs.length === 0 ? emptyMsg : 'No matching requests.';
+            tbody.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-sub);font-size:13px;">${msg}</div>`;
+            renderPager(0, 1);
+            return;
+        }
+
+        const pageDocs = filtered.slice((state.page - 1) * PAGE_SIZE, state.page * PAGE_SIZE);
+        pageDocs.forEach(docSnap => tbody.appendChild(buildRow(docSnap.id, docSnap.data())));
+        renderPager(filtered.length, totalPages);
+    }
+
+    sortBtn.addEventListener('click', () => {
+        state.sort = state.sort === 'newest' ? 'oldest' : 'newest';
+        state.page = 1;
+        render();
     });
+
+    const resetAndRender = () => { state.page = 1; render(); };
+    document.getElementById('search-input')?.addEventListener('input',  resetAndRender);
+    document.getElementById('doc-filter')?.addEventListener('change', resetAndRender);
+
+    return {
+        setDocs(docs) { state.docs = docs; render(); },
+        resetAndRender
+    };
 }
 
 // =============================================
@@ -1508,35 +1647,18 @@ function initPendingRequests() {
     const tbody = document.getElementById('requests-body');
     if (!tbody) return;
 
+    const list = createListController(tbody, { emptyMsg: 'No pending requests.' });
+
     const q = query(
         collection(db, 'requests'),
         where('status', 'in', ['pending', 'processing', 'approved'])
     );
 
     onSnapshot(q, (snapshot) => {
-        tbody.innerHTML = '';
-
         const countEl = document.getElementById('pendingCount');
         if (countEl) countEl.textContent = snapshot.size;
-
-        if (snapshot.empty) {
-            tbody.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-sub);font-size:13px;">No pending requests.</div>';
-            return;
-        }
-
-        const sorted = snapshot.docs.slice().sort((a, b) => {
-            const aTime = a.data().createdAt?.toMillis?.() ?? Date.now();
-            const bTime = b.data().createdAt?.toMillis?.() ?? Date.now();
-            return bTime - aTime; // newest first
-        });
-
-        sorted.forEach(docSnap => {
-            tbody.appendChild(buildRow(docSnap.id, docSnap.data()));
-        });
+        list.setDocs(snapshot.docs);
     });
-
-    document.getElementById('search-input')?.addEventListener('input',  () => applyFilters(tbody));
-    document.getElementById('doc-filter')?.addEventListener('change', () => applyFilters(tbody));
 }
 
 // =============================================
@@ -1546,45 +1668,21 @@ function initAllRequests() {
     const tbody = document.getElementById('requests-body');
     if (!tbody) return;
 
-    const q = query(collection(db, 'requests'));
+    const list = createListController(tbody, {
+        emptyMsg: 'No requests yet.',
+        getTab: () => document.querySelector('.tab-btn.active')?.dataset.status || 'all'
+    });
 
-    onSnapshot(q, (snapshot) => {
-        tbody.innerHTML = '';
-
-        if (snapshot.empty) {
-            tbody.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-sub);font-size:13px;">No requests yet.</div>';
-            return;
-        }
-
-        const sorted = snapshot.docs.slice().sort((a, b) => {
-            const aTime = a.data().createdAt?.toMillis?.() ?? Date.now();
-            const bTime = b.data().createdAt?.toMillis?.() ?? Date.now();
-            return bTime - aTime; // newest first
-        });
-
-        sorted.forEach(docSnap => {
-            tbody.appendChild(buildRow(docSnap.id, docSnap.data()));
-        });
-
-        const activeTab = document.querySelector('.tab-btn.active');
-        if (activeTab) filterTab(activeTab.dataset.status, tbody);
+    onSnapshot(query(collection(db, 'requests')), (snapshot) => {
+        list.setDocs(snapshot.docs);
     });
 
     document.querySelectorAll('.tab-btn').forEach(tab => {
         tab.addEventListener('click', () => {
             document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            filterTab(tab.dataset.status, tbody);
+            list.resetAndRender();
         });
-    });
-
-    document.getElementById('search-input')?.addEventListener('input',  () => applyFilters(tbody));
-    document.getElementById('doc-filter')?.addEventListener('change', () => applyFilters(tbody));
-}
-
-function filterTab(status, tbody) {
-    tbody.querySelectorAll('.table-row').forEach(row => {
-        row.style.display = (status === 'all' || row.dataset.status === status) ? '' : 'none';
     });
 }
 
