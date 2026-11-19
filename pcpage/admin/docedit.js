@@ -62,7 +62,9 @@ const S = {
     saved: {},          // overrides currently stored in Firestore
     editing: false,
     snapshot: '',       // JSON of overrides when edit mode started (dirty check)
-    usedKeys: null      // FIELDS keys the saved template uses (null = no template → show all)
+    usedKeys: null,     // FIELDS keys the saved template uses (null = no template → show all)
+    zoom: 1,
+    prevMaxWidth: ''
 };
 
 // ---------------------------------------------
@@ -93,7 +95,26 @@ function injectUI() {
     /* Side by side: form on the left, live document on the right */
     .dpe-split { display:flex; flex:1; min-height:0; align-items:stretch; }
     .dpe-split > .doc-preview-scroll { flex:1; min-width:0; }
-    .dpe-split > .dpe-panel { flex:0 0 340px; width:340px; max-height:none; border-bottom:0; border-right:1.5px solid var(--border,#D0DCF0); }
+    .dpe-split { position:relative; }
+    .dpe-split > .dpe-panel { flex:0 0 min(440px,40%); width:min(440px,40%); max-height:none; border-bottom:0; border-right:1.5px solid var(--border,#D0DCF0); padding:18px 20px; }
+    .dpe-split .dpe-field label { font-size:12px; margin-bottom:6px; }
+    .dpe-split .dpe-field input:not([type=checkbox]), .dpe-split .dpe-field textarea { font-size:16px; padding:12px 14px; border-radius:10px; }
+    .dpe-split .dpe-field textarea { min-height:90px; }
+    .dpe-split .dpe-hint { font-size:12px; }
+    .dpe-split .dpe-inline { font-size:13px; }
+    .dpe-split .dpe-btn { height:42px; font-size:13px; }
+    .dpe-split > .doc-preview-scroll { display:block; overflow:auto; }
+    .dpe-split #doc-preview-template, .dpe-split #doc-preview-content { margin-left:auto; margin-right:auto; }
+    .dpe-pan { cursor:grab; }
+    .dpe-pan.dragging { cursor:grabbing; user-select:none; -webkit-user-select:none; }
+    .dpe-zoom { position:absolute; top:10px; right:24px; z-index:6; display:flex; align-items:center; gap:4px; padding:5px; background:rgba(255,255,255,.95);
+                border:1.5px solid var(--border,#D0DCF0); border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,.15); font-family:'Nunito',sans-serif; }
+    .dpe-zoom button { min-width:34px; height:34px; padding:0 10px; border:1.5px solid var(--border,#D0DCF0); border-radius:8px; background:#fff; color:var(--primary,#1B3A6B);
+                       font-family:'Nunito',sans-serif; font-size:16px; font-weight:800; cursor:pointer; }
+    .dpe-zoom button:hover { background:#EEF2F9; }
+    .dpe-zoom .pct { min-width:48px; text-align:center; font-size:12px; font-weight:800; color:var(--text-sub,#5A6A85); }
+    .dpe-zoom .tip { font-size:11px; font-weight:700; color:var(--text-sub,#5A6A85); padding:0 6px; white-space:nowrap; }
+    @media (max-width:1100px) { .dpe-zoom .tip { display:none; } }
     .dpe-split .dpe-grid { grid-template-columns:1fr; }
     .dpe-field[hidden] { display:none; }
     .dpe-panel[hidden] { display:none; }
@@ -400,6 +421,97 @@ function enterEdit() {
     refreshPreview();
 }
 
+
+// ---------------------------------------------
+// Zoom + hand-drag panning for the live document (edit mode only)
+// ---------------------------------------------
+const ZOOM_MIN = 0.25, ZOOM_MAX = 3, ZOOM_STEP = 1.2;
+const docScroll   = () => $('doc-preview-modal')?.querySelector('.doc-preview-scroll');
+const zoomTargets = () => ['doc-preview-template', 'doc-preview-content'].map($).filter(Boolean);
+
+function applyZoom() {
+    zoomTargets().forEach(n => { n.style.zoom = String(S.zoom); });
+    const l = $('dpe-zoom-pct'); if (l) l.textContent = Math.round(S.zoom * 100) + '%';
+}
+
+function setZoom(z, cx, cy) {
+    const sc = docScroll();
+    z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+    const old = S.zoom;
+    if (!sc || Math.abs(z - old) < 0.001) { S.zoom = z; applyZoom(); return; }
+    const r  = sc.getBoundingClientRect();
+    const px = (cx ?? (r.left + sc.clientWidth / 2)) - r.left;   // keep this point still while zooming
+    const py = (cy ?? (r.top + sc.clientHeight / 2)) - r.top;
+    const k  = z / old;
+    const left = (sc.scrollLeft + px) * k - px;
+    const top  = (sc.scrollTop  + py) * k - py;
+    S.zoom = z; applyZoom();
+    sc.scrollLeft = left; sc.scrollTop = top;
+}
+
+function fitZoom() {
+    const sc = docScroll();
+    const t = zoomTargets().find(n => n.style.display !== 'none' && n.offsetParent !== null);
+    if (!sc || !t) return;
+    t.style.zoom = '1';
+    let natural = t.scrollWidth;
+    Array.from(t.children).forEach(c => { natural = Math.max(natural, c.scrollWidth, c.offsetWidth); });
+    const z = natural > 0 ? (sc.clientWidth - 32) / natural : 1;
+    S.zoom = 1;
+    setZoom(Math.min(2, Math.max(ZOOM_MIN, z)));
+    sc.scrollLeft = 0; sc.scrollTop = 0;
+}
+
+function buildZoomBar(split) {
+    const bar = document.createElement('div');
+    bar.id = 'dpe-zoombar';
+    bar.className = 'dpe-zoom';
+    bar.innerHTML = `
+        <button type="button" id="dpe-zout" title="Zoom out">−</button>
+        <span class="pct" id="dpe-zoom-pct">100%</span>
+        <button type="button" id="dpe-zin" title="Zoom in">+</button>
+        <button type="button" id="dpe-zfit" title="Fit to width" style="font-size:12px;">Fit</button>
+        <button type="button" id="dpe-z100" title="Actual size" style="font-size:12px;">100%</button>
+        <span class="tip">Drag to move · Ctrl + scroll to zoom</span>`;
+    split.appendChild(bar);
+    $('dpe-zout').onclick = () => setZoom(S.zoom / ZOOM_STEP);
+    $('dpe-zin').onclick  = () => setZoom(S.zoom * ZOOM_STEP);
+    $('dpe-zfit').onclick = fitZoom;
+    $('dpe-z100').onclick = () => setZoom(1);
+}
+
+let panWired = false;
+function wirePan(sc) {
+    if (panWired || !sc) return;
+    panWired = true;
+    let drag = null;
+    sc.addEventListener('pointerdown', (e) => {
+        if (!S.editing || e.pointerType !== 'mouse' || e.button !== 0) return;
+        if (e.target.closest('input, textarea, button, select, a')) return;
+        drag = { x: e.clientX, y: e.clientY, l: sc.scrollLeft, t: sc.scrollTop };
+        sc.classList.add('dragging');
+        try { sc.setPointerCapture(e.pointerId); } catch (_) {}
+        e.preventDefault();
+    });
+    sc.addEventListener('pointermove', (e) => {
+        if (!drag) return;
+        sc.scrollLeft = drag.l - (e.clientX - drag.x);
+        sc.scrollTop  = drag.t - (e.clientY - drag.y);
+    });
+    const end = (e) => {
+        if (!drag) return;
+        drag = null; sc.classList.remove('dragging');
+        try { sc.releasePointerCapture(e.pointerId); } catch (_) {}
+    };
+    sc.addEventListener('pointerup', end);
+    sc.addEventListener('pointercancel', end);
+    sc.addEventListener('wheel', (e) => {
+        if (!S.editing || !(e.ctrlKey || e.metaKey)) return;   // plain wheel still scrolls
+        e.preventDefault();
+        setZoom(S.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1), e.clientX, e.clientY);
+    }, { passive: false });
+}
+
 // Put the form and the document next to each other (moved back on exit so other code is unaffected)
 function enterSplit() {
     const panel = $('dp-edit-panel');
@@ -410,6 +522,15 @@ function enterSplit() {
     split.className = 'dpe-split';
     scroll.parentNode.insertBefore(split, scroll);
     split.append(panel, scroll);
+    buildZoomBar(split);
+    scroll.classList.add('dpe-pan');
+    wirePan(scroll);
+    // give the document more room while editing
+    const wrap = $('doc-preview-modal').querySelector('.doc-preview-wrapper');
+    if (wrap) { S.prevMaxWidth = wrap.style.maxWidth; wrap.style.maxWidth = '1800px'; }
+    S.zoom = 1;
+    // fit once the layout has settled
+    requestAnimationFrame(() => setTimeout(fitZoom, 60));
 }
 function exitSplit() {
     const split = document.getElementById('dpe-split');
@@ -417,8 +538,12 @@ function exitSplit() {
     const panel = $('dp-edit-panel');
     const scroll = split.querySelector('.doc-preview-scroll');
     split.parentNode.insertBefore(panel, split);
-    if (scroll) split.parentNode.insertBefore(scroll, split);
+    if (scroll) { split.parentNode.insertBefore(scroll, split); scroll.classList.remove('dpe-pan', 'dragging'); }
     split.remove();
+    zoomTargets().forEach(n => { n.style.zoom = ''; });
+    S.zoom = 1;
+    const wrap = $('doc-preview-modal').querySelector('.doc-preview-wrapper');
+    if (wrap) wrap.style.maxWidth = S.prevMaxWidth || '';
 }
 
 function exitEditUI() {
@@ -450,6 +575,7 @@ function refreshPreview() {
     const overrides = readOverrides();
     const eff = effectiveValues(S.base, overrides);
     paintDocument(eff);
+    if (S.editing) applyZoom();
 
     // highlight corrected values + show the original under each changed field
     Object.entries(FIELD_EL).forEach(([key, elId]) => {
