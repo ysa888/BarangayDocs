@@ -1527,7 +1527,7 @@ function initPendingRequests() {
         const sorted = snapshot.docs.slice().sort((a, b) => {
             const aTime = a.data().createdAt?.toMillis?.() || 0;
             const bTime = b.data().createdAt?.toMillis?.() || 0;
-            return bTime - aTime;
+            return aTime - bTime; // oldest first (FIFO)
         });
 
         sorted.forEach(docSnap => {
@@ -1559,7 +1559,7 @@ function initAllRequests() {
         const sorted = snapshot.docs.slice().sort((a, b) => {
             const aTime = a.data().createdAt?.toMillis?.() || 0;
             const bTime = b.data().createdAt?.toMillis?.() || 0;
-            return bTime - aTime;
+            return aTime - bTime; // oldest first (FIFO)
         });
 
         sorted.forEach(docSnap => {
