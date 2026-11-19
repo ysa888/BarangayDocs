@@ -187,7 +187,10 @@ function clearOriginalDocx() {
 // =============================================
 // Init Page
 // =============================================
+let pageInited = false;          // auth can fire more than once — never stack listeners/handlers
 function initPage(user, adminData) {
+    if (pageInited) return;
+    pageInited = true;
     const fullName = adminData.name || adminData.email || 'Admin';
     const avatarEl = document.querySelector('.admin-avatar .av-ph');
     if (avatarEl) avatarEl.textContent = getInitials(fullName);
@@ -268,12 +271,14 @@ function listenDocumentTypes() {
 function listenTemplates() {
     onSnapshot(collection(db, 'documentTemplates'), (snap) => {
         templates = {};
-        snap.docs.forEach(d => { templates[d.id] = d.data(); });
+        // 'estimate' → a just-saved template shows its "Updated" date immediately instead of blank
+        snap.docs.forEach(d => { templates[d.id] = d.data({ serverTimestamps: 'estimate' }); });
         renderCards();
         updateBadge();
     }, (err) => {
         // Most likely Firestore rules not yet updated — editor still works for viewing defaults
         console.warn('documentTemplates listener failed:', err);
+        showToast('Could not load saved templates: ' + (err.message || err), 6000);
     });
 }
 
