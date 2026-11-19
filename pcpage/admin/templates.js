@@ -536,6 +536,9 @@ function ensureEditor() {
             });
             ed.on('input change keyup SetContent ExecCommand undo redo ObjectResized TableModified', schedulePaginate);
             ed.on('ResizeWindow ResizeEditor', schedulePaginate);
+            // Text typed next to a {field} (or after Enter) must not stay orange / inside the chip
+            ed.on('input keyup', (e) => { if (!e.isComposing) normalizeChips(ed, true); });
+            ed.on('SetContent', () => setTimeout(() => normalizeChips(ed, false), 0));
             ed.on('init', () => {
                 ed.getBody().addEventListener('load', schedulePaginate, true);   // images finishing loading
                 setTimeout(schedulePaginate, 600);
@@ -739,6 +742,106 @@ function renderFieldPanel() {
     host.innerHTML = html || '<p class="side-note">No fields match.</p>';
     host.querySelectorAll('.field-chip').forEach(btn =>
         btn.addEventListener('click', () => insertField(btn.dataset.key)));
+}
+
+
+// ---------------------------------------------
+// Keep orange field chips honest: a chip is only the exact text {key}.
+// Anything typed next to it (or after pressing Enter) must NOT stay orange / inside the chip.
+// Pure DOM function (no editor needed) so it can be tested on its own.
+//   caret: { container, offset } of a collapsed caret, or null
+//   returns { changed, caretTo: { node, offset } | null }
+// ---------------------------------------------
+function normalizeChipsIn(body, caret) {
+    const result = { changed: false, caretTo: null };
+    if (!body) return result;
+    const clean = (t) => String(t).replace(/[\uFEFF\u200B]/g, '');
+    const doc = body.ownerDocument;
+    const lastTextOf = (node) => {
+        const w = doc.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+        let last = null, n;
+        while ((n = w.nextNode())) last = n;
+        return last;
+    };
+
+    body.querySelectorAll('span.ph[data-field]').forEach(chip => {
+        const token = '{' + chip.getAttribute('data-field') + '}';
+        if (clean(chip.textContent) === token) return;            // perfect chip
+        chip.normalize();
+
+        // find the text node that holds the token
+        let tNode = null;
+        const w = doc.createTreeWalker(chip, NodeFilter.SHOW_TEXT);
+        for (let n = w.nextNode(); n; n = w.nextNode()) {
+            if (n.nodeValue.includes(token)) { tNode = n; break; }
+        }
+
+        // No token left (e.g. empty chip carried over by Enter, or its braces were deleted):
+        // it is plain text now → drop the orange chip look and the field link.
+        if (!tNode) {
+            chip.classList.remove('ph');
+            chip.removeAttribute('data-field');
+            if (!chip.getAttribute('class')) chip.removeAttribute('class');
+            result.changed = true;
+            return;
+        }
+
+        const idx = tNode.nodeValue.indexOf(token);
+        const end = idx + token.length;
+
+        // where is the caret relative to the token?
+        let side = null;
+        if (caret && chip.contains(caret.container)) {
+            if (caret.container === tNode) side = caret.offset >= end ? 'after' : (caret.offset <= idx ? 'before' : 'in');
+            else side = (tNode.compareDocumentPosition(caret.container) & Node.DOCUMENT_POSITION_FOLLOWING) ? 'after' : 'before';
+        }
+
+        // move text AFTER the token out of the chip (formatting wrappers are kept by extractContents)
+        let afterNode = null, beforeNode = null;
+        const rAfter = doc.createRange();
+        rAfter.setStart(tNode, end);
+        rAfter.setEndAfter(chip.lastChild);
+        if (clean(rAfter.toString()) !== '') {
+            const frag = rAfter.extractContents();
+            afterNode = lastTextOf(frag);
+            chip.after(frag);
+            result.changed = true;
+        }
+        // …and text BEFORE the token
+        const rBefore = doc.createRange();
+        rBefore.setStart(chip, 0);
+        rBefore.setEnd(tNode, idx);
+        if (clean(rBefore.toString()) !== '') {
+            const frag = rBefore.extractContents();
+            beforeNode = lastTextOf(frag);
+            chip.before(frag);
+            result.changed = true;
+        }
+
+        const target = side === 'after' ? afterNode : side === 'before' ? beforeNode : null;
+        if (target) result.caretTo = { node: target, offset: target.nodeValue.length };
+    });
+    return result;
+}
+
+let normalizingChips = false;
+function normalizeChips(ed, userTriggered) {
+    if (!ed || normalizingChips) return;
+    const body = ed.getBody && ed.getBody();
+    if (!body || !body.querySelector('span.ph[data-field]')) return;
+    normalizingChips = true;
+    try {
+        const rng = ed.selection.getRng();
+        const caret = rng && rng.collapsed ? { container: rng.startContainer, offset: rng.startOffset } : null;
+        let res;
+        ed.undoManager.ignore(() => { res = normalizeChipsIn(body, caret); });
+        if (res && res.caretTo) ed.selection.setCursorLocation(res.caretTo.node, res.caretTo.offset);
+        if (res && res.changed && userTriggered) setDirty(true);
+    } catch (err) {
+        console.warn('Field chip cleanup failed:', err);
+    } finally {
+        normalizingChips = false;
+    }
 }
 
 function insertField(key) {
