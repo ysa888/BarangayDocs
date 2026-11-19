@@ -96,10 +96,10 @@ function injectUI() {
     .dpe-split { display:flex; flex:1; min-height:0; align-items:stretch; }
     .dpe-split > .doc-preview-scroll { flex:1; min-width:0; }
     .dpe-split { position:relative; }
-    .dpe-split > .dpe-panel { flex:0 0 min(440px,40%); width:min(440px,40%); max-height:none; border-bottom:0; border-right:1.5px solid var(--border,#D0DCF0); padding:18px 20px; }
+    .dpe-split > .dpe-panel { flex:0 0 min(380px,36%); width:min(380px,36%); max-height:none; border-bottom:0; border-right:1.5px solid var(--border,#D0DCF0); padding:18px 20px; }
     .dpe-split .dpe-field label { font-size:12px; margin-bottom:6px; }
-    .dpe-split .dpe-field input:not([type=checkbox]), .dpe-split .dpe-field textarea { font-size:16px; padding:12px 14px; border-radius:10px; }
-    .dpe-split .dpe-field textarea { min-height:90px; }
+    .dpe-split .dpe-field input:not([type=checkbox]), .dpe-split .dpe-field textarea { font-size:14px; padding:9px 11px; border-radius:9px; }
+    .dpe-split .dpe-field textarea { min-height:72px; }
     .dpe-split .dpe-hint { font-size:12px; }
     .dpe-split .dpe-inline { font-size:13px; }
     .dpe-split .dpe-btn { height:42px; font-size:13px; }
@@ -456,9 +456,9 @@ function fitZoom() {
     t.style.zoom = '1';
     let natural = t.scrollWidth;
     Array.from(t.children).forEach(c => { natural = Math.max(natural, c.scrollWidth, c.offsetWidth); });
-    const z = natural > 0 ? (sc.clientWidth - 32) / natural : 1;
+    const z = natural > 0 ? ((sc.clientWidth - 32) / natural) * 0.8 : 1;
     S.zoom = 1;
-    setZoom(Math.min(2, Math.max(ZOOM_MIN, z)));
+    setZoom(Math.min(1.25, Math.max(ZOOM_MIN, z)));
     sc.scrollLeft = 0; sc.scrollTop = 0;
 }
 
@@ -527,7 +527,7 @@ function enterSplit() {
     wirePan(scroll);
     // give the document more room while editing
     const wrap = $('doc-preview-modal').querySelector('.doc-preview-wrapper');
-    if (wrap) { S.prevMaxWidth = wrap.style.maxWidth; wrap.style.maxWidth = '1800px'; }
+    if (wrap) { S.prevMaxWidth = wrap.style.maxWidth; wrap.style.maxWidth = '1500px'; }
     S.zoom = 1;
     // fit once the layout has settled
     requestAnimationFrame(() => setTimeout(fitZoom, 60));
@@ -653,8 +653,8 @@ function toast(text) {
     setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-// ---------------------------------------------
+// ----------------------------------------------
 // Boot
-// ---------------------------------------------
+// ----------------------------------------------
 injectUI();
 window.BarangayDocEditor = { attach };
