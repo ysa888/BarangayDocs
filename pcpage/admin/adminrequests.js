@@ -530,6 +530,11 @@ function refreshRow(row, docId, status, data) {
 // "Back" — move a request one step back if the admin misclicked.
 // No SMS / in-app notification is sent for a step back (only an audit-log entry).
 async function revertStatus(docId, row, data, toStatus) {
+    // Legal lock: once the document is signed (Ready for Pickup) or released, it can never be moved back
+    if (data.status === 'ready' || data.status === 'released') {
+        showToast('Signed documents can no longer be moved back.');
+        return false;
+    }
     try {
         await updateDoc(doc(db, 'requests', docId), {
             status: toStatus,
@@ -1182,9 +1187,16 @@ async function populateAndShowDocModal(r, residentData, docId, opts = {}, rowDat
     }
 
     overlay.classList.add('show');
+
+    // "Edited details" comparison — only appears when the admin has actually changed something
+    const baseForCompare = baseValues(r, enrichedResident);
+    renderChangesBar(overlay, baseForCompare, r.docOverrides);
+    watchChanges(overlay, docId, baseForCompare);
+
     if (approving) setupPreviewExpiryPicker(overlay, r, approveCode, opts.mode === 'ready' ? r.expiresAt : null);
 
     document.getElementById('dp-close')?.addEventListener('click', () => {
+        stopChangesWatch();
         overlay.classList.remove('show');
     }, { once: true });
 
@@ -1208,7 +1220,7 @@ async function populateAndShowDocModal(r, residentData, docId, opts = {}, rowDat
         const STEPS = {
             approve: { label: '✓ Approve',                 back: { to: 'pending',    label: '← Back to Request' } },
             ready:   { label: '✓ Signed — Mark as Ready',  back: { to: 'processing', label: '← Back to Preview & Approve' } },
-            release: { label: '✓ Mark as Released',        back: { to: 'approved',   label: '← Back to Awaiting Signature' } }
+            release: { label: '✓ Mark as Released',        back: null }   // signed = locked, no way back
         };
         const step = STEPS[opts.mode];
         if (step) {
@@ -1246,13 +1258,21 @@ async function populateAndShowDocModal(r, residentData, docId, opts = {}, rowDat
             const bar = document.createElement('div');
             bar.id = 'dp-step-bar';
             bar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 20px;background:#fff;border-top:1.5px solid #D0DCF0;flex-shrink:0;';
-            const backBtn = document.createElement('button');
-            backBtn.type = 'button';
-            backBtn.className = 'dp-step-btn dp-step-back';
-            backBtn.textContent = step.back.label;
-            bar.append(backBtn, b);
+            let backBtn = null;
+            if (step.back) {
+                backBtn = document.createElement('button');
+                backBtn.type = 'button';
+                backBtn.className = 'dp-step-btn dp-step-back';
+                backBtn.textContent = step.back.label;
+                bar.append(backBtn, b);
+            } else {
+                const lock = document.createElement('span');
+                lock.style.cssText = "font-family:'Nunito',sans-serif;font-size:12px;font-weight:800;color:#6B7A99;";
+                lock.textContent = '🔒 Signed and issued — this can no longer be moved back.';
+                bar.append(lock, b);
+            }
 
-            backBtn.onclick = async () => {
+            if (backBtn) backBtn.onclick = async () => {
                 if (isEditing()) { showToast('Save or cancel your edits first.'); return; }
                 backBtn.disabled = true;
                 const ok = await revertStatus(docId, opts.row, cur, step.back.to);
@@ -1283,6 +1303,69 @@ async function populateAndShowDocModal(r, residentData, docId, opts = {}, rowDat
             if (wrapEl) wrapEl.style.maxWidth = '';
         }
     }
+}
+
+// =============================================
+// "Edited details" bar — original vs. changed, shown only when edits exist.
+// Live: follows the request document, so it updates right after the editor saves.
+// =============================================
+let changesUnsub = null;
+function stopChangesWatch() {
+    if (changesUnsub) { changesUnsub(); changesUnsub = null; }
+}
+
+function prettyKey(k) {
+    return String(k).replace(/([A-Z])/g, ' $1').replace(/[_-]+/g, ' ').trim().replace(/^./, c => c.toUpperCase());
+}
+function showVal(v) {
+    if (v === undefined || v === null || String(v).trim() === '') return '—';
+    return String(v);
+}
+
+function renderChangesBar(overlay, base, overrides) {
+    overlay.querySelector('#dp-changes-bar')?.remove();
+
+    const isPrim = v => v === null || ['string', 'number', 'boolean'].includes(typeof v);
+    const changed = Object.keys(overrides || {}).filter(k =>
+        isPrim(overrides[k]) && showVal(overrides[k]) !== showVal(base?.[k])
+    );
+    if (!changed.length) return;                       // nothing edited → nothing shown
+
+    if (!document.getElementById('dp-changes-style')) {
+        const st = document.createElement('style');
+        st.id = 'dp-changes-style';
+        st.textContent = `
+          .dp-changes-bar { padding:10px 20px; background:#FFF8E6; border-bottom:1.5px solid #F0D9A0; flex-shrink:0; max-height:180px; overflow:auto; font-family:'Nunito',sans-serif; }
+          .dp-changes-bar .dp-chg-title { font-size:11px; font-weight:800; color:#8A6200; text-transform:uppercase; letter-spacing:.4px; margin-bottom:6px; }
+          .dp-changes-bar table { width:100%; border-collapse:collapse; font-size:12px; }
+          .dp-changes-bar th { text-align:left; font-size:10px; font-weight:800; color:#6B7A99; text-transform:uppercase; padding:2px 8px 4px 0; }
+          .dp-changes-bar td { padding:3px 8px 3px 0; vertical-align:top; color:#1B3A6B; font-weight:700; overflow-wrap:anywhere; }
+          .dp-changes-bar td.dp-old { color:#6B7A99; text-decoration:line-through; font-weight:600; }
+          .dp-changes-bar td.dp-new { color:#146C43; }
+        `;
+        document.head.appendChild(st);
+    }
+
+    const esc = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const bar = document.createElement('div');
+    bar.id = 'dp-changes-bar';
+    bar.className = 'dp-changes-bar';
+    bar.innerHTML = `
+        <div class="dp-chg-title">✎ Edited details (${changed.length}) — original vs. changed</div>
+        <table>
+            <tr><th>Field</th><th>Original</th><th>Changed to</th></tr>
+            ${changed.map(k => `<tr><td>${esc(prettyKey(k))}</td><td class="dp-old">${esc(showVal(base?.[k]))}</td><td class="dp-new">${esc(showVal(overrides[k]))}</td></tr>`).join('')}
+        </table>`;
+    const scroll = overlay.querySelector('.doc-preview-scroll');
+    if (scroll) scroll.parentNode.insertBefore(bar, scroll);
+}
+
+function watchChanges(overlay, docId, base) {
+    stopChangesWatch();
+    changesUnsub = onSnapshot(doc(db, 'requests', docId), (snap) => {
+        if (!overlay.classList.contains('show')) { stopChangesWatch(); return; }
+        renderChangesBar(overlay, base, snap.exists() ? snap.data().docOverrides : null);
+    }, (err) => console.warn('Changes watch failed:', err));
 }
 
 function setText(id, value) {
