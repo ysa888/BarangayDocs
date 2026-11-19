@@ -881,32 +881,67 @@ async function openRequestModal(docId, data, row) {
     const birthTxt = formatBirthDate(rd, r);
     const sexTxt   = rd.sex || rd.gender;
 
+    if (!document.getElementById('rd-compare-style')) {
+        const st = document.createElement('style');
+        st.id = 'rd-compare-style';
+        st.textContent = `
+          #request-detail-modal .modal-box { max-height:92vh; overflow-y:auto; }
+          .rd-compare { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap:20px; align-items:start; }
+          .rd-col-title { font-size:11px; font-weight:800; color:var(--text-sub); text-transform:uppercase; letter-spacing:.5px; margin:0 0 10px; }
+          .rd-info-grid { display:grid; grid-template-columns: 1fr 1fr; gap:0 14px; }
+          .rd-info-grid .modal-field.rd-wide { grid-column: 1 / -1; }
+          .rd-pic-col { position:sticky; top:0; }
+          .rd-pic-col img.rd-id { display:block; width:100%; max-height:70vh; object-fit:contain; background:var(--bg); border:1.5px solid var(--border); border-radius:10px; cursor:zoom-in; }
+          .rd-pic-col .rd-id + .rd-id { margin-top:10px; }
+          @media (max-width: 760px) {
+            .rd-compare { grid-template-columns: 1fr; }
+            .rd-pic-col { position:static; order:-1; }   /* picture on top, info underneath */
+          }
+        `;
+        document.head.appendChild(st);
+    }
+
+    const wide = (label, val) => `<div class="modal-field rd-wide"><label>${label}</label><p>${esc(val || '—')}</p></div>`;
+
     overlay.innerHTML = `
-        <div class="modal-box" style="max-width:480px;">
+        <div class="modal-box" style="max-width:980px;width:96%;">
             <div class="modal-header">
                 <h3>Request Details</h3>
                 <button class="modal-close" type="button" data-rd="close">✕</button>
             </div>
-            <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
-                ${faceSrc
-                    ? `<img class="rd-zoom" src="${faceSrc}" alt="Profile" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid var(--border);flex-shrink:0;cursor:zoom-in;">`
-                    : `<div style="width:64px;height:64px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;flex-shrink:0;">${esc(initial)}</div>`}
-                <div style="min-width:0;">
-                    <div style="font-size:16px;font-weight:800;color:var(--text-main);overflow-wrap:anywhere;">${esc(r.residentName)}</div>
-                    <div style="font-size:12px;color:var(--text-sub);">${esc(rd.civilStatus || '')}${rd.civilStatus && sexTxt ? ' · ' : ''}${esc(sexTxt || '')}</div>
+            <div class="rd-compare">
+                <!-- LEFT: resident information -->
+                <div class="rd-info-col">
+                    <p class="rd-col-title">Resident Information</p>
+                    <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+                        ${faceSrc
+                            ? `<img class="rd-zoom" src="${faceSrc}" alt="Profile" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid var(--border);flex-shrink:0;cursor:zoom-in;">`
+                            : `<div style="width:64px;height:64px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;flex-shrink:0;">${esc(initial)}</div>`}
+                        <div style="min-width:0;">
+                            <div style="font-size:16px;font-weight:800;color:var(--text-main);overflow-wrap:anywhere;">${esc(r.residentName)}</div>
+                            <div style="font-size:12px;color:var(--text-sub);">${esc(rd.civilStatus || '')}${rd.civilStatus && sexTxt ? ' · ' : ''}${esc(sexTxt || '')}</div>
+                        </div>
+                    </div>
+                    <div class="rd-info-grid">
+                        ${wide('Document', r.documentType)}
+                        ${field('Reference No.', r.referenceNo)}
+                        ${field('Submitted', formatDate(r.createdAt))}
+                        ${wide('Purpose', r.purpose)}
+                        ${field('Birthday', birthTxt)}
+                        ${field('Age', resolveAge(rd, r))}
+                        ${wide('Contact', rd.contactNumber || rd.phone || rd.mobile || r.contactNumber)}
+                        ${wide('Address', resolveAddress(rd, r))}
+                    </div>
+                </div>
+                <!-- RIGHT: valid ID picture, beside the details for easy comparison -->
+                <div class="rd-pic-col">
+                    <p class="rd-col-title">Valid ID (click to enlarge)</p>
+                    ${idImgs.length
+                        ? idImgs.map((s, i) => `<img class="rd-zoom rd-id" src="${s}" alt="ID ${i + 1}">`).join('')
+                        : `<div class="modal-field"><p>No ID image found on this resident</p></div>`}
                 </div>
             </div>
-            ${field('Document', r.documentType)}
-            ${field('Reference No.', r.referenceNo)}
-            ${field('Purpose', r.purpose)}
-            ${field('Submitted', formatDate(r.createdAt))}
-            ${field('Contact', rd.contactNumber || rd.phone || rd.mobile || r.contactNumber)}
-            ${field('Address', resolveAddress(rd, r))}
-            ${field('Birthday', birthTxt)}
-            ${field('Age', resolveAge(rd, r))}
-            ${idImgs.length ? `<div class="modal-field"><label>Valid ID (click to enlarge)</label>${idImgs.map((s, i) => imgBox(s, 'ID ' + (i + 1))).join('<div style="height:8px"></div>')}</div>`
-                            : `<div class="modal-field"><label>Valid ID</label><p>No ID image found on this resident</p></div>`}
-            <div class="modal-btn-row" id="rd-buttons"></div>
+            <div class="modal-btn-row" id="rd-buttons" style="margin-top:16px;"></div>
         </div>`;
     document.body.appendChild(overlay);
     overlay.querySelectorAll('.rd-zoom').forEach(img => img.addEventListener('click', () => openLightbox(img.src)));
