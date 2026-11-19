@@ -23,12 +23,18 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 import { sendSMS } from './sms.js';
 import { baseValues, effectiveValues, paintDocument } from './docoverrides.js';
-import { loadTemplateForType, createTemplateView } from './doctemplate.js';
 
 // Admin-made template view (same renderer the resident preview uses). null = built-in certificate.
 let templateView = null;
 
 // Always read the latest saved template from Firestore each time a preview opens
+// doctemplate.js is loaded lazily so a problem there can never break this page
+let templateLib = null;
+async function getTemplateLib() {
+    if (!templateLib) templateLib = await import('./doctemplate.js');
+    return templateLib;
+}
+
 async function fetchLatestTemplate(documentType) {
     try {
         const tSnap = await getDocs(query(collection(db, 'documentTemplates'), where('documentName', '==', documentType)));
@@ -36,7 +42,12 @@ async function fetchLatestTemplate(documentType) {
     } catch (err) {
         console.warn('Could not fetch latest template:', err);
     }
-    return loadTemplateForType(db, documentType);
+    try {
+        return (await getTemplateLib()).loadTemplateForType(db, documentType);
+    } catch (err) {
+        console.warn('Template loader unavailable, using built-in certificate:', err);
+        return null;
+    }
 }
 // =============================================
 // Firebase Config & Init
@@ -1054,7 +1065,8 @@ async function populateAndShowDocModal(r, residentData, docId, opts = {}, rowDat
     const legacyEl = document.getElementById('doc-preview-content');
     const wrapEl   = overlay.querySelector('.doc-preview-wrapper');
     let tplEl      = document.getElementById('doc-preview-template');
-    const tpl      = await fetchLatestTemplate(r.documentType);
+    let tpl        = await fetchLatestTemplate(r.documentType);
+    try {
     if (tpl && legacyEl) {
         if (!tplEl) {
             tplEl = document.createElement('div');
@@ -1062,7 +1074,7 @@ async function populateAndShowDocModal(r, residentData, docId, opts = {}, rowDat
             legacyEl.parentNode.insertBefore(tplEl, legacyEl);
         }
         if (!templateView || templateView.container !== tplEl) {
-            templateView = createTemplateView(tplEl);
+            templateView = (await getTemplateLib()).createTemplateView(tplEl);
             templateView.container = tplEl;
         }
         tplEl.style.display = '';
@@ -1071,6 +1083,12 @@ async function populateAndShowDocModal(r, residentData, docId, opts = {}, rowDat
     } else {
         if (templateView) templateView.hide();
         if (tplEl) tplEl.style.display = 'none';
+        if (legacyEl) legacyEl.style.display = '';
+        if (wrapEl) wrapEl.style.maxWidth = '';
+    }
+    } catch (err) {
+        console.warn('Template preview setup failed, using built-in certificate:', err);
+        tpl = null;
         if (legacyEl) legacyEl.style.display = '';
         if (wrapEl) wrapEl.style.maxWidth = '';
     }
@@ -1118,8 +1136,15 @@ async function populateAndShowDocModal(r, residentData, docId, opts = {}, rowDat
     }
 
     // fixed-size pages + the admin's corrections (docOverrides); docedit.js live edits re-render via paintDocument
-    if (tpl && legacyEl) {
-        await templateView.show({ template: tpl, request: r, resident: residentData, overrides: r.docOverrides });
+    if (tpl && legacyEl && templateView) {
+        try {
+            await templateView.show({ template: tpl, request: r, resident: residentData, overrides: r.docOverrides });
+        } catch (err) {
+            console.warn('Template render failed, using built-in certificate:', err);
+            templateView.hide();
+            legacyEl.style.display = '';
+            if (wrapEl) wrapEl.style.maxWidth = '';
+        }
     }
 }
 
