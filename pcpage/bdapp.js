@@ -181,6 +181,17 @@ onAuthStateChanged(auth, async (user) => {
 // =============================================
 // SIDEBAR — populate user info on every page
 // =============================================
+function getFullAddress(userData) {
+    // "House No./Street, Barangay, City, Province" — skips anything missing
+    const parts = [
+        userData.houseNumber,
+        userData.barangay || 'Barangay Banicain',
+        userData.city     || 'Olongapo City',
+        userData.province
+    ].map(p => String(p || '').trim()).filter(Boolean);
+    return parts.join(', ');
+}
+
 function populateSidebar(userData) {
     const fullName = `${userData.firstName} ${userData.middleName ? userData.middleName.charAt(0) + '. ' : ''}${userData.lastName}`;
 
@@ -193,6 +204,17 @@ function populateSidebar(userData) {
     document.querySelectorAll('.user-name').forEach(n => n.textContent = fullName);
     document.querySelectorAll('.user-role').forEach(r => {
         r.textContent = `Resident • Barangay Banicain`;
+
+        // Full home address, shown under the role
+        let addr = r.parentElement.querySelector('.user-address');
+        if (!addr) {
+            addr = document.createElement('div');
+            addr.className = 'user-address';
+            r.insertAdjacentElement('afterend', addr);
+        }
+        const full = getFullAddress(userData);
+        addr.textContent = full;
+        addr.title = full;
     });
 }
 
@@ -1185,7 +1207,7 @@ function initAccount(user, userData) {
 
     if (profileAvatar) setAvatar(profileAvatar, userData.faceUrl, getInitials(fullName));
     if (profileName)   profileName.textContent   = fullName;
-    if (profileSub)    profileSub.textContent     = `${userData.barangay || 'Barangay Banicain'} • ${userData.city || 'Olongapo City'}`;
+    if (profileSub)    profileSub.textContent     = getFullAddress(userData);
 
     // Live request stats
     const reqRef = collection(db, 'requests');
@@ -1227,9 +1249,7 @@ function initAccount(user, userData) {
     setInfo('infoEmail',       userData.email);
     setInfo('infoContact',     userData.contactNumber);
     setInfo('infoBirthday',    birthday);
-    setInfo('infoAddress',     userData.houseNumber
-        ? `${userData.houseNumber}, ${userData.barangay || 'Brgy. Banicain'}`
-        : userData.barangay || 'Brgy. Banicain');
+    setInfo('infoAddress',     getFullAddress(userData));
     setInfo('infoCivilStatus', userData.civilStatus    || 'Not provided');
     setInfo('infoSex',         userData.sex            || 'Not provided');
     const residencyVal = userData.yearsOfResidency
