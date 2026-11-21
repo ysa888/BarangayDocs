@@ -135,20 +135,6 @@
     .avail-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
     .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1e1e2e; color: #fff; border-radius: 12px; padding: 12px 20px; font-size: 13px; font-weight: 700; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 999; white-space: nowrap; }
     .toast.show { opacity: 1; }
-    /* NEW REQUEST POP-UPS */
-    .nr-stack { position: fixed; top: 72px; right: 16px; z-index: 900; display: flex; flex-direction: column; gap: 10px; width: min(360px, calc(100vw - 32px)); pointer-events: none; }
-    .nr-card { pointer-events: auto; background: #fff; border: 1px solid var(--border); border-left: 5px solid var(--accent); border-radius: 12px; box-shadow: 0 10px 30px rgba(27,58,107,0.22); padding: 14px 14px 12px 16px; animation: nrIn 0.3s ease; }
-    .nr-card.out { opacity: 0; transform: translateX(24px); transition: all 0.25s ease; }
-    .nr-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-    .nr-tag { font-size: 10px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; color: var(--yellow-text); background: var(--yellow-bg); padding: 3px 8px; border-radius: 10px; }
-    .nr-close { border: none; background: transparent; color: var(--text-sub); font-size: 16px; line-height: 1; cursor: pointer; padding: 2px 4px; }
-    .nr-doc { font-family: 'Poppins', sans-serif; font-size: 14px; font-weight: 800; color: var(--text-main); }
-    .nr-meta { font-size: 12px; color: var(--text-sub); margin-top: 2px; word-break: break-word; }
-    .nr-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
-    .nr-view { border: none; background: var(--primary); color: #fff; font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 800; padding: 8px 14px; border-radius: 8px; cursor: pointer; }
-    .table-row.row-new { animation: rowFlash 3s ease; }
-    @keyframes rowFlash { 0%, 60% { background: var(--yellow-bg); } 100% { background: transparent; } }
-    @keyframes nrIn { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: none; } }
     .layout, .main { min-width: 0; }
     .sidebar-backdrop { display: none; }
     @media (max-width: 900px) {
@@ -461,7 +447,6 @@
   watchStatus(d => { data = d; render(); });
   setInterval(render, 30000);
 </script>
-<div class="nr-stack" id="newReqStack" aria-live="polite"></div>
 <script type="module" src="admindashboard.js"></script>
 <script type="module" src="adminnavbar.js"></script>
 </body>

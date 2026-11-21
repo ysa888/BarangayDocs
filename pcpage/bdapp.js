@@ -273,7 +273,7 @@ async function initHome(user, userData) {
     if (ucAddr) ucAddr.textContent = `${userData.barangay || 'Barangay Banicain'}, ${userData.city || 'Olongapo City'}`;
 
     // Available / unavailable documents (live from the admin's documents list)
-    listenHomeDocuments();
+    listenHomeDocuments(user, userData, fullName);
 
     // Floating AI assistant (Stage 3). Isolated so a chatbot problem can never break the page.
     try { initChatbot(user, userData); } catch (e) { console.error('Chatbot failed to start:', e); }
@@ -347,7 +347,8 @@ async function initHome(user, userData) {
 // Oldest first (what the admin added first is shown first).
 // status === 'active'  → "Available Documents" (click opens the request modal with it selected)
 // anything else        → "Unavailable Documents" (greyed out, not clickable)
-function listenHomeDocuments() {
+function listenHomeDocuments(user, userData, fullName) {
+    homeReqCtx = { user, userData, fullName };
     const grid   = el('docGrid');
     const unGrid = el('unavailGrid');
     if (!grid) return;
@@ -377,7 +378,9 @@ function listenHomeDocuments() {
         // Home shows only the 8 most recently added in each list (still oldest → newest).
         // Everything is still reachable from "View All" / the New Document Request modal.
         const HOME_LIMIT  = 8;
-        const available   = docs.filter(d => d.status === 'active').slice(-HOME_LIMIT);
+        homeActiveDocs    = docs.filter(d => d.status === 'active');
+        refreshHomeRequestGrid();   // if the pop-up is open, keep its list live
+        const available   = homeActiveDocs.slice(-HOME_LIMIT);
         const unavailable = docs.filter(d => d.status !== 'active').slice(-HOME_LIMIT);
 
         grid.replaceChildren();
@@ -386,9 +389,8 @@ function listenHomeDocuments() {
         }
         available.forEach(d => {
             const card = buildCard(d);
-            card.addEventListener('click', () => {
-                location.href = 'barangaydocs_request.html?doc=' + encodeURIComponent(d.id);
-            });
+            // Opens the request pop-up right here on the dashboard (no page change)
+            card.addEventListener('click', () => openHomeRequestModal(d.id));
             grid.appendChild(card);
         });
 
@@ -411,6 +413,184 @@ function listenHomeDocuments() {
         console.error('Documents listener failed (check Firestore rules):', err);
         grid.innerHTML = '<div class="doc-grid-empty">Could not load documents.</div>';
     });
+}
+
+// =============================================
+// HOME — "New Document Request" pop-up
+// Opens on top of the dashboard when a resident clicks a document card.
+// Saves to the same `requests` collection / fields as barangaydocs_request.html.
+// =============================================
+let homeActiveDocs      = [];      // every active document (live)
+let homeReqCtx          = null;    // { user, userData, fullName }
+let homeReqSelectedId   = null;
+let homeReqSubmitting   = false;
+
+const HOME_REQ_PURPOSES = ['Employment', 'Travel', 'Medical', 'School / Scholarship',
+    'Government Requirement', 'Loan Application', 'Business', 'Other'];
+
+function ensureHomeRequestModal() {
+    if (el('hqOverlay')) return;
+
+    const style = document.createElement('style');
+    style.textContent = `
+    .hq-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:800; align-items:center; justify-content:center; padding:16px; }
+    .hq-overlay.show { display:flex; }
+    .hq-modal { background:var(--card-bg,#fff); border-radius:24px; padding:32px; width:100%; max-width:540px; max-height:88vh; overflow-y:auto; }
+    .hq-title { font-family:'Poppins',sans-serif; font-size:20px; font-weight:700; color:var(--text-main); margin-bottom:4px; }
+    .hq-sub { font-size:13px; color:var(--text-sub); margin-bottom:24px; }
+    .hq-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:20px; }
+    .hq-doc { padding:12px 8px; border:2px solid var(--border); border-radius:12px; text-align:center; font-size:11px; font-weight:800; color:var(--text-sub); cursor:pointer; transition:all .2s; line-height:1.3; }
+    .hq-doc:hover { border-color:var(--primary); color:var(--primary); }
+    .hq-doc.selected { border-color:var(--primary); background:#EEF3FB; color:var(--primary); }
+    .hq-doc img { display:block; width:28px; height:28px; object-fit:contain; margin:0 auto 6px; }
+    .hq-field { margin-bottom:16px; }
+    .hq-field label { display:block; font-size:11px; font-weight:800; color:var(--text-sub); text-transform:uppercase; letter-spacing:.3px; margin-bottom:7px; }
+    .hq-field select, .hq-field textarea { width:100%; border:2px solid var(--border); border-radius:12px; padding:12px 16px; font-family:'Nunito',sans-serif; font-size:14px; color:var(--text-main); background:var(--bg); outline:none; transition:border-color .2s; }
+    .hq-field select:focus, .hq-field textarea:focus { border-color:var(--primary-light); background:#fff; }
+    .hq-field textarea { height:90px; resize:none; }
+    .hq-btns { display:flex; gap:12px; margin-top:20px; }
+    .hq-cancel { flex:1; height:48px; background:transparent; border:2px solid var(--border); border-radius:12px; font-family:'Nunito',sans-serif; font-size:14px; font-weight:800; color:var(--text-sub); cursor:pointer; }
+    .hq-submit { flex:2; height:48px; background:var(--primary); border:none; border-radius:12px; font-family:'Nunito',sans-serif; font-size:14px; font-weight:800; color:#fff; cursor:pointer; transition:background .2s; }
+    .hq-submit:hover { background:var(--primary-light); }
+    .hq-submit:disabled { opacity:.6; cursor:not-allowed; }
+    .hq-success { background:var(--card-bg,#fff); border-radius:24px; padding:40px; text-align:center; width:100%; max-width:400px; }
+    .hq-check { width:60px; height:60px; border-radius:50%; background:var(--green-bg,#D4EDDA); color:var(--green-text,#155724); font-size:30px; font-weight:800; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; }
+    .hq-success h3 { font-family:'Poppins',sans-serif; font-size:22px; font-weight:700; color:var(--text-main); margin-bottom:10px; }
+    .hq-success p { font-size:14px; color:var(--text-sub); line-height:1.6; margin-bottom:16px; }
+    .hq-ref { font-size:14px; font-weight:800; color:var(--primary); background:var(--bg); padding:10px 20px; border-radius:10px; margin-bottom:20px; }
+    .hq-done { width:100%; height:48px; background:var(--primary); border:none; border-radius:12px; font-family:'Nunito',sans-serif; font-size:15px; font-weight:800; color:#fff; cursor:pointer; }
+    @media (max-width:640px) { .hq-modal { padding:22px; } .hq-grid { grid-template-columns:repeat(2,1fr); } .hq-btns { flex-direction:column; } .hq-success { padding:28px; } }`;
+    document.head.appendChild(style);
+
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+    <div class="hq-overlay" id="hqOverlay">
+        <div class="hq-modal" role="dialog" aria-modal="true" aria-labelledby="hqTitle">
+            <div class="hq-title" id="hqTitle">New Document Request</div>
+            <div class="hq-sub">Select a document type and fill in the details</div>
+            <div class="hq-grid" id="hqGrid"></div>
+            <div class="hq-field">
+                <label for="hqPurpose">Purpose</label>
+                <select id="hqPurpose">
+                    <option value="">Select purpose</option>
+                    ${HOME_REQ_PURPOSES.map(p => `<option>${escapeHtml(p)}</option>`).join('')}
+                </select>
+            </div>
+            <div class="hq-field">
+                <label for="hqNotes">Additional Notes (Optional)</label>
+                <textarea id="hqNotes" placeholder="Any special instructions…"></textarea>
+            </div>
+            <div class="hq-btns">
+                <button type="button" class="hq-cancel" id="hqCancel">Cancel</button>
+                <button type="button" class="hq-submit" id="hqSubmit">Submit Request</button>
+            </div>
+        </div>
+    </div>
+    <div class="hq-overlay" id="hqSuccessOverlay">
+        <div class="hq-success">
+            <div class="hq-check">&#10003;</div>
+            <h3>Request Submitted!</h3>
+            <p>Your document request has been submitted successfully. You will be notified once it is ready for pickup.</p>
+            <div class="hq-ref" id="hqRef">Ref: —</div>
+            <button type="button" class="hq-done" id="hqDone">Done</button>
+        </div>
+    </div>`;
+    while (wrap.firstElementChild) document.body.appendChild(wrap.firstElementChild);
+
+    const overlay = el('hqOverlay');
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeHomeRequestModal(); });
+    el('hqCancel').addEventListener('click', closeHomeRequestModal);
+    el('hqSubmit').addEventListener('click', submitHomeRequest);
+    el('hqDone').addEventListener('click', () => el('hqSuccessOverlay').classList.remove('show'));
+    el('hqGrid').addEventListener('click', (e) => {
+        const btn = e.target.closest('.hq-doc');
+        if (!btn) return;
+        homeReqSelectedId = btn.dataset.id;
+        refreshHomeRequestGrid();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        closeHomeRequestModal();
+        el('hqSuccessOverlay')?.classList.remove('show');
+    });
+}
+
+function refreshHomeRequestGrid() {
+    const grid = el('hqGrid');
+    if (!grid) return;
+    if (!homeActiveDocs.some(d => d.id === homeReqSelectedId)) {
+        homeReqSelectedId = homeActiveDocs[0]?.id || null;   // selected doc was removed/disabled
+    }
+    if (!homeActiveDocs.length) {
+        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;font-size:13px;font-weight:700;color:var(--text-light);">No documents available at this time.</div>';
+        return;
+    }
+    grid.innerHTML = homeActiveDocs.map(d => `
+        <div class="hq-doc${d.id === homeReqSelectedId ? ' selected' : ''}" data-id="${escapeHtml(d.id)}">
+            <img src="${escapeHtml(d.icon || 'Icons/barangayclearance.png')}" alt="" onerror="this.src='Icons/barangayclearance.png'">
+            ${escapeHtml(d.name || '—')}
+        </div>`).join('');
+}
+
+function openHomeRequestModal(docId) {
+    ensureHomeRequestModal();
+    homeReqSelectedId = docId;
+    refreshHomeRequestGrid();
+    el('hqPurpose').value = '';
+    el('hqNotes').value   = '';
+    el('hqOverlay').classList.add('show');
+    el('hqPurpose').focus();
+}
+
+function closeHomeRequestModal() {
+    el('hqOverlay')?.classList.remove('show');
+}
+
+async function submitHomeRequest() {
+    if (homeReqSubmitting || !homeReqCtx) return;          // ignore double-clicks while saving
+    const { user, userData, fullName } = homeReqCtx;
+
+    const picked = homeActiveDocs.find(d => d.id === homeReqSelectedId);
+    if (!picked) return alert('Please select a document type.');
+
+    const purpose = el('hqPurpose').value;
+    if (!purpose) return alert('Please select a purpose.');
+
+    const notes = el('hqNotes').value.trim();
+    const ref = `BRY-${new Date().getFullYear()}-${String(Math.floor(10000 + Math.random() * 90000))}`;
+
+    homeReqSubmitting = true;
+    const btn = el('hqSubmit');
+    btn.disabled = true; btn.textContent = 'Submitting…';
+
+    try {
+        await addDoc(collection(db, 'requests'), {
+            uid:          user.uid,
+            residentName: fullName,
+            documentType: picked.name,
+            purpose,
+            notes,
+            referenceNo:  ref,
+            status:       'pending',
+            barangay:     userData.barangay || 'Barangay Banicain',
+            city:         userData.city     || 'Olongapo City',
+            createdAt:    serverTimestamp(),
+            readyAt:      null,
+            rejectReason: null,
+            docCode:      null,
+            qrContent:    null
+        });
+
+        closeHomeRequestModal();
+        el('hqRef').textContent = `Ref: ${ref}`;
+        el('hqSuccessOverlay').classList.add('show');
+    } catch (err) {
+        console.error('Submit request error:', err);
+        alert('Failed to submit request: ' + err.message);
+    } finally {
+        homeReqSubmitting = false;
+        btn.disabled = false; btn.textContent = 'Submit Request';
+    }
 }
 
 // ── Notification dropdown (merged: admin notifications + my requests) ──
