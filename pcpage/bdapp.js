@@ -573,43 +573,275 @@ function logChatUsage(kind) {
 
 const chatPick = (list) => list.map(c => ({ id: c.id, question: c.question }));
 
-// ── Secret command: typing 898989 in the chatbot adds ONE fixed entry to `aiKnowledge` ──
-// Skipped (nothing written) if an entry with the same question already exists.
-const SEED_COMMAND = '898989';
-const SEED_DOC_ID  = 'seed-barangay-clearance-request';
-const SEED_ENTRY = {
-    question: 'How can I request a Barangay Clearance?',
-    answer: 'To request a Barangay Clearance, log in to your BarangayDocs account and select the document request option. Complete the required information and submit your request.',
-    altQuestions: [
-        'How do I get a Barangay Clearance?',
-        'Where can I apply for Barangay Clearance?',
-        'I need to request a clearance.'
-    ],
-    keywords: ['barangay clearance', 'request clearance', 'document request'],
-    relatedWords: ['certificate', 'application', 'clearance'],
-    category: 'Document Request'
-};
-
-async function runSeedCommand() {
-    const col = collection(db, KNOWLEDGE_COLLECTION);
-    const same = await getDocs(query(col, where('status', '==', 'approved'), where('question', '==', SEED_ENTRY.question)));
-    if (!same.empty) {
-        return { reply: 'Already exists. Nothing was added.', answered: true, sources: [], kind: 'seed' };
+// ===== TEMPORARY RESTORE START (delete this whole block after the knowledge is back) =====
+// On the first chat message (even if the chat then errors) these entries are saved to `aiKnowledge`.
+// Each has a fixed id, so running again never creates duplicates.
+const RESTORE_FLAG = 'bd_kb_restored_v1';
+const RESTORE_ENTRIES = [
+    {
+        "question": "How can I request a Barangay Clearance?",
+        "answer": "To request a Barangay Clearance, log in to your BarangayDocs account and select the document request option. Choose Barangay Clearance, complete the required information, and submit your request. You can monitor your request status through the system.",
+        "alternativeQuestions": [
+            "How do I get a Barangay Clearance?",
+            "Where can I apply for Barangay Clearance?",
+            "How can I obtain a clearance?",
+            "I need to request a clearance."
+        ],
+        "keywords": [
+            "barangay clearance",
+            "request clearance",
+            "apply",
+            "document request",
+            "clearance application"
+        ],
+        "category": "Document Request",
+        "status": "draft"
+    },
+    {
+        "question": "How can I request a Certificate of Residency?",
+        "answer": "To request a Certificate of Residency, log in to your BarangayDocs account and select the document request option. Choose Certificate of Residency, provide the required information, and submit your request. You can track its progress through your account.",
+        "alternativeQuestions": [
+            "How do I get a residency certificate?",
+            "How can I apply for proof of residency?",
+            "Where can I request a Certificate of Residency?",
+            "I need proof that I live in this barangay."
+        ],
+        "keywords": [
+            "certificate of residency",
+            "residency",
+            "proof of address",
+            "proof of residency",
+            "document request"
+        ],
+        "category": "Document Request",
+        "status": "draft"
+    },
+    {
+        "question": "How can I request a Certificate of Indigency?",
+        "answer": "To request a Certificate of Indigency, log in to your BarangayDocs account and select the document request option. Choose Certificate of Indigency, complete the required information, and submit your request. The barangay staff will review your application.",
+        "alternativeQuestions": [
+            "How do I get a Certificate of Indigency?",
+            "Where can I apply for indigency?",
+            "How can I request proof of indigency?",
+            "I need an indigency certificate."
+        ],
+        "keywords": [
+            "certificate of indigency",
+            "indigency",
+            "financial assistance",
+            "proof of indigency",
+            "document request"
+        ],
+        "category": "Document Request",
+        "status": "draft"
+    },
+    {
+        "question": "What are the requirements for requesting barangay documents?",
+        "answer": "The requirements may depend on the type of document you are requesting. Make sure to provide accurate personal information and any supporting documents requested by the barangay. For the complete and updated list of requirements, please contact Barangay Banicain or ask the barangay staff.",
+        "alternativeQuestions": [
+            "What documents do I need to submit?",
+            "What are the requirements for a clearance?",
+            "What should I prepare before requesting?",
+            "Do I need to upload identification?"
+        ],
+        "keywords": [
+            "requirements",
+            "documents needed",
+            "valid ID",
+            "supporting documents",
+            "barangay requirements"
+        ],
+        "category": "Requirements",
+        "status": "draft"
+    },
+    {
+        "question": "How can I check the status of my document request?",
+        "answer": "You can check your document request status by logging in to your BarangayDocs account and opening the request tracking or request history section. Select your submitted request to view its current status and available details.",
+        "alternativeQuestions": [
+            "How do I track my request?",
+            "Is my document ready?",
+            "Where can I see my application status?",
+            "How do I know if my request is approved?",
+            "Can I check my pending request?"
+        ],
+        "keywords": [
+            "request status",
+            "track request",
+            "application status",
+            "pending",
+            "approved",
+            "document tracking"
+        ],
+        "category": "Request Tracking",
+        "status": "draft"
+    },
+    {
+        "question": "How long does it take to process a barangay document request?",
+        "answer": "Processing time may vary depending on the type of document, completeness of the submitted information, and the barangay staff's verification process. You can monitor your request through BarangayDocs. For an estimated completion time, contact the barangay office.",
+        "alternativeQuestions": [
+            "When will my document be ready?",
+            "How many days does processing take?",
+            "Why is my request taking so long?",
+            "When can I claim my document?"
+        ],
+        "keywords": [
+            "processing time",
+            "waiting time",
+            "document release",
+            "how long",
+            "request delay"
+        ],
+        "category": "Processing",
+        "status": "draft"
+    },
+    {
+        "question": "How much is the fee for requesting barangay documents?",
+        "answer": "Document fees may depend on the type of certificate or document requested and the current barangay fee schedule. Please contact Barangay Banicain to confirm the applicable fee before making any payment. Do not assume that all document requests have the same cost.",
+        "alternativeQuestions": [
+            "How much is a Barangay Clearance?",
+            "Is the document request free?",
+            "How much do I need to pay?",
+            "Are there processing fees?",
+            "What is the price of a barangay certificate?"
+        ],
+        "keywords": [
+            "document fee",
+            "price",
+            "cost",
+            "payment",
+            "barangay clearance fee",
+            "certificate fee"
+        ],
+        "category": "Fees and Payments",
+        "status": "draft"
+    },
+    {
+        "question": "What should I do if my document request is rejected?",
+        "answer": "If your document request is rejected, log in to your BarangayDocs account and check the request details for any available remarks or reason for rejection. Review the information and contact the barangay staff if you need clarification. Follow their instructions before submitting another request.",
+        "alternativeQuestions": [
+            "Why was my request rejected?",
+            "What happens if my application is denied?",
+            "Can I submit my request again?",
+            "How do I fix a rejected request?",
+            "What should I do after rejection?"
+        ],
+        "keywords": [
+            "rejected",
+            "denied request",
+            "request failed",
+            "resubmit",
+            "rejection reason",
+            "application problem"
+        ],
+        "category": "Request Tracking",
+        "status": "draft"
+    },
+    {
+        "question": "How can I create a BarangayDocs account?",
+        "answer": "To create an account, open the BarangayDocs website and go to the registration or sign-up page. Enter the required personal information and account credentials, then follow the instructions to complete registration. Make sure your information is accurate.",
+        "alternativeQuestions": [
+            "How do I register?",
+            "How can I sign up?",
+            "How do I make an account?",
+            "Where can I create my account?",
+            "I am a new user. How do I register?"
+        ],
+        "keywords": [
+            "register",
+            "registration",
+            "sign up",
+            "create account",
+            "new account",
+            "barangaydocs account"
+        ],
+        "category": "Account Assistance",
+        "status": "draft"
+    },
+    {
+        "question": "What should I do if I forget my password?",
+        "answer": "If you forget your BarangayDocs password, go to the login page and select the Forgot Password option, if available. Follow the password recovery instructions using your registered email address. Check your email for the recovery message and follow the provided steps.",
+        "alternativeQuestions": [
+            "I cannot remember my password.",
+            "How do I reset my password?",
+            "I cannot log in to my account.",
+            "How can I recover my account?",
+            "What if I lost my login credentials?"
+        ],
+        "keywords": [
+            "forgot password",
+            "reset password",
+            "recover account",
+            "cannot login",
+            "login problem",
+            "password recovery"
+        ],
+        "category": "Account Assistance",
+        "status": "draft"
+    },
+    {
+        "question": "What should I do if my personal information is incorrect?",
+        "answer": "If your personal information is incorrect, contact the barangay staff for assistance in verifying and correcting your information. Provide the correct details and any supporting information they may request. Make sure your personal information is accurate when submitting document requests.",
+        "alternativeQuestions": [
+            "How can I correct my name?",
+            "My address is incorrect. What should I do?",
+            "How do I update my personal details?",
+            "Can I edit my account information?",
+            "What if I entered the wrong information?"
+        ],
+        "keywords": [
+            "incorrect information",
+            "update profile",
+            "edit personal details",
+            "wrong name",
+            "wrong address",
+            "account information"
+        ],
+        "category": "Account Assistance",
+        "status": "draft"
+    },
+    {
+        "question": "How can I contact Barangay Banicain?",
+        "answer": "For questions, document requirements, processing concerns, and other inquiries, you may contact or visit the Barangay Banicain office in Olongapo City. Please use the official barangay contact information for accurate assistance.",
+        "alternativeQuestions": [
+            "Where is Barangay Banicain located?",
+            "How do I contact the barangay office?",
+            "Where can I ask for assistance?",
+            "Who can I talk to about my request?",
+            "What is the barangay contact number?"
+        ],
+        "keywords": [
+            "contact barangay",
+            "barangay office",
+            "contact information",
+            "phone number",
+            "location",
+            "assistance"
+        ],
+        "category": "General Information",
+        "status": "draft"
     }
-    await setDoc(doc(db, KNOWLEDGE_COLLECTION, SEED_DOC_ID), {
-        ...SEED_ENTRY,
-        alternativeQuestions: SEED_ENTRY.altQuestions,   // the admin page reads this field name
-        status: 'approved',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-    });
-    kbLoadedAt = 0;                                      // reload knowledge so it works right away
-    return { reply: 'Added: "' + SEED_ENTRY.question + '"', answered: true, sources: [], kind: 'seed' };
+];
+let restoreStarted = false;
+async function restoreKnowledgeOnce() {
+    if (restoreStarted) return;                       // once per page load
+    restoreStarted = true;
+    try { if (localStorage.getItem(RESTORE_FLAG)) return; } catch (e) {}
+    const results = await Promise.allSettled(RESTORE_ENTRIES.map((e, i) =>
+        setDoc(doc(db, KNOWLEDGE_COLLECTION, 'restore-' + String(i + 1).padStart(2, '0')), {
+            ...e,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        })
+    ));
+    const failed = results.filter(r => r.status === 'rejected');
+    if (failed.length) { console.warn('Knowledge restore: ' + failed.length + ' failed', failed[0].reason); return; }
+    try { localStorage.setItem(RESTORE_FLAG, '1'); } catch (e) {}
+    console.log('Knowledge restore: ' + results.length + ' entries saved.');
 }
+// ===== TEMPORARY RESTORE END =====
 
 /** The reply for a typed message. Same shape the old backend returned (+ `choices`). */
 async function answerMessage(text) {
-    if (String(text).trim() === SEED_COMMAND) return runSeedCommand();
     const { matcher, index } = await loadKnowledge();
     const m = matcher.matchMessage(index, text);
 
@@ -1070,6 +1302,7 @@ function initChatbot(user, userData) {
 
     // ── sending ──
     async function sendMessage(rawText, isRetry = false, opts = null) {
+        restoreKnowledgeOnce();   // TEMPORARY: runs on the first chat, never blocks or breaks the chat
         const text = String(rawText || '').trim().slice(0, CHAT_MAX_LEN);
         if (!text || state.busy) return;
         clearError();
