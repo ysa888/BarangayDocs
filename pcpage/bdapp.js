@@ -573,8 +573,43 @@ function logChatUsage(kind) {
 
 const chatPick = (list) => list.map(c => ({ id: c.id, question: c.question }));
 
+// ── Secret command: typing 898989 in the chatbot adds ONE fixed entry to `aiKnowledge` ──
+// Skipped (nothing written) if an entry with the same question already exists.
+const SEED_COMMAND = '898989';
+const SEED_DOC_ID  = 'seed-barangay-clearance-request';
+const SEED_ENTRY = {
+    question: 'How can I request a Barangay Clearance?',
+    answer: 'To request a Barangay Clearance, log in to your BarangayDocs account and select the document request option. Complete the required information and submit your request.',
+    altQuestions: [
+        'How do I get a Barangay Clearance?',
+        'Where can I apply for Barangay Clearance?',
+        'I need to request a clearance.'
+    ],
+    keywords: ['barangay clearance', 'request clearance', 'document request'],
+    relatedWords: ['certificate', 'application', 'clearance'],
+    category: 'Document Request'
+};
+
+async function runSeedCommand() {
+    const col = collection(db, KNOWLEDGE_COLLECTION);
+    const same = await getDocs(query(col, where('status', '==', 'approved'), where('question', '==', SEED_ENTRY.question)));
+    if (!same.empty) {
+        return { reply: 'Already exists. Nothing was added.', answered: true, sources: [], kind: 'seed' };
+    }
+    await setDoc(doc(db, KNOWLEDGE_COLLECTION, SEED_DOC_ID), {
+        ...SEED_ENTRY,
+        alternativeQuestions: SEED_ENTRY.altQuestions,   // the admin page reads this field name
+        status: 'approved',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+    });
+    kbLoadedAt = 0;                                      // reload knowledge so it works right away
+    return { reply: 'Added: "' + SEED_ENTRY.question + '"', answered: true, sources: [], kind: 'seed' };
+}
+
 /** The reply for a typed message. Same shape the old backend returned (+ `choices`). */
 async function answerMessage(text) {
+    if (String(text).trim() === SEED_COMMAND) return runSeedCommand();
     const { matcher, index } = await loadKnowledge();
     const m = matcher.matchMessage(index, text);
 
