@@ -261,6 +261,8 @@ function initRecentRequests() {
 
     tbody.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-sub);font-size:13px;">Loading...</div>';
 
+    let knownIds = null;   // null until the first snapshot has loaded
+
     onSnapshot(query(collection(db, 'requests')), (snapshot) => {
         tbody.innerHTML = '';
 
@@ -277,8 +279,11 @@ function initRecentRequests() {
         }).slice(0, 10);
 
         sorted.forEach(docSnap => {
-            tbody.appendChild(buildRow(docSnap.id, docSnap.data()));
+            const row = buildRow(docSnap.id, docSnap.data());
+            if (knownIds && !knownIds.has(docSnap.id)) row.classList.add('row-new');   // just arrived
+            tbody.appendChild(row);
         });
+        knownIds = new Set(snapshot.docs.map(d => d.id));
     });
 }
 
@@ -488,9 +493,68 @@ window.closeModalOutside = function (e) {
 };
 
 // =============================================
+// New-request pop-ups — a card slides in whenever a resident
+// submits a document request while this page is open
+// =============================================
+function escapeHtml(v) {
+    return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function playBeep() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = 880; g.gain.value = 0.06;
+        o.connect(g); g.connect(ctx.destination); o.start();
+        o.stop(ctx.currentTime + 0.18);
+    } catch (e) { /* browsers may block sound until the page is clicked */ }
+}
+
+function showNewRequestPopup(r) {
+    const stack = document.getElementById('newReqStack');
+    if (!stack) return;
+
+    const card = document.createElement('div');
+    card.className = 'nr-card';
+    card.innerHTML = `
+        <div class="nr-top">
+            <span class="nr-tag">New Request</span>
+            <button class="nr-close" aria-label="Dismiss">\u2715</button>
+        </div>
+        <div class="nr-doc">${escapeHtml(r.documentType || 'Document Request')}</div>
+        <div class="nr-meta">${escapeHtml(r.residentName || 'A resident')}${r.referenceNo ? ' \u2022 ' + escapeHtml(r.referenceNo) : ''}</div>
+        ${r.purpose ? `<div class="nr-meta">Purpose: ${escapeHtml(r.purpose)}</div>` : ''}
+        <div class="nr-actions"><button class="nr-view">View request</button></div>`;
+
+    const close = () => { card.classList.add('out'); setTimeout(() => card.remove(), 260); };
+    card.querySelector('.nr-close').onclick = close;
+    card.querySelector('.nr-view').onclick  = () => { window.location.href = 'admin_pending_requests.html'; };
+
+    stack.prepend(card);
+    while (stack.children.length > 4) stack.lastElementChild.remove();
+    setTimeout(close, 10000);
+    playBeep();
+}
+
+function initNewRequestPopups() {
+    let first = true;
+    onSnapshot(
+        query(collection(db, 'requests'), where('status', '==', 'pending')),
+        (snap) => {
+            if (first) { first = false; return; }   // ignore requests that already existed on load
+            snap.docChanges().forEach(ch => {
+                if (ch.type === 'added') showNewRequestPopup(ch.doc.data());
+            });
+        },
+        (err) => console.error('New-request listener failed:', err)
+    );
+}
+
+// =============================================
 // Init Dashboard
 // =============================================
 function initDashboard() {
     initStats();
     initRecentRequests();
+    initNewRequestPopups();
 }

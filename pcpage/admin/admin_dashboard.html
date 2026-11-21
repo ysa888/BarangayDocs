@@ -146,6 +146,8 @@
     .nr-meta { font-size: 12px; color: var(--text-sub); margin-top: 2px; word-break: break-word; }
     .nr-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
     .nr-view { border: none; background: var(--primary); color: #fff; font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 800; padding: 8px 14px; border-radius: 8px; cursor: pointer; }
+    .table-row.row-new { animation: rowFlash 3s ease; }
+    @keyframes rowFlash { 0%, 60% { background: var(--yellow-bg); } 100% { background: transparent; } }
     @keyframes nrIn { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: none; } }
     .layout, .main { min-width: 0; }
     .sidebar-backdrop { display: none; }
@@ -460,62 +462,6 @@
   setInterval(render, 30000);
 </script>
 <div class="nr-stack" id="newReqStack" aria-live="polite"></div>
-<script type="module">
-  // Pops up a card the moment a resident submits a new document request.
-  import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-  import { getFirestore, collection, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
-
-  const cfg = {
-    apiKey: "AIzaSyDqRAX7DEFl2r6JbDpdsEOkip3jblgRTag",
-    authDomain: "barangaydocs-df957.firebaseapp.com",
-    projectId: "barangaydocs-df957",
-    storageBucket: "barangaydocs-df957.firebasestorage.app",
-    messagingSenderId: "1006488581565",
-    appId: "1:1006488581565:web:b1269001298ff935838ed4"
-  };
-  const app = getApps().length ? getApp() : initializeApp(cfg);
-  const db = getFirestore(app);
-
-  const stack = document.getElementById('newReqStack');
-  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
-
-  function beep() {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = 'sine'; o.frequency.value = 880; g.gain.value = 0.06;
-      o.connect(g); g.connect(ctx.destination); o.start();
-      o.stop(ctx.currentTime + 0.18);
-    } catch (e) { /* browser may block audio until the page is clicked */ }
-  }
-
-  function popup(r) {
-    const card = document.createElement('div');
-    card.className = 'nr-card';
-    card.innerHTML =
-      '<div class="nr-top"><span class="nr-tag">New Request</span>' +
-      '<button class="nr-close" aria-label="Dismiss">\u2715</button></div>' +
-      '<div class="nr-doc">' + esc(r.documentType || 'Document Request') + '</div>' +
-      '<div class="nr-meta">' + esc(r.residentName || 'A resident') +
-      (r.referenceNo ? ' \u2022 ' + esc(r.referenceNo) : '') + '</div>' +
-      (r.purpose ? '<div class="nr-meta">Purpose: ' + esc(r.purpose) + '</div>' : '') +
-      '<div class="nr-actions"><button class="nr-view">View request</button></div>';
-
-    const close = () => { card.classList.add('out'); setTimeout(() => card.remove(), 260); };
-    card.querySelector('.nr-close').onclick = close;
-    card.querySelector('.nr-view').onclick = () => { window.location.href = 'admin_pending_requests.html'; };
-    stack.prepend(card);
-    while (stack.children.length > 4) stack.lastElementChild.remove();
-    setTimeout(close, 10000);
-    beep();
-  }
-
-  let first = true;
-  onSnapshot(query(collection(db, 'requests'), where('status', '==', 'pending')), snap => {
-    if (first) { first = false; return; }          // ignore requests that already existed on page load
-    snap.docChanges().forEach(ch => { if (ch.type === 'added') popup(ch.doc.data()); });
-  }, err => console.error('New-request listener failed:', err));
-</script>
 <script type="module" src="admindashboard.js"></script>
 <script type="module" src="adminnavbar.js"></script>
 </body>
