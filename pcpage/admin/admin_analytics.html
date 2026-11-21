@@ -122,6 +122,30 @@
     .empty{font-size:12.5px;font-weight:700;color:var(--text-sub);padding:22px 0;text-align:center}
     @media(max-width:640px){.uitem{gap:10px;padding:10px 0}.uq{font-size:12.5px}}
     @media print{.top-navbar,.sidebar,.bar,.btn{display:none!important}.main{margin:0}.layout{margin:0}.card,.kpi{break-inside:avoid}}
+    /* chart cursor + details popup (BarangayDocs modal style) */
+    canvas{cursor:default}
+    .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:500;align-items:center;justify-content:center}
+    .modal-overlay.show{display:flex}
+    .modal-box{background:var(--card-bg);border-radius:20px;padding:24px;width:720px;max-width:95vw;max-height:90vh;overflow-y:auto}
+    .modal-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px}
+    .modal-header h3{font-family:'Poppins',sans-serif;font-size:16px;font-weight:700;color:var(--text-main)}
+    .modal-close{width:32px;height:32px;flex-shrink:0;background:var(--bg);border:none;border-radius:8px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+    .modal-sub{font-size:12px;color:var(--text-sub);margin-bottom:14px}
+    .pop-pick{background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;font-size:14px;font-weight:700;color:var(--text-main);margin-bottom:14px}
+    .pop-pick[hidden]{display:none}
+    .pop-cv{position:relative;height:300px;margin-bottom:14px}
+    .pop-table{overflow-x:auto;border:1.5px solid var(--border);border-radius:12px}
+    .pop-table table{width:100%;border-collapse:collapse;font-size:13px}
+    .pop-table th{background:var(--bg);font-size:10px;font-weight:800;color:var(--text-light);text-transform:uppercase;letter-spacing:.5px;text-align:left;padding:10px 14px;border-bottom:1.5px solid var(--border)}
+    .pop-table td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text-sub);font-weight:700}
+    .pop-table td:first-child{color:var(--text-main)}
+    .pop-table tr:last-child td{border-bottom:none}
+    .pop-table tr.hl td{background:#EBF0FB;color:var(--primary)}
+    .modal-btn-row{display:flex;gap:10px;margin-top:16px}
+    .modal-btn-cancel{flex:1;height:44px;background:transparent;border:1.5px solid var(--border);border-radius:12px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:800;color:var(--text-sub);cursor:pointer}
+    .modal-btn-save{flex:2;height:44px;background:var(--primary);border:none;border-radius:12px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:800;color:#fff;cursor:pointer}
+    @media(max-width:640px){.modal-box{padding:18px}.pop-cv{height:240px}}
+    @media print{.modal-overlay{display:none!important}}
   </style>
   <link rel="stylesheet" href="adminresponsive.css">
 </head>
@@ -255,15 +279,15 @@
 
     <div class="grid g21">
       <div class="card"><h3>Requests over time</h3><p>Total, accepted, and rejected requests</p><div class="cv"><canvas id="cLine"></canvas></div></div>
-      <div class="card"><h3>Request status</h3><p>Click a slice to filter the page</p><div class="cv"><canvas id="cStatus"></canvas></div></div>
+      <div class="card"><h3>Request status</h3><p>Requests grouped by status</p><div class="cv"><canvas id="cStatus"></canvas></div></div>
     </div>
     <div class="grid g11">
-      <div class="card"><h3>Most requested documents</h3><p>Click a bar to filter by document</p><div class="cv"><canvas id="cDocs"></canvas></div></div>
+      <div class="card"><h3>Most requested documents</h3><p>Total requests per document type</p><div class="cv"><canvas id="cDocs"></canvas></div></div>
       <div class="card"><h3>Accepted vs rejected by document</h3><p>Accepted includes approved, ready, and released</p><div class="cv"><canvas id="cOutcome"></canvas></div></div>
     </div>
     <div class="grid g3">
-      <div class="card"><h3>Gender</h3><p>Click a slice to filter</p><div class="cv"><canvas id="cGender"></canvas></div></div>
-      <div class="card"><h3>Civil status</h3><p>Click a slice to filter</p><div class="cv"><canvas id="cCivil"></canvas></div></div>
+      <div class="card"><h3>Gender</h3><p>Requests by resident gender</p><div class="cv"><canvas id="cGender"></canvas></div></div>
+      <div class="card"><h3>Civil status</h3><p>Requests by resident civil status</p><div class="cv"><canvas id="cCivil"></canvas></div></div>
       <div class="card"><h3>Requests by weekday</h3><p>Busiest days for the barangay hall</p><div class="cv"><canvas id="cDay"></canvas></div></div>
     </div>
     <div class="grid g21">

@@ -119,15 +119,87 @@ function syncDocOptions() {
 }
 
 /* ---------- Charts ---------- */
+const OPT = {}, KEY = {};
 function mk(id, type, data, o = {}, key) {
+    OPT[id] = o; KEY[id] = key;
     if (C[id]) { C[id].data = data; C[id].update(); return; }
     C[id] = new Chart($(id), { type, data, options: Object.assign({ responsive: true, maintainAspectRatio: false,
-        onClick: key ? (e, els) => {
-            if (!els.length) return; const v = C[id].data.labels[els[0].index];
-            if (key === 'doc') $('doc').value = $('doc').value === v ? 'all' : v; else S[key] = S[key] === v ? null : v;
-            render();
-        } : undefined,
-        onHover: (e, els) => { e.native.target.style.cursor = key && els.length ? 'pointer' : 'default'; } }, o) });
+        onClick: (e, els) => openPop(id, els.length ? els[0].index : -1),
+        onHover: (e) => { e.native.target.style.cursor = 'default'; } }, o) });
+}
+
+/* ---------- Details popup (same modal style as BarangayDocs) ---------- */
+let pop = null, popChart = null;
+const dup = (v) => Array.isArray(v) ? v.map(dup) : (v && Object.getPrototypeOf(v) === Object.prototype) ? Object.fromEntries(Object.keys(v).map(k => [k, dup(v[k])])) : v;
+function closePop() {
+    if (popChart) { popChart.destroy(); popChart = null; }
+    if (pop) pop.classList.remove('show');
+    document.body.style.overflow = '';
+}
+function buildPop() {
+    pop = el('div', 'modal-overlay'); pop.id = 'popOverlay';
+    pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-modal', 'true');
+    pop.innerHTML = '<div class="modal-box"><div class="modal-header"><h3 id="popTitle"></h3>' +
+        '<button class="modal-close" type="button" aria-label="Close">\u2715</button></div>' +
+        '<p class="modal-sub" id="popSub"></p><div class="pop-pick" id="popPick" hidden></div>' +
+        '<div class="pop-cv"><canvas id="popCanvas"></canvas></div>' +
+        '<div class="pop-table" id="popTable"></div><div class="modal-btn-row" id="popBtns"></div></div>';
+    document.body.appendChild(pop);
+    pop.addEventListener('click', (e) => { if (e.target === pop) closePop(); });
+    pop.querySelector('.modal-close').addEventListener('click', closePop);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && pop.classList.contains('show')) closePop(); });
+}
+function openPop(id, idx) {
+    if (!pop) buildPop();
+    if (popChart) { popChart.destroy(); popChart = null; }
+    const src = C[id], card = $(id).closest('.card'), key = KEY[id];
+    const labels = src.data.labels.slice(), dsets = src.data.datasets;
+    $('popTitle').textContent = card.querySelector('h3').textContent;
+    $('popSub').textContent = card.querySelector('p').textContent;
+
+    popChart = new Chart($('popCanvas'), { type: src.config.type,
+        data: dup({ labels: src.data.labels, datasets: src.data.datasets }),
+        options: Object.assign({ responsive: true, maintainAspectRatio: false }, dup(OPT[id])) });
+    if (idx >= 0) { popChart.setActiveElements(dsets.map((_, di) => ({ datasetIndex: di, index: idx }))); popChart.update(); }
+
+    /* data table */
+    const cols = dsets.map((d, i) => d.label || (dsets.length === 1 ? 'Count' : 'Series ' + (i + 1)));
+    const single = dsets.length === 1, total = single ? dsets[0].data.reduce((a, b) => a + (+b || 0), 0) : 0;
+    const wrap = $('popTable'); wrap.innerHTML = '';
+    const tb = el('table'), hr = el('tr');
+    ['Item', ...cols, ...(single ? ['Share'] : [])].forEach(h => hr.appendChild(el('th', '', h)));
+    tb.appendChild(el('thead')).appendChild(hr);
+    const body = el('tbody');
+    labels.forEach((l, i) => {
+        const tr = el('tr', i === idx ? 'hl' : ''); tr.appendChild(el('td', '', l));
+        dsets.forEach(d => tr.appendChild(el('td', '', d.data[i] == null ? '\u2014' : d.data[i])));
+        if (single) tr.appendChild(el('td', '', pct(+dsets[0].data[i] || 0, total) + '%'));
+        body.appendChild(tr);
+    });
+    tb.appendChild(body); wrap.appendChild(tb);
+
+    /* clicked part */
+    const pick = $('popPick');
+    if (idx >= 0) {
+        pick.hidden = false;
+        pick.textContent = labels[idx] + ' \u2014 ' + dsets.map((d, i) => (single ? '' : cols[i] + ': ') + d.data[i]).join(' \u2022 ') +
+            (single ? ' (' + pct(+dsets[0].data[idx] || 0, total) + '%)' : '');
+    } else pick.hidden = true;
+
+    /* buttons */
+    const btns = $('popBtns'); btns.innerHTML = '';
+    const close = el('button', 'modal-btn-cancel', 'Close'); close.type = 'button'; close.addEventListener('click', closePop);
+    btns.appendChild(close);
+    if (key && idx >= 0) {
+        const v = labels[idx], on = key === 'doc' ? $('doc').value === v : S[key] === v;
+        const f = el('button', 'modal-btn-save', on ? 'Clear filter' : 'Filter page by ' + v); f.type = 'button';
+        f.addEventListener('click', () => {
+            if (key === 'doc') $('doc').value = on ? 'all' : v; else S[key] = on ? null : v;
+            closePop(); render();
+        });
+        btns.appendChild(f);
+    }
+    pop.classList.add('show'); document.body.style.overflow = 'hidden';
 }
 const shortTick = function (v) { const s = this.getLabelForValue(v); return innerWidth < 640 && s.length > 16 ? s.slice(0, 15) + '\u2026' : s; };
 const leg = { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, usePointStyle: true } } } };
