@@ -203,7 +203,7 @@ function populateSidebar(userData) {
     // Name & role
     document.querySelectorAll('.user-name').forEach(n => n.textContent = fullName);
     document.querySelectorAll('.user-role').forEach(r => {
-        r.textContent = `Resident • Barangay Banicain`;
+        r.textContent = 'Resident';
 
         // Full home address, shown under the role
         let addr = r.parentElement.querySelector('.user-address');
