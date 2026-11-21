@@ -6,6 +6,8 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
 import { openLightbox } from "./imageviewer.js";
+import { mountRejectReasonPicker } from "./rejectreasons.js";
+import { sendSMS } from "./sms.js";
 import { formatBirthDate, resolveAge, resolveAddress, findIdImages, isImgSrc } from "./residentinfo.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import {
@@ -18,6 +20,7 @@ import {
     doc,
     updateDoc,
     getDoc,
+    addDoc,
     serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
@@ -352,6 +355,101 @@ function wireRowButtons(row, docId, data) {
 }
 
 // =============================================
+// Reject popup — stays on the dashboard (no redirect).
+// Same reasons + same resident notification as the Requests page.
+// Process / Preview & Approve / Ready / Release still go to the admin pages.
+// =============================================
+async function notifyRejected(docId, reason) {
+    let r;
+    try {
+        const rs = await getDoc(doc(db, 'requests', docId));
+        if (!rs.exists()) return;
+        r = rs.data();
+    } catch (err) { console.error('Notify: could not load request', err); return; }
+
+    const message = `BarangayDocs: Request ${r.referenceNo} was rejected.${reason ? ' Reason: ' + reason : ' Check the app for details.'}`;
+
+    try {
+        await addDoc(collection(db, 'auditLogs'), {
+            action: 'request_rejected', targetType: 'request', targetId: docId,
+            referenceNo: r.referenceNo || '', residentName: r.residentName || '',
+            residentUid: r.uid || '', documentType: r.documentType || '',
+            details: reason ? 'Reason: ' + reason : '',
+            adminUid: auth.currentUser?.uid || '', adminEmail: auth.currentUser?.email || '',
+            createdAt: serverTimestamp()
+        });
+    } catch (err) { console.error('Audit log failed (check Firestore rules):', err); }
+
+    try {
+        if (r.uid) {
+            await addDoc(collection(db, 'notifications'), {
+                uid: r.uid, requestId: docId, referenceNo: r.referenceNo || '',
+                type: 'request_status', status: 'rejected', title: 'Request Rejected',
+                message, read: false, createdAt: serverTimestamp()
+            });
+        }
+    } catch (err) { console.error('Notify: in-app notification failed', err); }
+
+    try {
+        let phone = r.contactNumber || null;
+        if (r.uid) {
+            const res = await getDoc(doc(db, 'residents', r.uid));
+            if (res.exists()) { const d = res.data(); phone = d.contactNumber || d.phone || d.mobile || phone; }
+        }
+        await sendSMS(phone, message);
+    } catch (err) { console.error('Notify: SMS failed', err); }
+}
+
+function openRejectPopup(docId, r) {
+    document.getElementById('reject-popup')?.remove();
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay show';
+    overlay.id = 'reject-popup';
+    overlay.innerHTML = `
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Reject Request</h3>
+                <button class="modal-close" type="button" data-rj="close">✕</button>
+            </div>
+            <div style="padding:0 0 16px;">
+                <label style="font-size:11px;font-weight:800;color:var(--text-sub);text-transform:uppercase;letter-spacing:0.4px;display:block;margin-bottom:8px;">Reason for Rejection</label>
+                <textarea id="dash-reject-reason" placeholder="Please specify the reason for rejection…" maxlength="200" style="width:100%;height:90px;border:2px solid var(--border);border-radius:10px;padding:10px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--text-main);background:var(--bg);outline:none;resize:none;"></textarea>
+            </div>
+            <div class="modal-btn-row" style="margin-top:0;">
+                <button type="button" class="modal-btn-cancel" data-rj="close">Cancel</button>
+                <button type="button" class="modal-btn-save" data-rj="confirm" style="background:var(--red);">Confirm Rejection</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    const picker = mountRejectReasonPicker(overlay.querySelector('#dash-reject-reason'));
+    picker.reset();
+    const close = () => { picker.reset(); overlay.remove(); };
+    overlay.querySelectorAll('[data-rj="close"]').forEach(b => b.onclick = close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+    const confirmBtn = overlay.querySelector('[data-rj="confirm"]');
+    confirmBtn.onclick = async () => {
+        const { ok, reason, code, error } = picker.getResult();
+        if (!ok) return alert(error);
+        confirmBtn.disabled = true;
+        try {
+            await updateDoc(doc(db, 'requests', docId), {
+                status: 'rejected', rejectReason: reason, rejectReasonCode: code,
+                updatedAt: serverTimestamp()
+            });
+            notifyRejected(docId, reason);
+            close();
+            showToast('Request rejected.');
+        } catch (err) {
+            console.error(err);
+            confirmBtn.disabled = false;
+            alert('Could not reject the request. Try again.');
+        }
+    };
+}
+
+// =============================================
 // View Request modal — details + valid ID (zoomable) + Process / Reject
 // Built in JS so the HTML needs no change. Same popup as the Requests page.
 // =============================================
@@ -458,7 +556,7 @@ async function openRequestModal(docId, data, row) {
     };
     mk('Close', 'modal-btn-cancel', close);
     if (r.status === 'pending' || r.status === 'processing') {
-        mk('Reject', 'modal-btn-cancel', () => goToRequest(docId, r.status, 'reject'));
+        mk('Reject', 'modal-btn-cancel', () => { close(); openRejectPopup(docId, r); });
     }
     if (r.status === 'pending') {
         mk('Process', 'modal-btn-save', () => goToRequest(docId, r.status, 'process'));
