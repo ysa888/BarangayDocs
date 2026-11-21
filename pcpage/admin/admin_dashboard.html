@@ -74,8 +74,8 @@
     .col-name { flex: 2; min-width: 0; }
     .col-user { flex: 1.5; min-width: 0; }
     .col-date { width: 100px; flex-shrink: 0; }
-    .col-status { width: 100px; flex-shrink: 0; }
-    .col-action { width: 120px; flex-shrink: 0; text-align: right; }
+    .col-status { width: 120px; flex-shrink: 0; }
+    .col-action { width: 170px; flex-shrink: 0; text-align: right; }
     .doc-icon-sm { width: 34px; height: 34px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; overflow: hidden; }
     .doc-icon-sm img { width: 24px; height: 24px; object-fit: contain; }
     .doc-icon-sm .d-ph { width: 20px; height: 20px; background: var(--border); border-radius: 5px; }
@@ -88,13 +88,17 @@
     .badge.processing { background: var(--blue-bg); color: var(--blue-text); }
     .badge.ready { background: var(--green-bg); color: var(--green-text); }
     .badge.rejected { background: var(--red-bg); color: var(--red-text); }
-    .action-row { display: flex; gap: 6px; justify-content: flex-end; }
+    .action-row { display: flex; gap: 5px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
     .btn-approve { padding: 5px 10px; background: var(--green-bg); color: var(--green-text); border: 1.5px solid #C3E6CB; border-radius: 7px; font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800; cursor: pointer; transition: background 0.15s; }
     .btn-approve:hover { background: #C3E6CB; }
     .btn-reject { padding: 5px 10px; background: var(--red-bg); color: var(--red-text); border: 1.5px solid #F5C6CB; border-radius: 7px; font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800; cursor: pointer; transition: background 0.15s; }
     .btn-reject:hover { background: #F5C6CB; }
     .btn-view { padding: 5px 10px; background: var(--bg); color: var(--text-sub); border: 1.5px solid var(--border); border-radius: 7px; font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800; cursor: pointer; }
     .btn-process { padding: 5px 10px; background: var(--blue-bg); color: var(--blue-text); border: 1.5px solid #B8DAFF; border-radius: 7px; font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800; cursor: pointer; }
+    .btn-view-doc { padding: 5px 10px; background: #1B3A6B; color: #fff; border: 1.5px solid #1B3A6B; border-radius: 7px; font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800; cursor: pointer; }
+    .btn-view-doc:hover { background: #254e8c; }
+    .badge { white-space: nowrap; line-height: 1.2; }
+    .action-row button { white-space: nowrap; }
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 500; align-items: center; justify-content: center; }
     .modal-overlay.show { display: flex; }
     .modal-box { background: var(--card-bg); border-radius: 20px; padding: 24px; width: 440px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }

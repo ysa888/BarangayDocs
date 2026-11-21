@@ -5,7 +5,6 @@
 // =============================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-import { mountRejectReasonPicker } from "./rejectreasons.js";
 import { openLightbox } from "./imageviewer.js";
 import { formatBirthDate, resolveAge, resolveAddress, findIdImages, isImgSrc } from "./residentinfo.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
@@ -321,30 +320,23 @@ function buildRow(docId, data) {
 // Action buttons (matches adminrequests.js flow)
 // =============================================
 function getActionButtons(docId, status) {
-    if (status === 'pending') {
-        return `
-            <button class="btn-process" data-id="${docId}" data-action="viewrequest">View Request</button>
-            <button class="btn-reject"  data-id="${docId}" data-action="reject">Reject</button>`;
-    }
-    if (status === 'processing') {
-        return `
-            <button class="btn-view"    data-id="${docId}" data-action="viewrequest">View</button>
-            <button class="btn-approve" data-id="${docId}" data-action="approved">Approve</button>
-            <button class="btn-reject"  data-id="${docId}" data-action="reject">Reject</button>`;
-    }
-    if (status === 'approved') {
-        return `<button class="btn-approve" data-id="${docId}" data-action="ready">Mark Ready</button>`;
-    }
-    if (status === 'ready') {
-        return `<button class="btn-approve" data-id="${docId}" data-action="released">Mark Released</button>`;
-    }
-    if (status === 'released') {
-        return `<span style="font-size:11px;color:var(--green-text);">Released</span>`;
-    }
-    if (status === 'rejected') {
-        return `<span style="font-size:11px;color:var(--red-text);">Rejected</span>`;
-    }
+    const go = (cls, label) => `<button class="${cls}" data-id="${docId}" data-action="go">${label}</button>`;
+    if (status === 'pending')    return `<button class="btn-process" data-id="${docId}" data-action="viewrequest">View Request</button>`;
+    if (status === 'processing') return go('btn-approve', 'Preview &amp; Approve');
+    if (status === 'approved')   return go('btn-approve', 'Mark as Ready');
+    if (status === 'ready')      return go('btn-approve', 'Mark as Released');
+    if (status === 'released')   return go('btn-view-doc', 'View Document');
+    if (status === 'rejected')   return `<span style="font-size:11px;color:var(--red-text);">Rejected</span>`;
     return '';
+}
+
+// Steps after "View Request" live on the Requests pages (Preview & Approve, QR, signing...).
+// The dashboard opens that same popup there instead of having its own copy.
+function requestsPageFor(status) {
+    return ['pending', 'processing', 'approved'].includes(status) ? 'admin_pending_requests.html' : 'admin_all_requests.html';
+}
+function goToRequest(docId, status, action) {
+    window.location.href = requestsPageFor(status) + '?open=' + encodeURIComponent(docId) + (action ? '&action=' + action : '');
 }
 
 // =============================================
@@ -353,108 +345,10 @@ function getActionButtons(docId, status) {
 function wireRowButtons(row, docId, data) {
     row.querySelectorAll('[data-action]').forEach(btn => {
         btn.addEventListener('click', () => {
-            const action = btn.dataset.action;
-            if (action === 'reject') {
-                openRejectModal(docId, row);
-            } else if (action === 'viewrequest') {
-                openRequestModal(docId, data, row);
-            } else {
-                updateRequestStatus(docId, action, row, data);
-            }
+            if (btn.dataset.action === 'viewrequest') openRequestModal(docId, data, row);
+            else goToRequest(docId, data.status);
         });
     });
-}
-
-// =============================================
-// Update request status in Firestore
-// =============================================
-async function updateRequestStatus(docId, newStatus, row, data) {
-    try {
-        const updateData = {
-            status: newStatus,
-            updatedAt: serverTimestamp()
-        };
-        if (newStatus === 'released') updateData.releasedAt = serverTimestamp();
-
-        await updateDoc(doc(db, 'requests', docId), updateData);
-
-        // Update badge
-        const badge = row.querySelector('.badge');
-        if (badge) {
-            badge.className = `badge ${getBadgeClass(newStatus)}`;
-            badge.textContent = getBadgeLabel(newStatus);
-        }
-
-        // Update action buttons
-        const actionCol = row.querySelector('.col-action');
-        if (actionCol) {
-            actionCol.innerHTML = `<div class="action-row">${getActionButtons(docId, newStatus)}</div>`;
-            wireRowButtons(row, docId, { ...data, status: newStatus });
-        }
-
-        row.dataset.status = newStatus;
-
-        const messages = {
-            processing: '✓ Request is now processing',
-            approved:   '✓ Request approved',
-            ready:      '✓ Document marked ready for pickup',
-            released:   '✓ Document released to resident'
-        };
-        showToast(messages[newStatus] || 'Status updated');
-        return true;
-
-    } catch (err) {
-        console.error('Update error:', err);
-        showToast('Failed to update. Check Firestore rules.');
-        return false;
-    }
-}
-
-// =============================================
-// Reject Modal
-// =============================================
-function openRejectModal(docId, row) {
-    const overlay = document.getElementById('rejectModalOverlay');
-    if (!overlay) {
-        // Fallback: inline reject if modal not in HTML
-        if (!confirm('Are you sure you want to reject this request?')) return;
-        updateRequestStatus(docId, 'rejected', row, {});
-        return;
-    }
-
-    const picker = mountRejectReasonPicker(document.getElementById('rejectReason'));
-    picker?.reset();
-    overlay.classList.add('show');
-
-    document.getElementById('confirmRejectBtn').onclick = async () => {
-        let reason = '', code = '';
-        if (picker) {
-            const res = picker.getResult();
-            if (!res.ok) { showToast(res.error); return; }   // keep modal open
-            reason = res.reason; code = res.code;
-        }
-        overlay.classList.remove('show');
-        try {
-            await updateDoc(doc(db, 'requests', docId), {
-                status:           'rejected',
-                rejectReason:     reason,   // was "rejectNote" — residents read rejectReason
-                rejectReasonCode: code,
-                updatedAt:        serverTimestamp()
-            });
-            picker?.reset();
-            const badge = row.querySelector('.badge');
-            if (badge) { badge.className = 'badge rejected'; badge.textContent = 'Rejected'; }
-            const actionCol = row.querySelector('.col-action');
-            if (actionCol) actionCol.innerHTML = `<div class="action-row"><span style="font-size:11px;color:var(--red-text);">Rejected</span></div>`;
-            row.dataset.status = 'rejected';
-            showToast('Request rejected');
-        } catch (err) {
-            console.error('Reject error:', err);
-            showToast('Failed to reject. Check Firestore rules.');
-        }
-    };
-
-    document.getElementById('cancelRejectBtn').onclick = () => { overlay.classList.remove('show'); picker?.reset(); };
 }
 
 // =============================================
@@ -564,13 +458,10 @@ async function openRequestModal(docId, data, row) {
     };
     mk('Close', 'modal-btn-cancel', close);
     if (r.status === 'pending' || r.status === 'processing') {
-        mk('Reject', 'modal-btn-cancel', () => { close(); openRejectModal(docId, row); });
+        mk('Reject', 'modal-btn-cancel', () => goToRequest(docId, r.status, 'reject'));
     }
     if (r.status === 'pending') {
-        mk('Process', 'modal-btn-save', async () => {
-            close();
-            await updateRequestStatus(docId, 'processing', row, { ...data, ...r });
-        });
+        mk('Process', 'modal-btn-save', () => goToRequest(docId, r.status, 'process'));
     }
 }
 

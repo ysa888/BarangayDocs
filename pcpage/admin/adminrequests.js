@@ -2047,6 +2047,37 @@ function createListController(tbody, { emptyMsg, getTab }) {
 }
 
 // =============================================
+// Open a request straight from a link (used by the Dashboard)
+//   ?open=<docId>                 -> runs that request's next step
+//   ?open=<docId>&action=process  -> Process, then Preview & Approve
+//   ?open=<docId>&action=reject   -> Reject popup
+// Everything goes through the same popups as clicking the row here.
+// =============================================
+let deepLinkDone = false;
+function handleDeepLink(docs) {
+    if (deepLinkDone) return;
+    const p = new URLSearchParams(location.search), id = p.get('open');
+    if (!id) { deepLinkDone = true; return; }
+    const snap = docs.find(d => d.id === id);
+    if (!snap) return;                       // not in this list (yet)
+    deepLinkDone = true;
+    history.replaceState(null, '', location.pathname + location.hash);   // so a refresh doesn't repeat it
+
+    const data = snap.data(), status = data.status, want = p.get('action');
+    const row = document.querySelector(`.table-row[data-id="${id}"]`) || buildRow(id, data);
+    if (want === 'reject' && (status === 'pending' || status === 'processing')) { openRejectModal(id, row); return; }
+    if (want === 'process' && status === 'pending') {
+        (async () => {
+            const ok = await updateRequestStatus(id, 'processing', row, data);
+            if (ok) openDocumentModal(id, { ...data, status: 'processing' }, { mode: 'approve', row });
+        })();
+        return;
+    }
+    const cfg = getActionConfig(status);
+    if (cfg) runAction(cfg.primary.action, id, row, data);
+}
+
+// =============================================
 // PENDING REQUESTS PAGE
 // =============================================
 function initPendingRequests() {
@@ -2064,6 +2095,7 @@ function initPendingRequests() {
         const countEl = document.getElementById('pendingCount');
         if (countEl) countEl.textContent = snapshot.size;
         list.setDocs(snapshot.docs);
+        handleDeepLink(snapshot.docs);
     });
 }
 
@@ -2081,6 +2113,7 @@ function initAllRequests() {
 
     onSnapshot(query(collection(db, 'requests')), (snapshot) => {
         list.setDocs(snapshot.docs);
+        handleDeepLink(snapshot.docs);
     });
 
     document.querySelectorAll('.tab-btn').forEach(tab => {
