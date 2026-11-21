@@ -193,6 +193,16 @@ function getFullAddress(userData) {
 }
 
 function populateSidebar(userData) {
+    // Style for the address line — injected here so every page matches the
+    // role line (same font, size and color) without editing each page's CSS
+    if (!document.getElementById('bdUserAddressStyle')) {
+        const st = document.createElement('style');
+        st.id = 'bdUserAddressStyle';
+        st.textContent = `.sidebar-user .user-address { font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 400; color: rgba(255,255,255,0.5); line-height: 1.4; margin-top: 2px; word-break: break-word; }
+.sidebar-user .user-address:empty { display: none; }`;
+        document.head.appendChild(st);
+    }
+
     const fullName = `${userData.firstName} ${userData.middleName ? userData.middleName.charAt(0) + '. ' : ''}${userData.lastName}`;
 
     // Avatar initials

@@ -124,7 +124,7 @@ function initPage(user, userData) {
     const role = el('sidebarRole');
     if (avatar) avatar.textContent = getInitials(fullName);
     if (name) name.textContent = fullName;
-    if (role) role.textContent = 'Resident • Barangay Banicain';
+    if (role) role.textContent = 'Resident';
 
     // Load active document types from Firestore (real-time)
     listenDocumentTypes();
