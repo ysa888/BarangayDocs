@@ -137,7 +137,7 @@ function showPop(o) {
     $('popTitle').textContent = o.title; $('popSub').textContent = o.sub || '';
     pop.querySelector('.pop-cv').hidden = !o.chart;
     if (o.chart) {
-        popChart = new Chart($('popCanvas'), o.chart);
+        popChart = new Chart($('popCanvas'), dup(o.chart));
         if (o.active != null && o.active >= 0) { popChart.setActiveElements(popChart.data.datasets.map((_, di) => ({ datasetIndex: di, index: o.active }))); popChart.update(); }
     }
     const pick = $('popPick'); pick.hidden = !o.pick; pick.textContent = o.pick || '';
@@ -188,6 +188,15 @@ function openPop(id, idx) {
 const shortTick = function (v) { const s = this.getLabelForValue(v); return innerWidth < 640 && s.length > 16 ? s.slice(0, 15) + '\u2026' : s; };
 const leg = { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, usePointStyle: true } } } };
 
+/* chart configs for the KPI popups (the visual shown above the table) */
+const popBar = (labels, datasets, extra = {}, horizontal = true) => labels.length ? { type: 'bar', data: { labels, datasets },
+    options: Object.assign({ responsive: true, maintainAspectRatio: false, indexAxis: horizontal ? 'y' : 'x',
+        plugins: { legend: { display: datasets.length > 1, position: 'bottom', labels: { boxWidth: 12, usePointStyle: true } } },
+        scales: horizontal ? { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { ticks: { callback: shortTick } } }
+                           : { y: { beginAtZero: true, ticks: { precision: 0 } } } }, extra) } : null;
+const popDonut = (labels, data, colors) => labels.length ? { type: 'doughnut', data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2 }] },
+    options: Object.assign({ responsive: true, maintainAspectRatio: false, cutout: '58%' }, leg) } : null;
+
 function render() {
     syncDocOptions();
     const p = +$('period').value, d = $('doc').value, now = Date.now();
@@ -221,6 +230,14 @@ function render() {
         'Avg. processing time': { title: 'Average processing time', sub: 'Days from request to decision, by document', head: ['Document', 'Avg. days', 'Decided requests'],
             rows: atimes.length ? [...atimes, ['All documents', avg.toFixed(1), times.length]] : [] }
     };
+    /* each KPI shows its own visual in the popup */
+    const sKeys = ST.filter(x => stc.get(x));
+    kpiCfg['Total requests'].chart = popDonut(sKeys, sKeys.map(x => stc.get(x)), sKeys.map(x => STC[ST.indexOf(x)]));
+    kpiCfg['Accepted'].chart = popBar(kpiCfg['Accepted'].rows.map(r => r[0]), [{ label: 'Accepted', data: kpiCfg['Accepted'].rows.map(r => r[1]), backgroundColor: '#28A745', borderRadius: 6 }]);
+    kpiCfg['Rejected'].chart = popBar(kpiCfg['Rejected'].rows.map(r => r[0]), [{ label: 'Rejected', data: kpiCfg['Rejected'].rows.map(r => r[1]), backgroundColor: '#DC3545', borderRadius: 6 }]);
+    kpiCfg['Pending'].chart = popBar(kpiCfg['Pending'].rows.map(r => r[0]), [{ label: 'Pending', data: kpiCfg['Pending'].rows.map(r => r[1]), backgroundColor: '#FFC107', borderRadius: 6 }]);
+    kpiCfg['Avg. processing time'].chart = popBar(atimes.map(r => r[0]), [{ label: 'Avg. days', data: atimes.map(r => +r[1]), backgroundColor: '#2A5298', borderRadius: 6 }],
+        { scales: { x: { beginAtZero: true }, y: { ticks: { callback: shortTick } } } });
     [['Total requests', R.length, ''], ['Accepted', acc + ' (' + pct(acc, dec) + '%)', 'g'], ['Rejected', rej + ' (' + pct(rej, dec) + '%)', 'r'],
      ['Pending', pen, 'y'], ['Avg. processing time', avg.toFixed(1) + ' days', '']].forEach(([l, v, c]) => {
         const k = el('div', 'kpi ' + c); k.append(el('small', '', l), el('b', '', v)); clickable(k, kpiCfg[l]); kp.appendChild(k);
@@ -375,6 +392,15 @@ function renderAI() {
         rows: qRows(AI.unans.filter(u => (u.status || 'new') === 'new').sort((a, b) => b.count - a.count).slice(0, 10)) };
     const kbCfg = { title: 'Knowledge base coverage', sub: 'Entries per category and status', head: ['Category', 'Approved', 'Draft', 'Archived'],
         rows: cats.map((c, i) => [c, cs('approved')[i], cs('draft')[i], cs('archived')[i]]) };
+
+    distCfg.chart = RT.length ? popBar(['5 stars', '4 stars', '3 stars', '2 stars', '1 star'], [{ label: 'Ratings', data: dist, backgroundColor: '#2A5298', borderRadius: 6 }]) : null;
+    useCfg.chart = popBar(uk.map(ub.label), [{ label: 'Asked', data: uk.map(k => UB[k][0]), backgroundColor: '#2A5298', borderRadius: 4 },
+        { label: 'Answered', data: uk.map(k => UB[k][1]), backgroundColor: '#28A745', borderRadius: 4 }], {}, false);
+    const qChart = (arr) => popBar(arr.map(u => clip(u.q || '(no text)', 40)), [{ label: 'Times asked', data: arr.map(u => u.count), backgroundColor: '#FF8A65', borderRadius: 6 }]);
+    topCfg.chart = qChart(tq);
+    waitCfg.chart = qChart(AI.unans.filter(u => (u.status || 'new') === 'new').sort((a, b) => b.count - a.count).slice(0, 10));
+    kbCfg.chart = popBar(cats, [{ label: 'Approved', data: cs('approved'), backgroundColor: '#28A745' }, { label: 'Draft', data: cs('draft'), backgroundColor: '#FFC107' },
+        { label: 'Archived', data: cs('archived'), backgroundColor: '#9AA5BC' }], { scales: { x: { stacked: true, ticks: { precision: 0 } }, y: { stacked: true, ticks: { callback: shortTick } } } });
 
     const kp = $('aiKpis'); kp.innerHTML = '';
     [['Average rating', RT.length ? avg.toFixed(1) + ' / 5' : '\u2014', '', distCfg],
