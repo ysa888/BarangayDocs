@@ -23,6 +23,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 import { sendSMS } from './sms.js';
 import { baseValues, effectiveValues, paintDocument } from './docoverrides.js';
+import { openLightbox } from './imageviewer.js';
 
 // Admin-made template view (same renderer the resident preview uses). null = built-in certificate.
 let templateView = null;
@@ -761,26 +762,6 @@ async function markRequestReady(docId, row, data, btn, expiry = null) {
 }
 
 // =============================================
-// In-page image lightbox (click anywhere or press Esc to close)
-// =============================================
-function openLightbox(src) {
-    document.getElementById('rd-lightbox')?.remove();
-    const lb = document.createElement('div');
-    lb.id = 'rd-lightbox';
-    lb.style.cssText = 'position:fixed;inset:0;background:rgba(10,20,50,0.85);z-index:1200;display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out;';
-    const img = document.createElement('img');
-    img.src = src;
-    img.alt = 'Enlarged photo';
-    img.style.cssText = 'max-width:100%;max-height:100%;border-radius:12px;background:#fff;';
-    lb.appendChild(img);
-    const onKey = e => { if (e.key === 'Escape') closeLb(); };
-    const closeLb = () => { lb.remove(); document.removeEventListener('keydown', onKey); };
-    lb.addEventListener('click', closeLb);
-    document.addEventListener('keydown', onKey);
-    document.body.appendChild(lb);
-}
-
-// =============================================
 // Expiration picker inside the "Preview & Approve" document preview.
 // Changing it updates the certificate (expiration + QR) live.
 // =============================================
@@ -987,7 +968,7 @@ async function openRequestModal(docId, data, row) {
                 </div>
                 <!-- RIGHT: valid ID picture, beside the details for easy comparison -->
                 <div class="rd-pic-col">
-                    <p class="rd-col-title">Valid ID (click to enlarge)</p>
+                    <p class="rd-col-title">Valid ID (click to zoom, drag to move)</p>
                     ${idImgs.length
                         ? idImgs.map((s, i) => `<img class="rd-zoom rd-id" src="${s}" alt="ID ${i + 1}">`).join('')
                         : `<div class="modal-field"><p>No ID image found on this resident</p></div>`}

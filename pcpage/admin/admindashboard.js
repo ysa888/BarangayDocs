@@ -6,6 +6,8 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
 import { mountRejectReasonPicker } from "./rejectreasons.js";
+import { openLightbox } from "./imageviewer.js";
+import { formatBirthDate, resolveAge, resolveAddress, findIdImages, isImgSrc } from "./residentinfo.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import {
     getFirestore,
@@ -321,11 +323,12 @@ function buildRow(docId, data) {
 function getActionButtons(docId, status) {
     if (status === 'pending') {
         return `
-            <button class="btn-process" data-id="${docId}" data-action="processing">Process</button>
+            <button class="btn-process" data-id="${docId}" data-action="viewrequest">View Request</button>
             <button class="btn-reject"  data-id="${docId}" data-action="reject">Reject</button>`;
     }
     if (status === 'processing') {
         return `
+            <button class="btn-view"    data-id="${docId}" data-action="viewrequest">View</button>
             <button class="btn-approve" data-id="${docId}" data-action="approved">Approve</button>
             <button class="btn-reject"  data-id="${docId}" data-action="reject">Reject</button>`;
     }
@@ -353,6 +356,8 @@ function wireRowButtons(row, docId, data) {
             const action = btn.dataset.action;
             if (action === 'reject') {
                 openRejectModal(docId, row);
+            } else if (action === 'viewrequest') {
+                openRequestModal(docId, data, row);
             } else {
                 updateRequestStatus(docId, action, row, data);
             }
@@ -396,10 +401,12 @@ async function updateRequestStatus(docId, newStatus, row, data) {
             released:   '✓ Document released to resident'
         };
         showToast(messages[newStatus] || 'Status updated');
+        return true;
 
     } catch (err) {
         console.error('Update error:', err);
         showToast('Failed to update. Check Firestore rules.');
+        return false;
     }
 }
 
@@ -448,6 +455,123 @@ function openRejectModal(docId, row) {
     };
 
     document.getElementById('cancelRejectBtn').onclick = () => { overlay.classList.remove('show'); picker?.reset(); };
+}
+
+// =============================================
+// View Request modal — details + valid ID (zoomable) + Process / Reject
+// Built in JS so the HTML needs no change. Same popup as the Requests page.
+// =============================================
+async function openRequestModal(docId, data, row) {
+    let r = data, rd = {};
+    try {
+        const snap = await getDoc(doc(db, 'requests', docId));
+        if (snap.exists()) r = snap.data();
+        if (r.uid) {
+            const rs = await getDoc(doc(db, 'residents', r.uid));
+            if (rs.exists()) rd = rs.data();
+        }
+    } catch (err) { console.error(err); }
+
+    document.getElementById('request-detail-modal')?.remove();
+    const esc = v => String(v ?? '—').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const field = (label, val) => `<div class="modal-field"><label>${label}</label><p>${esc(val || '—')}</p></div>`;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay show';
+    overlay.id = 'request-detail-modal';
+    const faceSrc = [rd.faceUrl, rd.photoUrl, rd.profilePhoto, rd.profileUrl, rd.photo, rd.avatar].find(isImgSrc) || '';
+    const idImgs  = findIdImages(rd, r);
+    const initial = String(r.residentName || '?').trim().charAt(0).toUpperCase();
+    const imgBox  = (src, label) =>
+        `<img class="rd-zoom" src="${src}" alt="${label}" style="display:block;width:100%;max-height:200px;object-fit:contain;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;cursor:zoom-in;">`;
+    const birthTxt = formatBirthDate(rd, r);
+    const sexTxt   = rd.sex || rd.gender;
+
+    if (!document.getElementById('rd-compare-style')) {
+        const st = document.createElement('style');
+        st.id = 'rd-compare-style';
+        st.textContent = `
+          #request-detail-modal .modal-box { max-height:92vh; overflow-y:auto; }
+          .rd-compare { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap:20px; align-items:start; }
+          .rd-col-title { font-size:11px; font-weight:800; color:var(--text-sub); text-transform:uppercase; letter-spacing:.5px; margin:0 0 10px; }
+          .rd-info-grid { display:grid; grid-template-columns: 1fr 1fr; gap:0 14px; }
+          .rd-info-grid .modal-field.rd-wide { grid-column: 1 / -1; }
+          .rd-pic-col { position:sticky; top:0; }
+          .rd-pic-col img.rd-id { display:block; width:100%; max-height:70vh; object-fit:contain; background:var(--bg); border:1.5px solid var(--border); border-radius:10px; cursor:zoom-in; }
+          .rd-pic-col .rd-id + .rd-id { margin-top:10px; }
+          @media (max-width: 760px) {
+            .rd-compare { grid-template-columns: 1fr; }
+            .rd-pic-col { position:static; order:-1; }   /* picture on top, info underneath */
+          }
+        `;
+        document.head.appendChild(st);
+    }
+
+    const wide = (label, val) => `<div class="modal-field rd-wide"><label>${label}</label><p>${esc(val || '—')}</p></div>`;
+
+    overlay.innerHTML = `
+        <div class="modal-box" style="max-width:980px;width:96%;">
+            <div class="modal-header">
+                <h3>Request Details</h3>
+                <button class="modal-close" type="button" data-rd="close">✕</button>
+            </div>
+            <div class="rd-compare">
+                <!-- LEFT: resident information -->
+                <div class="rd-info-col">
+                    <p class="rd-col-title">Resident Information</p>
+                    <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+                        ${faceSrc
+                            ? `<img class="rd-zoom" src="${faceSrc}" alt="Profile" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid var(--border);flex-shrink:0;cursor:zoom-in;">`
+                            : `<div style="width:64px;height:64px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;flex-shrink:0;">${esc(initial)}</div>`}
+                        <div style="min-width:0;">
+                            <div style="font-size:16px;font-weight:800;color:var(--text-main);overflow-wrap:anywhere;">${esc(r.residentName)}</div>
+                            <div style="font-size:12px;color:var(--text-sub);">${esc(rd.civilStatus || '')}${rd.civilStatus && sexTxt ? ' · ' : ''}${esc(sexTxt || '')}</div>
+                        </div>
+                    </div>
+                    <div class="rd-info-grid">
+                        ${wide('Document', r.documentType)}
+                        ${field('Reference No.', r.referenceNo)}
+                        ${field('Submitted', formatDate(r.createdAt))}
+                        ${wide('Purpose', r.purpose)}
+                        ${field('Birthday', birthTxt)}
+                        ${field('Age', resolveAge(rd, r))}
+                        ${wide('Contact', rd.contactNumber || rd.phone || rd.mobile || r.contactNumber)}
+                        ${wide('Address', resolveAddress(rd, r))}
+                    </div>
+                </div>
+                <!-- RIGHT: valid ID picture, beside the details for easy comparison -->
+                <div class="rd-pic-col">
+                    <p class="rd-col-title">Valid ID (click to zoom, drag to move)</p>
+                    ${idImgs.length
+                        ? idImgs.map((s, i) => `<img class="rd-zoom rd-id" src="${s}" alt="ID ${i + 1}">`).join('')
+                        : `<div class="modal-field"><p>No ID image found on this resident</p></div>`}
+                </div>
+            </div>
+            <div class="modal-btn-row" id="rd-buttons" style="margin-top:16px;"></div>
+        </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelectorAll('.rd-zoom').forEach(img => img.addEventListener('click', () => openLightbox(img.src)));
+
+    const close = () => overlay.remove();
+    overlay.querySelector('[data-rd="close"]').onclick = close;
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+    const btns = overlay.querySelector('#rd-buttons');
+    const mk = (text, cls, fn) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = cls; b.textContent = text; b.onclick = fn;
+        btns.appendChild(b);
+    };
+    mk('Close', 'modal-btn-cancel', close);
+    if (r.status === 'pending' || r.status === 'processing') {
+        mk('Reject', 'modal-btn-cancel', () => { close(); openRejectModal(docId, row); });
+    }
+    if (r.status === 'pending') {
+        mk('Process', 'modal-btn-save', async () => {
+            close();
+            await updateRequestStatus(docId, 'processing', row, { ...data, ...r });
+        });
+    }
 }
 
 // =============================================
