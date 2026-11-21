@@ -359,7 +359,7 @@ function wireRowButtons(row, docId, data) {
 // Same reasons + same resident notification as the Requests page.
 // Process / Preview & Approve / Ready / Release still go to the admin pages.
 // =============================================
-async function notifyRejected(docId, reason) {
+async function notifyStatus(docId, status, reason) {
     let r;
     try {
         const rs = await getDoc(doc(db, 'requests', docId));
@@ -367,14 +367,17 @@ async function notifyRejected(docId, reason) {
         r = rs.data();
     } catch (err) { console.error('Notify: could not load request', err); return; }
 
-    const message = `BarangayDocs: Request ${r.referenceNo} was rejected.${reason ? ' Reason: ' + reason : ' Check the app for details.'}`;
+    const message = status === 'processing'
+        ? `BarangayDocs: Your request ${r.referenceNo} (${r.documentType}) is now being processed.`
+        : `BarangayDocs: Request ${r.referenceNo} was rejected.${reason ? ' Reason: ' + reason : ' Check the app for details.'}`;
+    const title = status === 'processing' ? 'Request Processing' : 'Request Rejected';
 
     try {
         await addDoc(collection(db, 'auditLogs'), {
-            action: 'request_rejected', targetType: 'request', targetId: docId,
+            action: 'request_' + status, targetType: 'request', targetId: docId,
             referenceNo: r.referenceNo || '', residentName: r.residentName || '',
             residentUid: r.uid || '', documentType: r.documentType || '',
-            details: reason ? 'Reason: ' + reason : '',
+            details: status === 'rejected' && reason ? 'Reason: ' + reason : '',
             adminUid: auth.currentUser?.uid || '', adminEmail: auth.currentUser?.email || '',
             createdAt: serverTimestamp()
         });
@@ -384,7 +387,7 @@ async function notifyRejected(docId, reason) {
         if (r.uid) {
             await addDoc(collection(db, 'notifications'), {
                 uid: r.uid, requestId: docId, referenceNo: r.referenceNo || '',
-                type: 'request_status', status: 'rejected', title: 'Request Rejected',
+                type: 'request_status', status, title,
                 message, read: false, createdAt: serverTimestamp()
             });
         }
@@ -438,7 +441,7 @@ function openRejectPopup(docId, r) {
                 status: 'rejected', rejectReason: reason, rejectReasonCode: code,
                 updatedAt: serverTimestamp()
             });
-            notifyRejected(docId, reason);
+            notifyStatus(docId, 'rejected', reason);
             close();
             showToast('Request rejected.');
         } catch (err) {
@@ -559,7 +562,17 @@ async function openRequestModal(docId, data, row) {
         mk('Reject', 'modal-btn-cancel', () => { close(); openRejectPopup(docId, r); });
     }
     if (r.status === 'pending') {
-        mk('Process', 'modal-btn-save', () => goToRequest(docId, r.status, 'process'));
+        mk('Process', 'modal-btn-save', async () => {
+            try {
+                await updateDoc(doc(db, 'requests', docId), { status: 'processing', updatedAt: serverTimestamp() });
+                notifyStatus(docId, 'processing');
+                close();
+                showToast('✓ Request marked as Processing');
+            } catch (err) {
+                console.error(err);
+                showToast('Failed to update. Check Firestore rules.');
+            }
+        });
     }
 }
 
