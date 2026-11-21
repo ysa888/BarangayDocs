@@ -338,9 +338,22 @@ function getActionButtons(docId, status) {
 function requestsPageFor(status) {
     return ['pending', 'processing', 'approved'].includes(status) ? 'admin_pending_requests.html' : 'admin_all_requests.html';
 }
+// Opens the Requests page's popup floating over the dashboard (transparent iframe, ?embed=1)
+// so the admin stays on the dashboard. The page tells us when its last popup closes.
 function goToRequest(docId, status, action) {
-    window.location.href = requestsPageFor(status) + '?open=' + encodeURIComponent(docId) + (action ? '&action=' + action : '');
+    document.getElementById('requests-embed')?.remove();
+    const f = document.createElement('iframe');
+    f.id = 'requests-embed';
+    f.setAttribute('allowtransparency', 'true');
+    f.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;background:transparent;z-index:900;color-scheme:normal;';
+    f.src = requestsPageFor(status) + '?embed=1&open=' + encodeURIComponent(docId) + (action ? '&action=' + action : '');
+    document.body.appendChild(f);
 }
+window.addEventListener('message', e => {
+    if (e.origin === location.origin && e.data?.type === 'requests-embed-close') {
+        document.getElementById('requests-embed')?.remove();
+    }
+});
 
 // =============================================
 // Wire row action buttons

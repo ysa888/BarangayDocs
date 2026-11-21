@@ -79,6 +79,35 @@ const isPendingPage = window.PAGE_TYPE === 'pending' || document.title.includes(
 const isAllPage     = window.PAGE_TYPE === 'all'     || document.title.includes('All Requests');
 
 // =============================================
+// Embed mode (?embed=1) — used by the Dashboard.
+// The page is loaded transparent inside an overlay iframe on the dashboard:
+// only the popups show, and the parent is told when the last popup closes.
+// =============================================
+const isEmbed = new URLSearchParams(location.search).get('embed') === '1';
+if (isEmbed) {
+    const st = document.createElement('style');
+    st.textContent = `
+        html, body { background: transparent !important; }
+        body > *:not([class*="modal"]):not([class*="overlay"]):not([class*="lightbox"]):not([id*="lightbox"]):not([class*="toast"]):not(script):not(style) {
+            visibility: hidden !important; pointer-events: none !important;
+        }`;
+    document.head.appendChild(st);
+
+    let seen = false, timer = null;
+    const popupOpen = () => [...document.querySelectorAll('.modal-overlay, .confirm-overlay, #request-detail-modal')]
+        .some(e => getComputedStyle(e).display !== 'none');
+    const tellParent = () => parent.postMessage({ type: 'requests-embed-close' }, location.origin);
+    const check = () => {
+        if (popupOpen()) { seen = true; clearTimeout(timer); return; }
+        if (seen) { clearTimeout(timer); timer = setTimeout(() => { if (!popupOpen()) tellParent(); }, 500); }
+    };
+    new MutationObserver(check).observe(document.documentElement, {
+        subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'style']
+    });
+    setTimeout(() => { if (!seen) tellParent(); }, 8000);   // nothing opened (e.g. request not found)
+}
+
+// =============================================
 // Auth Guard
 // =============================================
 onAuthStateChanged(auth, async (user) => {
