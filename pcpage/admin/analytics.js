@@ -58,17 +58,16 @@ Chart.register({ id: 'emptyMsg', afterDraw(ch) {   // "no data" text for the AI 
     ctx.fillText('No data for this period', (a.left + a.right) / 2, (a.top + a.bottom) / 2); ctx.restore();
 } });
 
-const state = { reqs: [], res: [] };
+const state = { reqs: [], res: [], reqsLoaded: false, reqsError: false };
 const AI = { ratings: [], unans: [], kb: [], usage: [] };   // anonymous fields only, no names or uids
 let AIS = null;                                           // last AI summary, used by the CSV export
 const S = { gender: null, civil: null, st: null };
 const C = {};
-let ALL = [], CUR = [], usingDemo = false;
+let ALL = [], CUR = [];
 
 /* ---------- Data ---------- */
 function build() {
-    if (!state.reqs.length) { ALL = demo(); usingDemo = true; return; }
-    usingDemo = false;
+    if (!state.reqs.length) { ALL = []; return; }
     const byId = new Map(state.res.map(r => [r.id, r]));
     const byName = new Map();
     state.res.forEach(r => {
@@ -92,23 +91,6 @@ function build() {
     const mg = miss(r => r.gender === 'Unknown'), mc = miss(r => r.civil === 'Unknown'), ma = miss(r => r.age == null);
     if (mg || mc || ma) console.info('[analytics] requests missing gender / civil status / age:', mg, mc, ma, 'of', ALL.length,
         '- if these are high, add your field names to KEYS at the top of analytics.js');
-}
-function demo() {
-    let s = 7; const R = () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
-    const pick = (a) => { let t = R() * a.reduce((x, y) => x + y[1], 0); for (const [v, w] of a) if ((t -= w) < 0) return v; return a[0][0]; };
-    const docs = [['Barangay Clearance', 30], ['Certificate of Residency', 22], ['Certificate of Indigency', 15], ['Barangay ID', 12], ['Business Clearance', 8], ['Good Moral Certificate', 7], ['First-Time Jobseeker Certificate', 6]], out = [];
-    for (let i = 0; i < 720; i++) {
-        const off = Math.floor(365 * Math.pow(R(), 1.3)), dt = new Date(Date.now() - off * 864e5);
-        if ([0, 6].includes(dt.getDay()) && R() < .85) { i--; continue; }
-        dt.setHours(8 + Math.floor(R() * 9), Math.floor(R() * 60));
-        const d = pick(docs), jb = d.startsWith('First'), base = jb ? 21 : d.includes('Indigency') ? 48 : d.includes('Business') ? 40 : 34;
-        const age = Math.max(15, Math.min(88, Math.round(base + (jb ? 3 : 14) * (R() + R() + R() + R() - 2) * 1.73)));
-        const civil = age < 24 ? pick([['Single', 90], ['Married', 6], ['Live-In', 4]]) : age >= 60 ? pick([['Married', 45], ['Widowed', 40], ['Single', 8], ['Separated', 7]]) : pick([['Single', 35], ['Married', 45], ['Live-In', 8], ['Separated', 7], ['Widowed', 5]]);
-        const st = off < 4 ? pick([['Submitted', 50], ['Processing', 50]]) : R() < (d.includes('Business') ? .14 : .08) ? 'Rejected' : pick([['Released', 72], ['Ready', 18], ['Approved', 10]]);
-        out.push({ id: 'DEMO-' + i, doc: d, st, gender: pick([['Female', 53], ['Male', 47]]), civil, age, created: dt,
-            decided: grp(st) === 'pending' ? null : new Date(dt.getTime() + (1 + Math.floor(R() * 5)) * 864e5) });
-    }
-    return out;
 }
 function syncDocOptions() {
     const sel = $('doc'), cur = sel.value, names = [...new Set(ALL.map(r => r.doc))].sort();
@@ -149,57 +131,59 @@ function buildPop() {
     pop.querySelector('.modal-close').addEventListener('click', closePop);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && pop.classList.contains('show')) closePop(); });
 }
-function openPop(id, idx) {
+function showPop(o) {
     if (!pop) buildPop();
     if (popChart) { popChart.destroy(); popChart = null; }
+    $('popTitle').textContent = o.title; $('popSub').textContent = o.sub || '';
+    pop.querySelector('.pop-cv').hidden = !o.chart;
+    if (o.chart) {
+        popChart = new Chart($('popCanvas'), o.chart);
+        if (o.active != null && o.active >= 0) { popChart.setActiveElements(popChart.data.datasets.map((_, di) => ({ datasetIndex: di, index: o.active }))); popChart.update(); }
+    }
+    const pick = $('popPick'); pick.hidden = !o.pick; pick.textContent = o.pick || '';
+    const hl = [].concat(o.hl == null ? [] : o.hl), wrap = $('popTable'); wrap.innerHTML = '';
+    if (o.rows && o.rows.length) {
+        const tb = el('table'), hr = el('tr'), body = el('tbody');
+        o.head.forEach(h => hr.appendChild(el('th', '', h)));
+        tb.appendChild(el('thead')).appendChild(hr);
+        o.rows.forEach((r, i) => { const tr = el('tr', hl.includes(i) ? 'hl' : ''); r.forEach(v => tr.appendChild(el('td', '', v == null ? '\u2014' : v))); body.appendChild(tr); });
+        tb.appendChild(body); wrap.appendChild(tb);
+    } else wrap.appendChild(el('div', 'empty', 'No data for this selection yet.'));
+    const btns = $('popBtns'); btns.innerHTML = '';
+    const close = el('button', 'modal-btn-cancel', 'Close'); close.type = 'button'; close.addEventListener('click', closePop); btns.appendChild(close);
+    if (o.action) { const f = el('button', 'modal-btn-save', o.action.label); f.type = 'button'; f.addEventListener('click', o.action.run); btns.appendChild(f); }
+    pop.classList.add('show'); document.body.style.overflow = 'hidden';
+}
+/* makes a KPI box or insight chip open a details popup (cursor stays default) */
+function clickable(node, cfg) {
+    node.tabIndex = 0; node.setAttribute('role', 'button');
+    const go = () => showPop(cfg);
+    node.addEventListener('click', go);
+    node.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+}
+function openPop(id, idx) {
     const src = C[id], card = $(id).closest('.card'), key = KEY[id];
     const labels = src.data.labels.slice(), dsets = src.data.datasets;
-    $('popTitle').textContent = card.querySelector('h3').textContent;
-    $('popSub').textContent = card.querySelector('p').textContent;
-
-    popChart = new Chart($('popCanvas'), { type: src.config.type,
-        data: dup({ labels: src.data.labels, datasets: src.data.datasets }),
-        options: Object.assign({ responsive: true, maintainAspectRatio: false }, dup(OPT[id])) });
-    if (idx >= 0) { popChart.setActiveElements(dsets.map((_, di) => ({ datasetIndex: di, index: idx }))); popChart.update(); }
-
-    /* data table */
     const cols = dsets.map((d, i) => d.label || (dsets.length === 1 ? 'Count' : 'Series ' + (i + 1)));
     const single = dsets.length === 1, total = single ? dsets[0].data.reduce((a, b) => a + (+b || 0), 0) : 0;
-    const wrap = $('popTable'); wrap.innerHTML = '';
-    const tb = el('table'), hr = el('tr');
-    ['Item', ...cols, ...(single ? ['Share'] : [])].forEach(h => hr.appendChild(el('th', '', h)));
-    tb.appendChild(el('thead')).appendChild(hr);
-    const body = el('tbody');
-    labels.forEach((l, i) => {
-        const tr = el('tr', i === idx ? 'hl' : ''); tr.appendChild(el('td', '', l));
-        dsets.forEach(d => tr.appendChild(el('td', '', d.data[i] == null ? '\u2014' : d.data[i])));
-        if (single) tr.appendChild(el('td', '', pct(+dsets[0].data[i] || 0, total) + '%'));
-        body.appendChild(tr);
-    });
-    tb.appendChild(body); wrap.appendChild(tb);
-
-    /* clicked part */
-    const pick = $('popPick');
-    if (idx >= 0) {
-        pick.hidden = false;
-        pick.textContent = labels[idx] + ' \u2014 ' + dsets.map((d, i) => (single ? '' : cols[i] + ': ') + d.data[i]).join(' \u2022 ') +
-            (single ? ' (' + pct(+dsets[0].data[idx] || 0, total) + '%)' : '');
-    } else pick.hidden = true;
-
-    /* buttons */
-    const btns = $('popBtns'); btns.innerHTML = '';
-    const close = el('button', 'modal-btn-cancel', 'Close'); close.type = 'button'; close.addEventListener('click', closePop);
-    btns.appendChild(close);
+    const o = {
+        title: card.querySelector('h3').textContent, sub: card.querySelector('p').textContent,
+        chart: { type: src.config.type, data: dup({ labels: src.data.labels, datasets: src.data.datasets }),
+                 options: Object.assign({ responsive: true, maintainAspectRatio: false }, dup(OPT[id])) },
+        active: idx, hl: idx >= 0 ? idx : null,
+        head: ['Item', ...cols, ...(single ? ['Share'] : [])],
+        rows: labels.map((l, i) => [l, ...dsets.map(d => d.data[i]), ...(single ? [pct(+dsets[0].data[i] || 0, total) + '%'] : [])])
+    };
+    if (idx >= 0) o.pick = labels[idx] + ' \u2014 ' + dsets.map((d, i) => (single ? '' : cols[i] + ': ') + d.data[idx]).join(' \u2022 ') +
+        (single ? ' (' + pct(+dsets[0].data[idx] || 0, total) + '%)' : '');
     if (key && idx >= 0) {
         const v = labels[idx], on = key === 'doc' ? $('doc').value === v : S[key] === v;
-        const f = el('button', 'modal-btn-save', on ? 'Clear filter' : 'Filter page by ' + v); f.type = 'button';
-        f.addEventListener('click', () => {
+        o.action = { label: on ? 'Clear filter' : 'Filter page by ' + v, run: () => {
             if (key === 'doc') $('doc').value = on ? 'all' : v; else S[key] = on ? null : v;
             closePop(); render();
-        });
-        btns.appendChild(f);
+        } };
     }
-    pop.classList.add('show'); document.body.style.overflow = 'hidden';
+    showPop(o);
 }
 const shortTick = function (v) { const s = this.getLabelForValue(v); return innerWidth < 640 && s.length > 16 ? s.slice(0, 15) + '\u2026' : s; };
 const leg = { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, usePointStyle: true } } } };
@@ -210,7 +194,9 @@ function render() {
     const R = ALL.filter(r => (!p || now - r.created < p * 864e5) && (d === 'all' || r.doc === d) &&
         (!S.gender || r.gender === S.gender) && (!S.civil || r.civil === S.civil) && (!S.st || r.st === S.st));
     CUR = R;
-    $('demo').hidden = !usingDemo;
+    const nb = $('demo');
+    if (state.reqsError) { nb.textContent = 'Could not load requests from Firestore. Check your connection or permissions.'; nb.hidden = false; }
+    else { nb.textContent = 'No requests in Firestore yet. This page fills in automatically as residents submit requests.'; nb.hidden = ALL.length > 0 || !state.reqsLoaded; }
     const acc = R.filter(r => grp(r.st) === 'accepted').length, rej = R.filter(r => r.st === 'Rejected').length, pen = R.length - acc - rej, dec = acc + rej;
     const times = R.filter(r => r.decided).map(r => (r.decided - r.created) / 864e5).filter(t => t >= 0);
     const avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0;
@@ -221,9 +207,23 @@ function render() {
         const c = el('span', 'chip', v + ' \u2715'); c.addEventListener('click', () => { S[k] = null; render(); }); chips.appendChild(c);
     });
     const kp = $('kpis'); kp.innerHTML = '';
+    const stc = tally(R, r => r.st), dn = top(tally(R, r => r.doc)).map(x => x[0]);
+    const perDoc = (pick) => dn.map(n => { const x = R.filter(r => r.doc === n), c = x.filter(pick).length, dd = x.filter(r => grp(r.st) !== 'pending').length; return [n, c, dd, pct(c, dd) + '%']; })
+        .filter(r => r[1] > 0).sort((a, b) => b[1] - a[1]);
+    const atimes = dn.map(n => { const t = R.filter(r => r.doc === n && r.decided).map(r => (r.decided - r.created) / 864e5).filter(x => x >= 0); return [n, t.length ? (t.reduce((a, b) => a + b, 0) / t.length).toFixed(1) : null, t.length]; }).filter(r => r[2] > 0);
+    const kpiCfg = {
+        'Total requests': { title: 'Total requests', sub: 'All requests for the current filters, grouped by status', head: ['Status', 'Requests', 'Share'],
+            rows: [...new Set([...ST, ...stc.keys()])].filter(x => stc.get(x)).map(x => [x, stc.get(x), pct(stc.get(x), R.length) + '%']) },
+        'Accepted': { title: 'Accepted requests', sub: 'Accepted includes approved, ready, and released', head: ['Document', 'Accepted', 'Decided', 'Acceptance rate'], rows: perDoc(r => grp(r.st) === 'accepted') },
+        'Rejected': { title: 'Rejected requests', sub: 'Rejected requests by document', head: ['Document', 'Rejected', 'Decided', 'Rejection rate'], rows: perDoc(r => r.st === 'Rejected') },
+        'Pending': { title: 'Pending requests', sub: 'Submitted or processing, by document', head: ['Document', 'Pending'],
+            rows: dn.map(n => [n, R.filter(r => r.doc === n && grp(r.st) === 'pending').length]).filter(r => r[1] > 0).sort((a, b) => b[1] - a[1]) },
+        'Avg. processing time': { title: 'Average processing time', sub: 'Days from request to decision, by document', head: ['Document', 'Avg. days', 'Decided requests'],
+            rows: atimes.length ? [...atimes, ['All documents', avg.toFixed(1), times.length]] : [] }
+    };
     [['Total requests', R.length, ''], ['Accepted', acc + ' (' + pct(acc, dec) + '%)', 'g'], ['Rejected', rej + ' (' + pct(rej, dec) + '%)', 'r'],
      ['Pending', pen, 'y'], ['Avg. processing time', avg.toFixed(1) + ' days', '']].forEach(([l, v, c]) => {
-        const k = el('div', 'kpi ' + c); k.append(el('small', '', l), el('b', '', v)); kp.appendChild(k);
+        const k = el('div', 'kpi ' + c); k.append(el('small', '', l), el('b', '', v)); clickable(k, kpiCfg[l]); kp.appendChild(k);
     });
 
     /* line: bucket by span */
@@ -273,15 +273,23 @@ function render() {
         st.appendChild(el('div', 'sr', 'No age data for this selection'));
     }
 
-    /* insights */
+    /* insights (each chip opens the table behind it) */
     const I = [];
-    if (dc.length) I.push(`${dc[0][0]} is the most requested document (${pct(dc[0][1], R.length)}% of requests)`);
     const rr = dl.map(n => { const x = R.filter(r => r.doc === n && grp(r.st) !== 'pending'); return [n, pct(x.filter(r => r.st === 'Rejected').length, x.length), x.length]; }).filter(x => x[2] >= 10).sort((a, b) => b[1] - a[1]);
-    if (rr.length) I.push(`Highest rejection rate: ${rr[0][0]} at ${rr[0][1]}%`);
-    const bd = [...wd].sort((a, b) => b[1] - a[1])[0]; if (bd) I.push(`Busiest day: ${DAYS[bd[0]]}`);
-    const bm = top(tally(R, r => r.created.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })))[0]; if (bm) I.push(`Peak month: ${bm[0]} (${bm[1]} requests)`);
-    if (gc.length && gc[0][0] !== 'Unknown') I.push(`${gc[0][0]} residents file ${pct(gc[0][1], R.length)}% of requests`);
-    const ins = $('ins'); ins.innerHTML = ''; I.forEach(t => ins.appendChild(el('span', '', t)));
+    const share = (arr) => arr.map(x => [x[0], x[1], pct(x[1], R.length) + '%']);
+    if (dc.length) I.push([`${dc[0][0]} is the most requested document (${pct(dc[0][1], R.length)}% of requests)`,
+        { title: 'Most requested documents', sub: 'Share of all requests for the current filters', head: ['Document', 'Requests', 'Share'], rows: share(dc), hl: 0 }]);
+    if (rr.length) I.push([`Highest rejection rate: ${rr[0][0]} at ${rr[0][1]}%`,
+        { title: 'Rejection rate by document', sub: 'Documents with at least 10 decided requests', head: ['Document', 'Rejection rate', 'Decided requests'], rows: rr.map(x => [x[0], x[1] + '%', x[2]]), hl: 0 }]);
+    const bd = [...wd].sort((a, b) => b[1] - a[1])[0];
+    if (bd) I.push([`Busiest day: ${DAYS[bd[0]]}`,
+        { title: 'Requests by weekday', sub: 'When residents file the most requests', head: ['Day', 'Requests', 'Share'], rows: share(DAYS.map((d, i) => [d, wd.get(i) || 0])), hl: bd[0] }]);
+    const mt = top(tally(R, r => r.created.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' }))), bm = mt[0];
+    if (bm) I.push([`Peak month: ${bm[0]} (${bm[1]} requests)`,
+        { title: 'Requests by month', sub: 'Busiest months first', head: ['Month', 'Requests', 'Share'], rows: share(mt), hl: 0 }]);
+    if (gc.length && gc[0][0] !== 'Unknown') I.push([`${gc[0][0]} residents file ${pct(gc[0][1], R.length)}% of requests`,
+        { title: 'Requests by gender', sub: 'Share of requests by resident gender', head: ['Gender', 'Requests', 'Share'], rows: share(gc), hl: 0 }]);
+    const ins = $('ins'); ins.innerHTML = ''; I.forEach(([t, cfg]) => { const c = el('span', '', t); clickable(c, cfg); ins.appendChild(c); });
     renderAI();
 }
 
@@ -311,15 +319,6 @@ function renderAI() {
 
     AIS = [['Ratings', RT.length], ['Average rating', avg ? avg.toFixed(2) : ''], ['Rated 4-5 stars (%)', RT.length ? pct(sat, RT.length) : ''],
         ['Questions asked', asked], ['Questions answered', answered], ['Answer rate (%)', asked ? pct(answered, asked) : ''], ['Unanswered questions waiting', waiting]];
-
-    const kp = $('aiKpis'); kp.innerHTML = '';
-    [['Average rating', RT.length ? avg.toFixed(1) + ' / 5' : '\u2014', ''],
-     ['Rated 4-5 stars', RT.length ? pct(sat, RT.length) + '%' : '\u2014', 'g'],
-     ['Questions asked', asked ? asked : '\u2014', ''],
-     ['Answer rate', asked ? pct(answered, asked) + '%' : '\u2014', 'g'],
-     ['Unanswered, waiting', waiting, waiting ? 'r' : '']].forEach(([l, v, c]) => {
-        const k = el('div', 'kpi ' + c); k.append(el('small', '', l), el('b', '', v)); kp.appendChild(k);
-    });
 
     /* ratings over time: bars = count, line = average */
     const rb = bucketer(RT.map(r => r.at)), RB = {};
@@ -365,14 +364,35 @@ function renderAI() {
         { label: 'Archived', data: cs('archived'), backgroundColor: '#9AA5BC' }] },
         Object.assign({ indexAxis: 'y', scales: { x: { stacked: true, ticks: { precision: 0 } }, y: { stacked: true, ticks: { callback: shortTick } } } }, leg));
 
+    /* KPI boxes + insights (each opens the table behind it) */
+    const distCfg = { title: 'Rating distribution', sub: 'How many residents gave each score', head: ['Score', 'Ratings', 'Share'],
+        rows: [5, 4, 3, 2, 1].map((n, i) => [n + (n === 1 ? ' star' : ' stars'), dist[i], pct(dist[i], RT.length) + '%']) };
+    const useCfg = { title: 'Chat activity', sub: 'Questions asked and answered by the assistant', head: ['Period', 'Asked', 'Answered', 'Answer rate'],
+        rows: uk.map(k => [ub.label(k), UB[k][0], UB[k][1], pct(UB[k][1], UB[k][0]) + '%']) };
+    const qRows = (arr) => arr.map(u => [clip(u.q || '(no text)', 90), u.count + '\u00D7', (u.status || 'new') === 'new' ? 'Waiting' : cap(u.status)]);
+    const topCfg = { title: 'Most asked unanswered questions', sub: 'Top 10 for the selected period', head: ['Question', 'Times asked', 'Status'], rows: qRows(tq), hl: 0 };
+    const waitCfg = { title: 'Unanswered questions waiting', sub: 'Still waiting for a knowledge entry (top 10 by times asked)', head: ['Question', 'Times asked', 'Status'],
+        rows: qRows(AI.unans.filter(u => (u.status || 'new') === 'new').sort((a, b) => b.count - a.count).slice(0, 10)) };
+    const kbCfg = { title: 'Knowledge base coverage', sub: 'Entries per category and status', head: ['Category', 'Approved', 'Draft', 'Archived'],
+        rows: cats.map((c, i) => [c, cs('approved')[i], cs('draft')[i], cs('archived')[i]]) };
+
+    const kp = $('aiKpis'); kp.innerHTML = '';
+    [['Average rating', RT.length ? avg.toFixed(1) + ' / 5' : '\u2014', '', distCfg],
+     ['Rated 4-5 stars', RT.length ? pct(sat, RT.length) + '%' : '\u2014', 'g', Object.assign({}, distCfg, { hl: [0, 1] })],
+     ['Questions asked', asked ? asked : '\u2014', '', useCfg],
+     ['Answer rate', asked ? pct(answered, asked) + '%' : '\u2014', 'g', useCfg],
+     ['Unanswered, waiting', waiting, waiting ? 'r' : '', waitCfg]].forEach(([l, v, c, cfg]) => {
+        const k = el('div', 'kpi ' + c); k.append(el('small', '', l), el('b', '', v)); clickable(k, cfg); kp.appendChild(k);
+    });
+
     /* insights */
     const I = [];
-    if (RT.length) I.push(`Residents rate the assistant ${avg.toFixed(1)} / 5 on average (${RT.length} rating${RT.length === 1 ? '' : 's'})`);
-    if (asked) I.push(`${pct(answered, asked)}% of questions were answered from the knowledge base`);
-    if (tq.length) I.push(`Most repeated unanswered question: "${clip(tq[0].q, 60)}" (${tq[0].count}x)`);
-    if (waiting) I.push(`${waiting} unanswered question${waiting === 1 ? '' : 's'} still waiting for a knowledge entry`);
-    const ap = KB.filter(k => k.status === 'approved').length; if (KB.length) I.push(`${ap} of ${KB.length} knowledge entries are approved and live`);
-    const ins = $('aiIns'); ins.innerHTML = ''; I.forEach(t => ins.appendChild(el('span', '', t)));
+    if (RT.length) I.push([`Residents rate the assistant ${avg.toFixed(1)} / 5 on average (${RT.length} rating${RT.length === 1 ? '' : 's'})`, distCfg]);
+    if (asked) I.push([`${pct(answered, asked)}% of questions were answered from the knowledge base`, useCfg]);
+    if (tq.length) I.push([`Most repeated unanswered question: "${clip(tq[0].q, 60)}" (${tq[0].count}x)`, topCfg]);
+    if (waiting) I.push([`${waiting} unanswered question${waiting === 1 ? '' : 's'} still waiting for a knowledge entry`, waitCfg]);
+    const ap = KB.filter(k => k.status === 'approved').length; if (KB.length) I.push([`${ap} of ${KB.length} knowledge entries are approved and live`, kbCfg]);
+    const ins = $('aiIns'); ins.innerHTML = ''; I.forEach(([t, cfg]) => { const c = el('span', '', t); clickable(c, cfg); ins.appendChild(c); });
 }
 
 window.exportCSV = function () {
@@ -413,8 +433,8 @@ onAuthStateChanged(auth, async (user) => {
         await signOut(auth); window.location.href = '../barangaydocs_login.html'; return;
     }
     const sub = (name, key) => onSnapshot(collection(db, name),
-        (s) => { state[key] = s.docs.map(d => ({ id: d.id, ...d.data() })); build(); render(); },
-        (err) => { console.error('Analytics listener failed:', name, err); if (key === 'reqs') { build(); render(); } });
+        (s) => { state[key] = s.docs.map(d => ({ id: d.id, ...d.data() })); if (key === 'reqs') { state.reqsLoaded = true; state.reqsError = false; } build(); render(); },
+        (err) => { console.error('Analytics listener failed:', name, err); if (key === 'reqs') { state.reqsError = true; build(); render(); } });
     sub('requests', 'reqs'); sub('residents', 'res');
     // AI assistant data: only anonymous fields are copied (never residentName or uid)
     const subAi = (name, key, map) => onSnapshot(collection(db, name),

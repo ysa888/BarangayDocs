@@ -144,6 +144,11 @@
     .modal-btn-row{display:flex;gap:10px;margin-top:16px}
     .modal-btn-cancel{flex:1;height:44px;background:transparent;border:1.5px solid var(--border);border-radius:12px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:800;color:var(--text-sub);cursor:pointer}
     .modal-btn-save{flex:2;height:44px;background:var(--primary);border:none;border-radius:12px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:800;color:#fff;cursor:pointer}
+    .pop-cv[hidden]{display:none}
+    .kpi[role=button],.ins span[role=button]{cursor:default}
+    .kpi[role=button]:hover{border-color:var(--primary-light)}
+    .ins span[role=button]:hover{background:#DDE7F8}
+    .kpi[role=button]:focus-visible,.ins span[role=button]:focus-visible{outline:2px solid var(--primary-light);outline-offset:2px}
     @media(max-width:640px){.modal-box{padding:18px}.pop-cv{height:240px}}
     @media print{.modal-overlay{display:none!important}}
   </style>
@@ -265,7 +270,7 @@
         <button class="btn solid" onclick="exportCSV()">Export CSV</button>
       </div>
     </div>
-    <div class="demo" id="demo" hidden>No requests found yet, so this page is showing sample data.</div>
+    <div class="demo" id="demo" hidden>No requests in Firestore yet. This page fills in automatically as residents submit requests.</div>
 
     <div class="bar">
       <select id="period" class="fs"><option value="0">All time</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="180">Last 6 months</option><option value="365">Last 12 months</option></select>
