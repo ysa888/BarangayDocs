@@ -388,6 +388,8 @@ function goToRequest(docId, status, action) {
     f.src = requestsPageFor(status) + '?embed=1&open=' + encodeURIComponent(docId) + (action ? '&action=' + action : '');
     document.body.appendChild(f);
 }
+// After "Process": pop the Preview & Approve straight up over the dashboard
+function onProcessed(docId) { goToRequest(docId, 'processing'); }
 window.addEventListener('message', e => {
     if (e.origin === location.origin && e.data?.type === 'requests-embed-close') {
         document.getElementById('requests-embed')?.remove();
@@ -640,6 +642,7 @@ async function openRequestModalInner(docId, data, row) {
                 notifyStatus(docId, 'processing');
                 close();
                 showToast('✓ Request marked as Processing');
+                onProcessed(docId);
             } catch (err) {
                 console.error(err);
                 showToast('Failed to update. Check Firestore rules.');

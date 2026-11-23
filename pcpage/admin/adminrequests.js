@@ -105,6 +105,7 @@ const PAGE_STATUSES = IS_ALL ? null : ['pending', 'processing', 'approved'];
 let allDocs = [];                              // [{ id, ...data }] live
 let activeTab = 'all';
 let embedHandled = false;
+let embedBusy = false;                         // a popup is about to open (don't close the dashboard pop-up yet)
 
 // =============================================
 // Small helpers
@@ -378,6 +379,7 @@ async function openRequestModalInner(docId, data, row) {
                 notifyStatus(docId, 'processing');
                 close();
                 showToast('✓ Request marked as Processing');
+                onProcessed(docId, r);
             } catch (err) {
                 console.error(err);
                 showToast('Failed to update. Check Firestore rules.');
@@ -808,16 +810,20 @@ async function openPreviewFor(id, r, { approve = false } = {}) {
     await openDocumentPreview(id, r);
     const overlay = el('doc-preview-modal');
     if (!overlay) return;
-    const bar = overlay.querySelector('.doc-preview-toolbar > div');
-    el('dp-approve-admin')?.remove();
+    const wrap = overlay.querySelector('.doc-preview-wrapper');
+    el('dp-footer-admin')?.remove();
 
-    // docedit.js may already provide its own approve control; only add ours if it doesn't
-    if (approve && bar && !document.querySelector('#dp-approve, [data-dp-approve]')) {
-        const b = document.createElement('button');
-        b.id = 'dp-approve-admin';
-        b.type = 'button';
-        b.className = 'dp-btn dp-btn-primary';
-        b.textContent = '✓ Approve';
+    // Approve sits at the BOTTOM of the preview (docedit.js may provide its own; then we don't add ours)
+    if (approve && wrap && !document.querySelector('#dp-approve, [data-dp-approve]')) {
+        const f = document.createElement('div');
+        f.id = 'dp-footer-admin';
+        f.style.cssText = 'flex-shrink:0;display:flex;gap:10px;justify-content:flex-end;padding:12px 16px;background:#fff;border-top:1.5px solid #E3E8F2;';
+        f.innerHTML = `
+            <button type="button" id="dp-footer-close" style="min-height:46px;padding:0 20px;border:2px solid #E3E8F2;background:transparent;border-radius:12px;font-family:'Nunito',sans-serif;font-size:14px;font-weight:800;color:#6B7A99;cursor:pointer;">Close</button>
+            <button type="button" id="dp-approve-admin" style="min-height:46px;padding:0 28px;border:none;background:#28A745;border-radius:12px;font-family:'Nunito',sans-serif;font-size:14px;font-weight:800;color:#fff;cursor:pointer;">✓ Approve</button>`;
+        wrap.appendChild(f);
+        f.querySelector('#dp-footer-close').onclick = () => overlay.classList.remove('show');
+        const b = f.querySelector('#dp-approve-admin');
         b.onclick = async () => {
             if (!confirm('Approve this request? It will move to "Awaiting Signature".')) return;
             b.disabled = true;
@@ -831,10 +837,15 @@ async function openPreviewFor(id, r, { approve = false } = {}) {
                 showToast('Failed to approve. Check Firestore rules.');
             }
         };
-        bar.insertBefore(b, bar.firstChild);
     }
     const closeBtn = el('dp-close');
     if (closeBtn) closeBtn.onclick = () => overlay.classList.remove('show');
+}
+
+// After "Process": pop the Preview & Approve straight up (no extra click)
+function onProcessed(id, r) {
+    embedBusy = true;
+    openPreviewFor(id, { ...r, status: 'processing' }, { approve: true }).finally(() => { embedBusy = false; });
 }
 
 // =============================================
@@ -1023,7 +1034,7 @@ function setupEmbed() {
     const check = () => {
         clearTimeout(timer);
         timer = setTimeout(() => {
-            if (embedHandled && !document.querySelector('.modal-overlay.show')) {
+            if (embedHandled && !embedBusy && !document.querySelector('.modal-overlay.show')) {
                 parent.postMessage({ type: 'requests-embed-close' }, location.origin);
             }
         }, 250);
