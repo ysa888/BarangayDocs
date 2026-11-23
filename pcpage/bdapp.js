@@ -437,6 +437,108 @@ let homeReqCtx          = null;    // { user, userData, fullName }
 let homeReqSelectedId   = null;
 let homeReqSubmitting   = false;
 
+// ---- Required live photo (same rule as the Requests page) ----
+const HQ_CLOUDINARY_CLOUD  = 'ddizbxtdd';
+const HQ_CLOUDINARY_PRESET = 'barangaydocs_preset';
+let hqPhotoBlob = null, hqPhotoStream = null, hqPhotoPreviewUrl = null;
+
+async function hqUploadPhoto(file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('upload_preset', HQ_CLOUDINARY_PRESET);
+    fd.append('folder', 'barangaydocs/request_photos');
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${HQ_CLOUDINARY_CLOUD}/image/upload`, { method: 'POST', body: fd });
+    if (!res.ok) throw new Error('Photo upload failed');
+    const data = await res.json();
+    return { url: data.secure_url, publicId: data.public_id };
+}
+
+function hqPhotoError(msg) {
+    const e = el('hqPhotoErr'); if (e) e.textContent = msg || '';
+    el('hqPhotoBox')?.classList.toggle('err', !!msg);
+}
+function hqPhotoStopStream() {
+    if (hqPhotoStream) { hqPhotoStream.getTracks().forEach(t => t.stop()); hqPhotoStream = null; }
+    const v = el('hqPhotoVideo'); if (v) v.srcObject = null;
+}
+function hqPhotoRender(state) {
+    const box = el('hqPhotoBox'); if (!box) return;
+    box.dataset.state = state;
+    box.classList.toggle('has-photo', state === 'done');
+    const cam = el('hqPhotoCamBtn'), snap = el('hqPhotoSnapBtn');
+    if (cam)  { cam.hidden = state === 'live'; cam.textContent = state === 'done' ? 'Retake' : 'Open Camera'; }
+    if (snap) snap.hidden = state !== 'live';
+}
+function hqPhotoReset() {
+    hqPhotoStopStream();
+    hqPhotoBlob = null;
+    if (hqPhotoPreviewUrl) { URL.revokeObjectURL(hqPhotoPreviewUrl); hqPhotoPreviewUrl = null; }
+    const img = el('hqPhotoImg'); if (img) img.removeAttribute('src');
+    hqPhotoError('');
+    hqPhotoRender('idle');
+}
+function hqPhotoLayoutOval() {
+    const box = el('hqPhotoBox'), v = el('hqPhotoVideo');
+    if (!box || !v || !v.videoWidth) return;
+    const aspect = v.videoWidth / v.videoHeight;
+    box.style.aspectRatio = v.videoWidth + ' / ' + v.videoHeight;
+    box.style.width = '';
+    requestAnimationFrame(() => {
+        let r = box.getBoundingClientRect();
+        const maxH = window.innerHeight * 0.5;
+        if (r.height > maxH) { box.style.width = Math.round(maxH * aspect) + 'px'; r = box.getBoundingClientRect(); }
+        let oh = r.height * 0.8, ow = oh * 0.75;
+        if (ow > r.width * 0.85) { ow = r.width * 0.85; oh = ow / 0.75; }
+        box.style.setProperty('--ow', ow + 'px');
+        box.style.setProperty('--oh', oh + 'px');
+    });
+}
+window.addEventListener('resize', () => { if (el('hqPhotoBox')?.dataset.state === 'live') hqPhotoLayoutOval(); });
+
+async function hqPhotoStartCamera() {
+    const video = el('hqPhotoVideo');
+    hqPhotoError('');
+    if (!navigator.mediaDevices?.getUserMedia) {
+        return hqPhotoError('Camera is not available on this device or browser. Open BarangayDocs in a browser with camera support (HTTPS).');
+    }
+    try {
+        hqPhotoStopStream();
+        hqPhotoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+        video.srcObject = hqPhotoStream;
+        await video.play();
+        hqPhotoRender('live');
+        hqPhotoLayoutOval();
+    } catch (err) {
+        console.error('Camera error:', err);
+        hqPhotoStopStream();
+        hqPhotoRender('idle');
+        hqPhotoError('Could not open the camera. Please allow camera access, then tap "Open Camera".');
+    }
+}
+function hqPhotoSnap() {
+    const v = el('hqPhotoVideo');
+    if (!v.videoWidth) return hqPhotoError('Camera is still starting. Try again.');
+    const scale = Math.min(1, 900 / Math.max(v.videoWidth, v.videoHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(v.videoWidth * scale); c.height = Math.round(v.videoHeight * scale);
+    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+    c.toBlob(b => {
+        if (!b) return hqPhotoError('Could not capture the photo. Please try again.');
+        hqPhotoStopStream();
+        hqPhotoBlob = b;
+        if (hqPhotoPreviewUrl) URL.revokeObjectURL(hqPhotoPreviewUrl);
+        hqPhotoPreviewUrl = URL.createObjectURL(b);
+        el('hqPhotoImg').src = hqPhotoPreviewUrl;
+        hqPhotoError('');
+        hqPhotoRender('done');
+    }, 'image/jpeg', 0.85);
+}
+
+function hqShowStep(step) {
+    el('hqStepDetails').hidden = step !== 'details';
+    el('hqStepPhoto').hidden   = step !== 'photo';
+}
+
 const HOME_REQ_PURPOSES = ['Employment', 'Travel', 'Medical', 'School / Scholarship',
     'Government Requirement', 'Loan Application', 'Business', 'Other'];
 
@@ -471,7 +573,34 @@ function ensureHomeRequestModal() {
     .hq-success p { font-size:14px; color:var(--text-sub); line-height:1.6; margin-bottom:16px; }
     .hq-ref { font-size:14px; font-weight:800; color:var(--primary); background:var(--bg); padding:10px 20px; border-radius:10px; margin-bottom:20px; }
     .hq-done { width:100%; height:48px; background:var(--primary); border:none; border-radius:12px; font-family:'Nunito',sans-serif; font-size:15px; font-weight:800; color:#fff; cursor:pointer; }
-    @media (max-width:640px) { .hq-modal { padding:22px; } .hq-grid { grid-template-columns:repeat(2,1fr); } .hq-btns { flex-direction:column; } .hq-success { padding:28px; } }`;
+    .hq-modal [hidden] { display:none !important; }
+    .hq-step-note { font-size:12px; font-weight:700; color:var(--text-sub); margin-bottom:14px; }
+    .hq-pbox { position:relative; width:100%; max-width:360px; aspect-ratio:3/4; margin:0 auto; border:2px dashed var(--border); border-radius:16px; background:var(--bg); overflow:hidden; display:flex; align-items:center; justify-content:center; color:var(--text-light); font-size:13px; font-weight:700; text-align:center; }
+    .hq-pbox .hq-pph { padding:0 24px; line-height:1.4; }
+    .hq-pblur, .hq-pring { display:none; position:absolute; pointer-events:none; }
+    .hq-pbox[data-state="live"] .hq-pblur { display:block; inset:0; background:rgba(255,255,255,0.12); -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px);
+      -webkit-mask-image:radial-gradient(ellipse calc(var(--ow,60%)/2) calc(var(--oh,80%)/2) at 50% 50%, transparent 99%, #000 100%);
+      mask-image:radial-gradient(ellipse calc(var(--ow,60%)/2) calc(var(--oh,80%)/2) at 50% 50%, transparent 99%, #000 100%); }
+    .hq-pbox[data-state="live"] .hq-pring { display:block; left:50%; top:50%; width:var(--ow,60%); height:var(--oh,80%); transform:translate(-50%,-50%); border:3px solid #fff; border-radius:50%; box-shadow:0 0 0 1px rgba(0,0,0,.25); }
+    .hq-pbox.has-photo { border-style:solid; border-color:var(--green,#28a745); }
+    .hq-pbox.err { border-color:var(--red,#dc3545); }
+    .hq-pbox video, .hq-pbox img { width:100%; height:100%; object-fit:cover; display:none; }
+    .hq-pbox video { transform:scaleX(-1); }
+    .hq-pbox[data-state="live"] video, .hq-pbox[data-state="done"] img { display:block; }
+    .hq-pbox[data-state="live"] .hq-pph, .hq-pbox[data-state="done"] .hq-pph { display:none; }
+    .hq-pactions { display:flex; gap:8px; margin-top:14px; }
+    .hq-pbtn { flex:1; min-height:48px; border-radius:12px; border:2px solid var(--primary); background:var(--primary); color:#fff; font-family:'Nunito',sans-serif; font-size:14px; font-weight:800; cursor:pointer; }
+    .hq-pbtn[hidden] { display:none !important; }
+    .hq-perr { color:var(--red,#dc3545); font-size:12px; font-weight:700; margin-top:6px; text-align:center; }
+    @media (max-width:640px) {
+      .hq-overlay { padding:10px; }
+      .hq-modal { padding:22px 18px; max-height:94vh; max-height:94dvh; }
+      .hq-grid { grid-template-columns:repeat(2,1fr); }
+      .hq-btns { flex-direction:column-reverse; }
+      .hq-cancel, .hq-submit, .hq-done { height:auto; min-height:54px; font-size:15px; }
+      .hq-pbtn { min-height:54px; font-size:15px; }
+      .hq-success { padding:28px; }
+    }`;
     document.head.appendChild(style);
 
     const wrap = document.createElement('div');
@@ -479,6 +608,7 @@ function ensureHomeRequestModal() {
     <div class="hq-overlay" id="hqOverlay">
         <div class="hq-modal" role="dialog" aria-modal="true" aria-labelledby="hqTitle">
             <div class="hq-title" id="hqTitle">New Document Request</div>
+            <div id="hqStepDetails">
             <div class="hq-sub">Select a document type and fill in the details</div>
             <div class="hq-grid" id="hqGrid"></div>
             <div class="hq-field">
@@ -494,7 +624,27 @@ function ensureHomeRequestModal() {
             </div>
             <div class="hq-btns">
                 <button type="button" class="hq-cancel" id="hqCancel">Cancel</button>
-                <button type="button" class="hq-submit" id="hqSubmit">Submit Request</button>
+                <button type="button" class="hq-submit" id="hqNext">Next</button>
+            </div>
+            </div>
+            <div id="hqStepPhoto" hidden>
+                <div class="hq-sub">Last step · A live photo of you is required so the barangay can confirm it is really you</div>
+                <div class="hq-pbox" id="hqPhotoBox" data-state="idle">
+                    <div class="hq-pph">Starting camera… fit your face inside the oval</div>
+                    <video id="hqPhotoVideo" playsinline muted></video>
+                    <img id="hqPhotoImg" alt="Your current photo">
+                    <div class="hq-pblur"></div>
+                    <div class="hq-pring"></div>
+                </div>
+                <div class="hq-pactions">
+                    <button type="button" class="hq-pbtn" id="hqPhotoCamBtn">Open Camera</button>
+                    <button type="button" class="hq-pbtn" id="hqPhotoSnapBtn" hidden>Capture</button>
+                </div>
+                <div class="hq-perr" id="hqPhotoErr"></div>
+                <div class="hq-btns">
+                    <button type="button" class="hq-cancel" id="hqBack">Back</button>
+                    <button type="button" class="hq-submit" id="hqSubmit">Submit Request</button>
+                </div>
             </div>
         </div>
     </div>
@@ -513,6 +663,15 @@ function ensureHomeRequestModal() {
     overlay.addEventListener('click', (e) => { if (e.target === overlay) closeHomeRequestModal(); });
     el('hqCancel').addEventListener('click', closeHomeRequestModal);
     el('hqSubmit').addEventListener('click', submitHomeRequest);
+    el('hqNext').addEventListener('click', () => {
+        if (!homeActiveDocs.some(d => d.id === homeReqSelectedId)) return alert('Please select a document type.');
+        if (!el('hqPurpose').value) return alert('Please select a purpose.');
+        hqShowStep('photo');
+        if (!hqPhotoBlob) hqPhotoStartCamera();      // open the camera right away
+    });
+    el('hqBack').addEventListener('click', () => { hqPhotoStopStream(); hqPhotoRender(hqPhotoBlob ? 'done' : 'idle'); hqShowStep('details'); });
+    el('hqPhotoCamBtn').addEventListener('click', hqPhotoStartCamera);   // also "Retake"
+    el('hqPhotoSnapBtn').addEventListener('click', hqPhotoSnap);
     el('hqDone').addEventListener('click', () => el('hqSuccessOverlay').classList.remove('show'));
     el('hqGrid').addEventListener('click', (e) => {
         const btn = e.target.closest('.hq-doc');
@@ -550,11 +709,14 @@ function openHomeRequestModal(docId) {
     refreshHomeRequestGrid();
     el('hqPurpose').value = '';
     el('hqNotes').value   = '';
+    hqPhotoReset();
+    hqShowStep('details');
     el('hqOverlay').classList.add('show');
     el('hqPurpose').focus();
 }
 
 function closeHomeRequestModal() {
+    hqPhotoStopStream();
     el('hqOverlay')?.classList.remove('show');
 }
 
@@ -568,17 +730,26 @@ async function submitHomeRequest() {
     const purpose = el('hqPurpose').value;
     if (!purpose) return alert('Please select a purpose.');
 
+    if (!hqPhotoBlob) {
+        hqPhotoError('Please take a live photo to continue.');
+        return alert('Please take a live picture of yourself before requesting a document.');
+    }
+
     const notes = el('hqNotes').value.trim();
     const ref = `BRY-${new Date().getFullYear()}-${String(Math.floor(10000 + Math.random() * 90000))}`;
 
     homeReqSubmitting = true;
     const btn = el('hqSubmit');
-    btn.disabled = true; btn.textContent = 'Submitting…';
+    btn.disabled = true; btn.textContent = 'Uploading photo…';
 
     try {
+        const photo = await hqUploadPhoto(hqPhotoBlob);
+        btn.textContent = 'Submitting…';
         await addDoc(collection(db, 'requests'), {
             uid:          user.uid,
             residentName: fullName,
+            requestPhotoUrl:      photo.url,
+            requestPhotoPublicId: photo.publicId,
             documentType: picked.name,
             purpose,
             notes,
@@ -594,6 +765,7 @@ async function submitHomeRequest() {
         });
 
         closeHomeRequestModal();
+        hqPhotoReset();
         el('hqRef').textContent = `Ref: ${ref}`;
         el('hqSuccessOverlay').classList.add('show');
     } catch (err) {
