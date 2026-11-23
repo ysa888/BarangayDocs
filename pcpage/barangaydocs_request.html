@@ -297,20 +297,18 @@
   <div class="modal-overlay" id="photoOverlay" style="z-index:1010;">
     <div class="modal">
       <div class="modal-title">Take Your Photo</div>
-      <div class="modal-sub">Last step · A current photo of you is required to submit this request</div>
+      <div class="modal-sub">Last step · A live photo of you is required so the barangay can confirm it is really you</div>
       <div class="s-field">
-        <label>Current Photo (Required)</label>
+        <label>Live Photo (Required)</label>
         <div class="rp-box" id="reqPhotoBox" data-state="idle">
-          <div class="rp-ph">Take a clear, current photo of your face</div>
+          <div class="rp-ph">Starting camera… face the camera and take a clear photo</div>
           <video id="reqPhotoVideo" playsinline muted></video>
           <img id="reqPhotoImg" alt="Your current photo">
         </div>
         <div class="rp-actions">
           <button type="button" class="rp-btn primary" id="reqPhotoCamBtn">Open Camera</button>
           <button type="button" class="rp-btn primary" id="reqPhotoSnapBtn" hidden>Capture</button>
-          <button type="button" class="rp-btn" id="reqPhotoUploadBtn">Upload Instead</button>
         </div>
-        <input type="file" id="reqPhotoInput" accept="image/*" capture="user" hidden>
         <div class="rp-err" id="reqPhotoErr"></div>
       </div>
       <div class="modal-btn-row">

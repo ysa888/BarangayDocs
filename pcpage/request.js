@@ -439,7 +439,6 @@ function reqPhotoReset() {
     reqPhotoBlob = null;
     if (reqPhotoPreviewUrl) { URL.revokeObjectURL(reqPhotoPreviewUrl); reqPhotoPreviewUrl = null; }
     const img = el('reqPhotoImg'); if (img) img.removeAttribute('src');
-    const input = el('reqPhotoInput'); if (input) input.value = '';
     reqPhotoError('');
     reqPhotoRender('idle');
 }
@@ -464,44 +463,37 @@ function reqPhotoToBlob(source, w, h) {
         c.toBlob(b => b ? resolve(b) : reject(new Error('Could not read photo')), 'image/jpeg', 0.85));
 }
 
-function wireRequestPhoto() {
-    const camBtn = el('reqPhotoCamBtn'), snapBtn = el('reqPhotoSnapBtn');
-    const upBtn = el('reqPhotoUploadBtn'), input = el('reqPhotoInput'), video = el('reqPhotoVideo');
-    if (!camBtn || !input) return;
+/** Opens the front camera (live only - no file uploads, so the photo is taken right now) */
+async function reqPhotoStartCamera() {
+    const video = el('reqPhotoVideo');
+    reqPhotoError('');
+    if (!navigator.mediaDevices?.getUserMedia) {
+        return reqPhotoError('Camera is not available on this device or browser. Open BarangayDocs in a browser with camera support (HTTPS).');
+    }
+    try {
+        reqPhotoStopStream();
+        reqPhotoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+        video.srcObject = reqPhotoStream;
+        await video.play();
+        reqPhotoRender('live');
+    } catch (err) {
+        console.error('Camera error:', err);
+        reqPhotoStopStream();
+        reqPhotoRender('idle');
+        reqPhotoError('Could not open the camera. Please allow camera access, then tap "Open Camera".');
+    }
+}
 
-    camBtn.addEventListener('click', async () => {
-        reqPhotoError('');
-        if (!navigator.mediaDevices?.getUserMedia) {
-            return reqPhotoError('Camera is not available on this device. Use "Upload Instead".');
-        }
-        try {
-            reqPhotoStopStream();
-            reqPhotoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
-            video.srcObject = reqPhotoStream;
-            await video.play();
-            reqPhotoRender('live');
-        } catch (err) {
-            console.error('Camera error:', err);
-            reqPhotoStopStream();
-            reqPhotoError('Could not open the camera. Allow camera access or use "Upload Instead".');
-        }
-    });
+function wireRequestPhoto() {
+    const camBtn = el('reqPhotoCamBtn'), snapBtn = el('reqPhotoSnapBtn'), video = el('reqPhotoVideo');
+    if (!camBtn || !snapBtn) return;
+
+    camBtn.addEventListener('click', reqPhotoStartCamera);   // also serves as "Retake"
 
     snapBtn.addEventListener('click', async () => {
         if (!video.videoWidth) return reqPhotoError('Camera is still starting. Try again.');
         try { reqPhotoSet(await reqPhotoToBlob(video, video.videoWidth, video.videoHeight)); }
         catch (err) { reqPhotoError('Could not capture the photo. Please try again.'); }
-    });
-
-    upBtn.addEventListener('click', () => input.click());
-    input.addEventListener('change', async () => {
-        const f = input.files && input.files[0];
-        if (!f) return;
-        if (!/^image\//.test(f.type)) return reqPhotoError('Please choose an image file.');
-        try {
-            const bmp = await createImageBitmap(f);
-            reqPhotoSet(await reqPhotoToBlob(bmp, bmp.width, bmp.height));
-        } catch (err) { reqPhotoError('That image could not be read. Try another photo.'); }
     });
 }
 
@@ -513,6 +505,8 @@ function wireRequestSteps() {
         if (!el('purposeSelect')?.value) return alert('Please select a purpose.');
         el('modalOverlay')?.classList.remove('show');
         el('photoOverlay')?.classList.add('show');
+        // Next popup = take picture: start the camera right away (unless a photo is already taken)
+        if (!reqPhotoBlob) reqPhotoStartCamera();
     });
     el('reqBackBtn')?.addEventListener('click', () => {
         reqPhotoStopStream();
@@ -536,8 +530,8 @@ async function submitRequest(user, userData, fullName) {
     if (!purpose) return alert('Please select a purpose.');
 
     if (!reqPhotoBlob) {
-        reqPhotoError('Please take or upload a current photo to continue.');
-        return alert('Please take a current picture before requesting a document.');
+        reqPhotoError('Please take a live photo to continue.');
+        return alert('Please take a live picture of yourself before requesting a document.');
     }
 
     const notes = el('notesInput')?.value.trim() || '';
