@@ -34,7 +34,7 @@ const baseValues      = mOver.baseValues      || ((r, rd) => ({ residentName: r?
 const effectiveValues = mOver.effectiveValues || ((base, o) => ({ ...base, ...(o || {}) }));
 const paintDocument   = mOver.paintDocument   || (() => {});
 const loadTemplateForType = mTpl.loadTemplateForType || (async () => null);
-const createTemplateView  = mTpl.createTemplateView  || (() => ({ active: false, show: async () => {}, hide() {}, print() {} }));
+const createTemplateView  = mTpl.createTemplateView  || null;
 
 // Helper modules are loaded defensively: if one is missing or throws on load, the dashboard
 // (and the View Request popup) still works with the built-in fallbacks below.
@@ -421,7 +421,7 @@ async function openDocumentPreview(requestId, cachedData) {
     }
     if (!tpl) tpl = await loadTemplateForType(db, r.documentType);
 
-    if (tpl && legacyEl) {
+    if (tpl && legacyEl && createTemplateView) {
         if (!tplEl) {
             tplEl = document.createElement('div');
             tplEl.id = 'doc-preview-template';

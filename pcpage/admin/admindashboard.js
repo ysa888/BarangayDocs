@@ -648,35 +648,6 @@ async function openRequestModalInner(docId, data, row) {
     }
 }
 
-// =============================================
-// View Request Detail Modal (existing HTML modal)
-// =============================================
-window.viewDetail = function (ref, docType, user, status, purpose) {
-    document.getElementById('modalTitle').textContent = 'Request Details';
-    document.getElementById('modalBody').innerHTML = `
-        <div class="modal-field"><label>Reference No.</label><p>${ref}</p></div>
-        <div class="modal-field"><label>Document Type</label><p>${docType}</p></div>
-        <div class="modal-field"><label>Resident</label><p>${user}</p></div>
-        <div class="modal-field"><label>Purpose</label><p>${purpose || '—'}</p></div>
-        <div class="modal-field"><label>Status</label>
-            <select id="modal-status-select">
-                <option ${status === 'Pending'    ? 'selected' : ''}>Pending</option>
-                <option ${status === 'Processing' ? 'selected' : ''}>Processing</option>
-                <option ${status === 'Ready'      ? 'selected' : ''}>Ready</option>
-                <option ${status === 'Rejected'   ? 'selected' : ''}>Rejected</option>
-            </select>
-        </div>
-        <div class="modal-field"><label>Admin Notes</label><textarea placeholder="Add notes here..."></textarea></div>
-        <div class="modal-btn-row">
-            <button class="modal-btn-cancel" id="modalCancelBtn">Close</button>
-            <button class="modal-btn-save"   id="modalSaveBtn">Save Changes</button>
-        </div>`;
-
-    document.getElementById('modalOverlay').classList.add('show');
-    document.getElementById('modalCancelBtn').onclick = closeModal;
-    document.getElementById('modalSaveBtn').onclick   = () => { closeModal(); showToast('Changes saved'); };
-};
-
 window.closeModal = function () {
     document.getElementById('modalOverlay')?.classList.remove('show');
 };
