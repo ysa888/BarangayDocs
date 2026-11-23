@@ -12,8 +12,29 @@ import {
     getFirestore, doc, getDoc, collection, addDoc, updateDoc, query, where,
     onSnapshot, getDocs, serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
-import { baseValues, effectiveValues, paintDocument } from "./admin/docoverrides.js";
-import { loadTemplateForType, createTemplateView } from "./admin/doctemplate.js";
+
+// Show something right away so a blank list always means "the script did not run"
+{ const b = document.getElementById('requests-body'); if (b) b.innerHTML = '<div style="padding:24px;text-align:center;color:#6B7A99;font-size:13px;">Loading...</div>'; }
+window.addEventListener('unhandledrejection', e => console.error('adminrequests.js unhandled error:', e.reason));
+
+// These two files live next to the admin pages in most setups, but the resident side imports them
+// from ./admin/. Try every likely location instead of failing the whole script on a wrong path.
+async function importFirst(paths) {
+    for (const p of paths) {
+        try { return await import(p); } catch (err) { console.warn('Could not load ' + p, err); }
+    }
+    console.error('None of these could be loaded: ' + paths.join(', ') + ' - using built-in fallbacks.');
+    return {};
+}
+const [mOver, mTpl] = await Promise.all([
+    importFirst(['./docoverrides.js', './admin/docoverrides.js', '../admin/docoverrides.js']),
+    importFirst(['./doctemplate.js',  './admin/doctemplate.js',  '../admin/doctemplate.js'])
+]);
+const baseValues      = mOver.baseValues      || ((r, rd) => ({ residentName: r?.residentName || '—', age: '—', occupation: '—', address: 'Barangay Banicain, Olongapo City, Zambales', birthday: '', contactNumber: '' }));
+const effectiveValues = mOver.effectiveValues || ((base, o) => ({ ...base, ...(o || {}) }));
+const paintDocument   = mOver.paintDocument   || (() => {});
+const loadTemplateForType = mTpl.loadTemplateForType || (async () => null);
+const createTemplateView  = mTpl.createTemplateView  || (() => ({ active: false, show: async () => {}, hide() {}, print() {} }));
 
 // Helper modules are loaded defensively: if one is missing or throws on load, the dashboard
 // (and the View Request popup) still works with the built-in fallbacks below.
