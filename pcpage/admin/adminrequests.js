@@ -937,6 +937,8 @@ async function openRequestModal(docId, data, row) {
     overlay.id = 'request-detail-modal';
     const faceSrc = [rd.faceUrl, rd.photoUrl, rd.profilePhoto, rd.profileUrl, rd.photo, rd.avatar].find(isImgSrc) || '';
     const idImgs  = findIdImages(rd, r);
+    // Live photo the resident took when submitting this request (proves it's really them)
+    const livePhoto = isImgSrc(r.requestPhotoUrl) ? r.requestPhotoUrl : '';
     const initial = String(r.residentName || '?').trim().charAt(0).toUpperCase();
     const imgBox  = (src, label) =>
         `<img class="rd-zoom" src="${src}" alt="${label}" style="display:block;width:100%;max-height:200px;object-fit:contain;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;cursor:zoom-in;">`;
@@ -955,6 +957,8 @@ async function openRequestModal(docId, data, row) {
           .rd-pic-col { position:sticky; top:0; }
           .rd-pic-col img.rd-id { display:block; width:100%; max-height:70vh; object-fit:contain; background:var(--bg); border:1.5px solid var(--border); border-radius:10px; cursor:zoom-in; }
           .rd-pic-col .rd-id + .rd-id { margin-top:10px; }
+          .rd-pic-col img.rd-live { display:block; width:100%; max-height:260px; object-fit:contain; background:var(--bg); border:2px solid var(--primary); border-radius:10px; cursor:zoom-in; margin-bottom:16px; }
+          .rd-pic-col .rd-live-missing { margin-bottom:16px; padding:12px; border:1.5px dashed var(--border); border-radius:10px; font-size:12px; font-weight:700; color:var(--text-sub); }
           @media (max-width: 760px) {
             .rd-compare { grid-template-columns: 1fr; }
             .rd-pic-col { position:static; order:-1; }   /* picture on top, info underneath */
@@ -997,6 +1001,10 @@ async function openRequestModal(docId, data, row) {
                 </div>
                 <!-- RIGHT: valid ID picture, beside the details for easy comparison -->
                 <div class="rd-pic-col">
+                    <p class="rd-col-title">Live Photo at Time of Request</p>
+                    ${livePhoto
+                        ? `<img class="rd-zoom rd-live" src="${livePhoto}" alt="Live photo of requester">`
+                        : `<div class="rd-live-missing">No live photo on this request (submitted before the photo step was added).</div>`}
                     <p class="rd-col-title">Valid ID (click to zoom, drag to move)</p>
                     ${idImgs.length
                         ? idImgs.map((s, i) => `<img class="rd-zoom rd-id" src="${s}" alt="ID ${i + 1}">`).join('')
