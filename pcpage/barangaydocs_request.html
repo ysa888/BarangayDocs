@@ -135,6 +135,7 @@
     .btn-cancel { flex: 1; height: 48px; background: transparent; border: 2px solid var(--border); border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800; color: var(--text-sub); cursor: pointer; }
     .btn-submit { flex: 2; height: 48px; background: var(--primary); border: none; border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800; color: #fff; cursor: pointer; transition: background 0.2s; }
     .btn-submit:hover { background: var(--primary-light); }
+    .btn-submit[hidden], #reqStep2[hidden] { display: none; }
 
     /* SUCCESS MODAL */
     .success-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 600; align-items: center; justify-content: center; }
@@ -259,7 +260,8 @@
   <div class="modal-overlay" id="modalOverlay" onclick="closeModalOutside(event)">
     <div class="modal">
       <div class="modal-title">New Document Request</div>
-      <div class="modal-sub">Select a document type and fill in the details</div>
+      <div class="modal-sub" id="reqStepSub">Step 1 of 2 · Select a document type and fill in the details</div>
+      <div id="reqStep1">
       <div class="doc-type-grid" id="docTypeGrid">
         <div class="doc-type-grid-loading">Loading available documents…</div>
       </div>
@@ -283,6 +285,8 @@
         <label>Additional Notes (Optional)</label>
         <textarea id="notesInput" placeholder="Any special instructions…"></textarea>
       </div>
+      </div>
+      <div id="reqStep2" hidden>
       <div class="s-field">
         <label>Current Photo (Required)</label>
         <div class="rp-box" id="reqPhotoBox" data-state="idle">
@@ -298,10 +302,12 @@
         <input type="file" id="reqPhotoInput" accept="image/*" capture="user" hidden>
         <div class="rp-err" id="reqPhotoErr"></div>
       </div>
+      </div>
       <div class="modal-btn-row">
-        <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+        <button class="btn-cancel" id="reqBackBtn" type="button">Cancel</button>
+        <button class="btn-submit" id="reqNextBtn" type="button">Next</button>
         <!-- bdapp.js wires this button -->
-        <button class="btn-submit" id="submitRequestBtn">Submit Request</button>
+        <button class="btn-submit" id="submitRequestBtn" hidden>Submit Request</button>
       </div>
     </div>
   </div>

@@ -147,6 +147,7 @@ function initPage(user, userData) {
 
     // Submit request button
     wireRequestPhoto();
+    wireRequestSteps();
     el('submitRequestBtn')?.addEventListener('click', () => {
         submitRequest(user, userData, fullName);
     });
@@ -501,6 +502,32 @@ function wireRequestPhoto() {
             const bmp = await createImageBitmap(f);
             reqPhotoSet(await reqPhotoToBlob(bmp, bmp.width, bmp.height));
         } catch (err) { reqPhotoError('That image could not be read. Try another photo.'); }
+    });
+}
+
+// ---- Two-step request flow: 1) details  2) current photo ----
+function reqSetStep(n) {
+    el('reqStep1').hidden = n !== 1;
+    el('reqStep2').hidden = n !== 2;
+    el('reqNextBtn').hidden = n !== 1;
+    el('submitRequestBtn').hidden = n !== 2;
+    el('reqBackBtn').textContent = n === 1 ? 'Cancel' : 'Back';
+    el('reqStepSub').textContent = n === 1
+        ? 'Step 1 of 2 · Select a document type and fill in the details'
+        : 'Step 2 of 2 · Take a current photo of yourself';
+    if (n === 1) reqPhotoStopStream();
+    el('reqStep' + n)?.closest('.modal')?.scrollTo?.(0, 0);
+}
+
+function wireRequestSteps() {
+    if (!el('reqNextBtn')) return;
+    el('reqNextBtn').addEventListener('click', () => {
+        if (!document.querySelector('.doc-type-btn.selected')) return alert('Please select a document type.');
+        if (!el('purposeSelect')?.value) return alert('Please select a purpose.');
+        reqSetStep(2);
+    });
+    el('reqBackBtn').addEventListener('click', () => {
+        if (!el('reqStep2').hidden) reqSetStep(1); else window.closeModal();
     });
 }
 
@@ -1011,6 +1038,7 @@ window.openModal = function () {
 window.closeModal = function () {
     el('modalOverlay')?.classList.remove('show');
     reqPhotoReset();
+    if (el('reqStep1')) reqSetStep(1);
 };
 window.closeModalOutside = function (e) {
     if (e.target === el('modalOverlay')) window.closeModal();
