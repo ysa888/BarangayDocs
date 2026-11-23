@@ -79,6 +79,32 @@ function formatRelativeTime(val) {
     return formatDate(val);
 }
 
+/** Notification time: real clock time, e.g. "Just now", "12m ago", "Today, 3:45 PM", "Yesterday, 9:10 AM", "Nov 20, 2:05 PM" */
+function toDateSafe(val) {
+    if (!val) return null;
+    const d = val?.toDate ? val.toDate() : (typeof val?.seconds === 'number' ? new Date(val.seconds * 1000) : new Date(val));
+    return isNaN(d) ? null : d;
+}
+function formatNotifTime(val) {
+    const d = toDateSafe(val);
+    if (!d) return 'Just now';                      // server time not filled in yet (brand-new write)
+    const mins = Math.floor((Date.now() - d.getTime()) / 60000);
+    if (mins < 1)  return 'Just now';
+    if (mins < 60 && mins >= 0) return `${mins}m ago`;
+    const clock = d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true });
+    const startOf = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const dayDiff = Math.round((startOf(new Date()) - startOf(d)) / 86400000);
+    if (dayDiff === 0) return `Today, ${clock}`;
+    if (dayDiff === 1) return `Yesterday, ${clock}`;
+    const sameYear = d.getFullYear() === new Date().getFullYear();
+    const date = d.toLocaleDateString('en-PH', sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
+    return `${date}, ${clock}`;
+}
+function formatFullDateTime(val) {
+    const d = toDateSafe(val);
+    return d ? d.toLocaleString('en-PH', { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '';
+}
+
 /** Generate a reference number: BRY-YYYY-XXXXX */
 function generateRef() {
     const year = new Date().getFullYear();
@@ -841,7 +867,8 @@ function renderNotifs() {
         st.textContent = label[it.status] || 'Update';
         const tm = document.createElement('span');
         tm.className = 'notif-item-time';
-        tm.textContent = '· ' + formatRelativeTime(it.time);
+        tm.textContent = '· ' + formatNotifTime(it.time);
+        tm.title = formatFullDateTime(it.time);          // hover / long-press shows the exact date and time
         meta.append(st, tm);
         body.append(title);
         if (it.sub) {
