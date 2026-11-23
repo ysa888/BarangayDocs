@@ -957,7 +957,7 @@ async function openRequestModal(docId, data, row) {
           .rd-pic-col { position:sticky; top:0; }
           .rd-pic-col img.rd-id { display:block; width:100%; max-height:70vh; object-fit:contain; background:var(--bg); border:1.5px solid var(--border); border-radius:10px; cursor:zoom-in; }
           .rd-pic-col .rd-id + .rd-id { margin-top:10px; }
-          .rd-pic-col img.rd-live { display:block; width:100%; max-height:260px; object-fit:contain; background:var(--bg); border:2px solid var(--primary); border-radius:10px; cursor:zoom-in; margin-bottom:16px; }
+          .rd-pic-col img.rd-live { display:block; width:170px; max-width:60%; aspect-ratio:3/4; object-fit:cover; background:var(--bg); border:3px solid var(--primary); border-radius:50%; cursor:zoom-in; margin:0 auto 16px; }
           .rd-pic-col .rd-live-missing { margin-bottom:16px; padding:12px; border:1.5px dashed var(--border); border-radius:10px; font-size:12px; font-weight:700; color:var(--text-sub); }
           @media (max-width: 760px) {
             .rd-compare { grid-template-columns: 1fr; }

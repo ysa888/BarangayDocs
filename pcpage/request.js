@@ -453,12 +453,14 @@ function reqPhotoSet(blob) {
     reqPhotoRender('done');
 }
 
-/** Draw an image/video frame to a canvas (max 900px) and return a JPEG blob */
+/** Crop the centre 3:4 portrait (exactly what the oval frame shows), scale to max 900px, return a JPEG blob */
 function reqPhotoToBlob(source, w, h) {
-    const scale = Math.min(1, 900 / Math.max(w, h));
+    const sw = Math.min(w, h * 3 / 4), sh = sw * 4 / 3;
+    const sx = (w - sw) / 2, sy = (h - sh) / 2;
+    const scale = Math.min(1, 900 / sh);
     const c = document.createElement('canvas');
-    c.width = Math.round(w * scale); c.height = Math.round(h * scale);
-    c.getContext('2d').drawImage(source, 0, 0, c.width, c.height);
+    c.width = Math.round(sw * scale); c.height = Math.round(sh * scale);
+    c.getContext('2d').drawImage(source, sx, sy, sw, sh, 0, 0, c.width, c.height);
     return new Promise((resolve, reject) =>
         c.toBlob(b => b ? resolve(b) : reject(new Error('Could not read photo')), 'image/jpeg', 0.85));
 }
@@ -1058,4 +1060,3 @@ function docIcon(name) {
 function escapeHtml(v) {
     return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
-//

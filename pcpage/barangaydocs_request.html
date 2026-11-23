@@ -158,18 +158,19 @@
     .lbtn-logout { flex: 1; height: 46px; background: var(--red); border: none; border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800; color: #fff; cursor: pointer; }
   
     /* Required current photo (request modal) */
-    .rp-box { position: relative; width: 100%; aspect-ratio: 4 / 3; max-height: 240px; border: 2px dashed var(--border); border-radius: 12px; background: var(--bg); overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--text-light); font-size: 13px; font-weight: 700; }
+    .rp-box { position: relative; width: min(100%, 210px); aspect-ratio: 3 / 4; margin: 0 auto; border: 3px dashed var(--border); border-radius: 50%; background: var(--bg); overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--text-light); font-size: 12px; font-weight: 700; text-align: center; }
+    .rp-box .rp-ph { padding: 0 28px; line-height: 1.4; }
     .rp-box.has-photo { border-style: solid; border-color: var(--green); }
     .rp-box.err { border-color: var(--red); }
     .rp-box video, .rp-box img { width: 100%; height: 100%; object-fit: cover; display: none; }
     .rp-box video { transform: scaleX(-1); }
     .rp-box[data-state="live"] video, .rp-box[data-state="done"] img { display: block; }
     .rp-box[data-state="live"] .rp-ph, .rp-box[data-state="done"] .rp-ph { display: none; }
-    .rp-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .rp-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
     .rp-btn { flex: 1; min-width: 120px; height: 40px; border-radius: 12px; border: 2px solid var(--border); background: #fff; color: var(--primary); font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800; cursor: pointer; }
     .rp-btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
     .rp-btn[hidden] { display: none; }
-    .rp-err { color: var(--red); font-size: 12px; font-weight: 700; margin-top: 6px; min-height: 0; }
+    .rp-err { color: var(--red); font-size: 12px; font-weight: 700; margin-top: 6px; min-height: 0; text-align: center; }
   </style>
 </head>
 <body>
@@ -301,7 +302,7 @@
       <div class="s-field">
         <label>Live Photo (Required)</label>
         <div class="rp-box" id="reqPhotoBox" data-state="idle">
-          <div class="rp-ph">Starting camera… face the camera and take a clear photo</div>
+          <div class="rp-ph">Starting camera… fit your face inside the oval</div>
           <video id="reqPhotoVideo" playsinline muted></video>
           <img id="reqPhotoImg" alt="Your current photo">
         </div>
@@ -685,7 +686,6 @@
     this.classList.remove('show');
   });
   document.getElementById('menuToggle').addEventListener('click', toggleSidebar);
-  //
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 <script type="module" src="bdapp.js"></script>
