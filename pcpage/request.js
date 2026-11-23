@@ -505,29 +505,19 @@ function wireRequestPhoto() {
     });
 }
 
-// ---- Two-step request flow: 1) details  2) current photo ----
-function reqSetStep(n) {
-    el('reqStep1').hidden = n !== 1;
-    el('reqStep2').hidden = n !== 2;
-    el('reqNextBtn').hidden = n !== 1;
-    el('submitRequestBtn').hidden = n !== 2;
-    el('reqBackBtn').textContent = n === 1 ? 'Cancel' : 'Back';
-    el('reqStepSub').textContent = n === 1
-        ? 'Step 1 of 2 · Select a document type and fill in the details'
-        : 'Step 2 of 2 · Take a current photo of yourself';
-    if (n === 1) reqPhotoStopStream();
-    el('reqStep' + n)?.closest('.modal')?.scrollTo?.(0, 0);
-}
-
+// ---- Request flow: details popup  ->  (Next)  ->  photo popup ----
 function wireRequestSteps() {
     if (!el('reqNextBtn')) return;
     el('reqNextBtn').addEventListener('click', () => {
         if (!document.querySelector('.doc-type-btn.selected')) return alert('Please select a document type.');
         if (!el('purposeSelect')?.value) return alert('Please select a purpose.');
-        reqSetStep(2);
+        el('modalOverlay')?.classList.remove('show');
+        el('photoOverlay')?.classList.add('show');
     });
-    el('reqBackBtn').addEventListener('click', () => {
-        if (!el('reqStep2').hidden) reqSetStep(1); else window.closeModal();
+    el('reqBackBtn')?.addEventListener('click', () => {
+        reqPhotoStopStream();
+        el('photoOverlay')?.classList.remove('show');
+        el('modalOverlay')?.classList.add('show');
     });
 }
 
@@ -1037,8 +1027,8 @@ window.openModal = function () {
 };
 window.closeModal = function () {
     el('modalOverlay')?.classList.remove('show');
+    el('photoOverlay')?.classList.remove('show');
     reqPhotoReset();
-    if (el('reqStep1')) reqSetStep(1);
 };
 window.closeModalOutside = function (e) {
     if (e.target === el('modalOverlay')) window.closeModal();
