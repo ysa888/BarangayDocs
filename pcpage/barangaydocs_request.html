@@ -158,8 +158,22 @@
     .lbtn-logout { flex: 1; height: 46px; background: var(--red); border: none; border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800; color: #fff; cursor: pointer; }
   
     /* Required current photo (request modal) */
-    .rp-box { position: relative; width: min(100%, 210px); aspect-ratio: 3 / 4; margin: 0 auto; border: 3px dashed var(--border); border-radius: 50%; background: var(--bg); overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--text-light); font-size: 12px; font-weight: 700; text-align: center; }
-    .rp-box .rp-ph { padding: 0 28px; line-height: 1.4; }
+    .rp-box { position: relative; width: 100%; max-width: 360px; aspect-ratio: 3 / 4; margin: 0 auto; border: 2px dashed var(--border); border-radius: 16px; background: var(--bg); overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--text-light); font-size: 13px; font-weight: 700; text-align: center; }
+    .rp-box .rp-ph { padding: 0 24px; line-height: 1.4; }
+    /* Live camera: everything outside the oval is blurred, the face area stays sharp */
+    .rp-blur, .rp-ring { display: none; position: absolute; pointer-events: none; }
+    .rp-box[data-state="live"] .rp-blur {
+      display: block; inset: 0;
+      background: rgba(255,255,255,0.12);
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+      -webkit-mask-image: radial-gradient(ellipse calc(var(--ow, 60%) / 2) calc(var(--oh, 80%) / 2) at 50% 50%, transparent 99%, #000 100%);
+      mask-image: radial-gradient(ellipse calc(var(--ow, 60%) / 2) calc(var(--oh, 80%) / 2) at 50% 50%, transparent 99%, #000 100%);
+    }
+    .rp-box[data-state="live"] .rp-ring {
+      display: block; left: 50%; top: 50%; width: var(--ow, 60%); height: var(--oh, 80%);
+      transform: translate(-50%, -50%); border: 3px solid #fff; border-radius: 50%;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
+    }
     .rp-box.has-photo { border-style: solid; border-color: var(--green); }
     .rp-box.err { border-color: var(--red); }
     .rp-box video, .rp-box img { width: 100%; height: 100%; object-fit: cover; display: none; }
@@ -305,6 +319,8 @@
           <div class="rp-ph">Starting camera… fit your face inside the oval</div>
           <video id="reqPhotoVideo" playsinline muted></video>
           <img id="reqPhotoImg" alt="Your current photo">
+          <div class="rp-blur"></div>
+          <div class="rp-ring"></div>
         </div>
         <div class="rp-actions">
           <button type="button" class="rp-btn primary" id="reqPhotoCamBtn">Open Camera</button>

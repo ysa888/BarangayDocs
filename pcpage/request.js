@@ -440,6 +440,7 @@ function reqPhotoReset() {
     if (reqPhotoPreviewUrl) { URL.revokeObjectURL(reqPhotoPreviewUrl); reqPhotoPreviewUrl = null; }
     const img = el('reqPhotoImg'); if (img) img.removeAttribute('src');
     reqPhotoError('');
+    const box = el('reqPhotoBox'); if (box) { box.style.aspectRatio = ''; box.style.width = ''; }
     reqPhotoRender('idle');
 }
 
@@ -453,17 +454,34 @@ function reqPhotoSet(blob) {
     reqPhotoRender('done');
 }
 
-/** Crop the centre 3:4 portrait (exactly what the oval frame shows), scale to max 900px, return a JPEG blob */
+/** Draw the full camera frame to a canvas (max 900px) and return a normal JPEG blob - no oval, no cropping */
 function reqPhotoToBlob(source, w, h) {
-    const sw = Math.min(w, h * 3 / 4), sh = sw * 4 / 3;
-    const sx = (w - sw) / 2, sy = (h - sh) / 2;
-    const scale = Math.min(1, 900 / sh);
+    const scale = Math.min(1, 900 / Math.max(w, h));
     const c = document.createElement('canvas');
-    c.width = Math.round(sw * scale); c.height = Math.round(sh * scale);
-    c.getContext('2d').drawImage(source, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+    c.getContext('2d').drawImage(source, 0, 0, c.width, c.height);
     return new Promise((resolve, reject) =>
         c.toBlob(b => b ? resolve(b) : reject(new Error('Could not read photo')), 'image/jpeg', 0.85));
 }
+
+/** Match the preview box to the camera's real shape, then size the oval guide inside it */
+function reqPhotoLayoutOval() {
+    const box = el('reqPhotoBox'), v = el('reqPhotoVideo');
+    if (!box || !v || !v.videoWidth) return;
+    const aspect = v.videoWidth / v.videoHeight;
+    box.style.aspectRatio = v.videoWidth + ' / ' + v.videoHeight;
+    box.style.width = '';
+    requestAnimationFrame(() => {
+        let r = box.getBoundingClientRect();
+        const maxH = window.innerHeight * 0.55;          // keep tall phone cameras on screen
+        if (r.height > maxH) { box.style.width = Math.round(maxH * aspect) + 'px'; r = box.getBoundingClientRect(); }
+        let oh = r.height * 0.8, ow = oh * 0.75;          // face-shaped oval (3:4)
+        if (ow > r.width * 0.85) { ow = r.width * 0.85; oh = ow / 0.75; }
+        box.style.setProperty('--ow', ow + 'px');
+        box.style.setProperty('--oh', oh + 'px');
+    });
+}
+window.addEventListener('resize', () => { if (el('reqPhotoBox')?.dataset.state === 'live') reqPhotoLayoutOval(); });
 
 /** Opens the front camera (live only - no file uploads, so the photo is taken right now) */
 async function reqPhotoStartCamera() {
@@ -478,6 +496,7 @@ async function reqPhotoStartCamera() {
         video.srcObject = reqPhotoStream;
         await video.play();
         reqPhotoRender('live');
+        reqPhotoLayoutOval();
     } catch (err) {
         console.error('Camera error:', err);
         reqPhotoStopStream();
