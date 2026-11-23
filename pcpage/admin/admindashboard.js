@@ -5,10 +5,49 @@
 // =============================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-import { openLightbox } from "./imageviewer.js";
-import { mountRejectReasonPicker } from "./rejectreasons.js";
-import { sendSMS } from "./sms.js";
-import { formatBirthDate, resolveAge, resolveAddress, findIdImages, isImgSrc } from "./residentinfo.js";
+// Helper modules are loaded defensively: if one is missing or throws on load, the dashboard
+// (and the View Request popup) still works with the built-in fallbacks below.
+async function tryImport(path) {
+    try { return await import(path); }
+    catch (err) { console.error('Could not load ' + path + ' - using fallback:', err); return {}; }
+}
+const [mViewer, mReasons, mSms, mResident] = await Promise.all([
+    tryImport('./imageviewer.js'), tryImport('./rejectreasons.js'),
+    tryImport('./sms.js'),         tryImport('./residentinfo.js')
+]);
+
+const isImgSrc = mResident.isImgSrc || (v => typeof v === 'string' && /^(https?:\/\/|data:image\/|\/|\.\/)/i.test(v.trim()));
+const findIdImages = mResident.findIdImages || ((rd = {}, r = {}) => {
+    const out = [];
+    const keys = Object.keys(rd).concat(Object.keys(r));
+    keys.forEach(k => {
+        if (!/id|valid|front|back/i.test(k) || /^(uid|residentid|requestphoto)/i.test(k)) return;
+        [rd[k], r[k]].forEach(v => { if (isImgSrc(v) && !out.includes(v)) out.push(v); });
+    });
+    return out;
+});
+const formatBirthDate = mResident.formatBirthDate || ((rd = {}, r = {}) => {
+    const v = rd.birthDate || rd.birthday || rd.dob || r.birthDate || r.birthday;
+    const d = v?.toDate ? v.toDate() : (v ? new Date(v) : null);
+    return d && !isNaN(d) ? d.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+});
+const resolveAge = mResident.resolveAge || ((rd = {}, r = {}) => {
+    if (rd.age || r.age) return rd.age || r.age;
+    const v = rd.birthDate || rd.birthday || rd.dob || r.birthDate || r.birthday;
+    const d = v?.toDate ? v.toDate() : (v ? new Date(v) : null);
+    return d && !isNaN(d) ? Math.floor((Date.now() - d) / 31557600000) : '';
+});
+const resolveAddress = mResident.resolveAddress || ((rd = {}, r = {}) =>
+    rd.address || r.address || [rd.street, rd.barangay || r.barangay, rd.city || r.city].filter(Boolean).join(', '));
+const openLightbox = mViewer.openLightbox || (src => window.open(src, '_blank'));
+const sendSMS = mSms.sendSMS || (async () => {});
+const mountRejectReasonPicker = mReasons.mountRejectReasonPicker || (ta => ({
+    reset() { if (ta) ta.value = ''; },
+    getResult() {
+        const reason = (ta?.value || '').trim();
+        return reason ? { ok: true, reason, code: 'other' } : { ok: false, error: 'Please enter a reason for rejection.' };
+    }
+}));
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import {
     getFirestore,
@@ -469,8 +508,19 @@ function openRejectPopup(docId, r) {
 // View Request modal — details + valid ID (zoomable) + Process / Reject
 // Built in JS so the HTML needs no change. Same popup as the Requests page.
 // =============================================
+const rdSafe = (fn, fallback, ...args) => { try { const v = fn(...args); return v ?? fallback; } catch (e) { console.error('Request modal helper failed:', e); return fallback; } };
+
 async function openRequestModal(docId, data, row) {
-    let r = data, rd = {};
+  try {
+    await openRequestModalInner(docId, data, row);
+  } catch (err) {
+    console.error('Could not open request:', err);
+    showToast('Could not open this request. Check the console for details.');
+  }
+}
+
+async function openRequestModalInner(docId, data, row) {
+    let r = data || {}, rd = {};
     try {
         const snap = await getDoc(doc(db, 'requests', docId));
         if (snap.exists()) r = snap.data();
@@ -487,12 +537,13 @@ async function openRequestModal(docId, data, row) {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay show';
     overlay.id = 'request-detail-modal';
-    const faceSrc = [rd.faceUrl, rd.photoUrl, rd.profilePhoto, rd.profileUrl, rd.photo, rd.avatar].find(isImgSrc) || '';
-    const idImgs  = findIdImages(rd, r);
+    const faceSrc = rdSafe(() => [rd.faceUrl, rd.photoUrl, rd.profilePhoto, rd.profileUrl, rd.photo, rd.avatar].find(isImgSrc), '') || '';
+    const idImgs  = rdSafe(findIdImages, [], rd, r) || [];
+    const livePic = /^https?:\/\//i.test(r.requestPhotoUrl || '') ? r.requestPhotoUrl : '';
     const initial = String(r.residentName || '?').trim().charAt(0).toUpperCase();
     const imgBox  = (src, label) =>
         `<img class="rd-zoom" src="${src}" alt="${label}" style="display:block;width:100%;max-height:200px;object-fit:contain;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;cursor:zoom-in;">`;
-    const birthTxt = formatBirthDate(rd, r);
+    const birthTxt = rdSafe(formatBirthDate, '', rd, r);
     const sexTxt   = rd.sex || rd.gender;
 
     if (!document.getElementById('rd-compare-style')) {
@@ -542,14 +593,18 @@ async function openRequestModal(docId, data, row) {
                         ${field('Submitted', formatDate(r.createdAt))}
                         ${wide('Purpose', r.purpose)}
                         ${field('Birthday', birthTxt)}
-                        ${field('Age', resolveAge(rd, r))}
+                        ${field('Age', rdSafe(resolveAge, '', rd, r))}
                         ${wide('Contact', rd.contactNumber || rd.phone || rd.mobile || r.contactNumber)}
-                        ${wide('Address', resolveAddress(rd, r))}
+                        ${wide('Address', rdSafe(resolveAddress, '', rd, r))}
                     </div>
                 </div>
                 <!-- RIGHT: valid ID picture, beside the details for easy comparison -->
                 <div class="rd-pic-col">
-                    <p class="rd-col-title">Valid ID (click to zoom, drag to move)</p>
+                    <p class="rd-col-title">Live Photo taken at request (click to zoom)</p>
+                    ${livePic
+                        ? `<img class="rd-zoom rd-id" src="${esc(livePic)}" alt="Live photo">`
+                        : `<div class="modal-field"><p>No live photo on this request</p></div>`}
+                    <p class="rd-col-title" style="margin-top:16px;">Valid ID (click to zoom, drag to move)</p>
                     ${idImgs.length
                         ? idImgs.map((s, i) => `<img class="rd-zoom rd-id" src="${s}" alt="ID ${i + 1}">`).join('')
                         : `<div class="modal-field"><p>No ID image found on this resident</p></div>`}
@@ -559,6 +614,7 @@ async function openRequestModal(docId, data, row) {
         </div>`;
     document.body.appendChild(overlay);
     overlay.querySelectorAll('.rd-zoom').forEach(img => img.addEventListener('click', () => openLightbox(img.src)));
+    overlay.style.zIndex = '1000';
 
     const close = () => overlay.remove();
     overlay.querySelector('[data-rd="close"]').onclick = close;
