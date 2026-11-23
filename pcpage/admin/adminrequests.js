@@ -289,16 +289,19 @@ async function openRequestModalInner(docId, data, row) {
         st.id = 'rd-compare-style';
         st.textContent = `
           #request-detail-modal .modal-box { max-height:92vh; overflow-y:auto; }
-          .rd-compare { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap:20px; align-items:start; }
+          .rd-compare { display:grid; grid-template-columns: minmax(0,1fr) 230px; gap:20px; align-items:start; }
           .rd-col-title { font-size:11px; font-weight:800; color:var(--text-sub); text-transform:uppercase; letter-spacing:.5px; margin:0 0 10px; }
           .rd-info-grid { display:grid; grid-template-columns: 1fr 1fr; gap:0 14px; }
           .rd-info-grid .modal-field.rd-wide { grid-column: 1 / -1; }
           .rd-pic-col { position:sticky; top:0; }
-          .rd-pic-col img.rd-id { display:block; width:100%; max-height:70vh; object-fit:contain; background:var(--bg); border:1.5px solid var(--border); border-radius:10px; cursor:zoom-in; }
-          .rd-pic-col .rd-id + .rd-id { margin-top:10px; }
+          .rd-pic-col img.rd-id { display:block; width:100%; height:150px; object-fit:cover; background:var(--bg); border:1.5px solid var(--border); border-radius:10px; cursor:zoom-in; transition:box-shadow .15s; }
+          .rd-pic-col img.rd-id:hover { box-shadow:0 4px 14px rgba(27,58,107,.25); }
+          .rd-pic-col .rd-id + .rd-id { margin-top:8px; }
           @media (max-width: 760px) {
             .rd-compare { grid-template-columns: 1fr; }
-            .rd-pic-col { position:static; order:-1; }   /* picture on top, info underneath */
+            .rd-pic-col { position:static; order:-1; display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:8px; }
+            .rd-pic-col .rd-col-title { grid-column:1/-1; margin:0; }
+            .rd-pic-col img.rd-id { height:110px; margin:0 !important; }
           }
         `;
         document.head.appendChild(st);
