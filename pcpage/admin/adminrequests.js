@@ -1,29 +1,64 @@
 // =============================================
-// request.js
-// Handles: barangaydocs_request.html
+// adminrequests.js
+// Handles: admin_pending_requests.html and admin_all_requests.html
+// Live list of requests + View Request / Process / Reject /
+// Preview & Approve / Mark as Ready (QR + expiry) / Mark as Released.
+// Also runs as the transparent pop-up over the dashboard (?embed=1&open=<id>).
 // =============================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import {
-    getFirestore,
-    doc,
-    getDoc,
-    collection,
-    addDoc,
-    query,
-    where,
-    orderBy,
-    onSnapshot,
-    getDocs,
-    serverTimestamp
+    getFirestore, doc, getDoc, collection, addDoc, updateDoc, query, where,
+    onSnapshot, getDocs, serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 import { baseValues, effectiveValues, paintDocument } from "./admin/docoverrides.js";
 import { loadTemplateForType, createTemplateView } from "./admin/doctemplate.js";
 
-// =============================================
-// Firebase Config & Init
-// =============================================
+// Helper modules are loaded defensively: if one is missing or throws on load, the dashboard
+// (and the View Request popup) still works with the built-in fallbacks below.
+async function tryImport(path) {
+    try { return await import(path); }
+    catch (err) { console.error('Could not load ' + path + ' - using fallback:', err); return {}; }
+}
+const [mViewer, mReasons, mSms, mResident] = await Promise.all([
+    tryImport('./imageviewer.js'), tryImport('./rejectreasons.js'),
+    tryImport('./sms.js'),         tryImport('./residentinfo.js')
+]);
+
+const isImgSrc = mResident.isImgSrc || (v => typeof v === 'string' && /^(https?:\/\/|data:image\/|\/|\.\/)/i.test(v.trim()));
+const findIdImages = mResident.findIdImages || ((rd = {}, r = {}) => {
+    const out = [];
+    const keys = Object.keys(rd).concat(Object.keys(r));
+    keys.forEach(k => {
+        if (!/id|valid|front|back/i.test(k) || /^(uid|residentid|requestphoto)/i.test(k)) return;
+        [rd[k], r[k]].forEach(v => { if (isImgSrc(v) && !out.includes(v)) out.push(v); });
+    });
+    return out;
+});
+const formatBirthDate = mResident.formatBirthDate || ((rd = {}, r = {}) => {
+    const v = rd.birthDate || rd.birthday || rd.dob || r.birthDate || r.birthday;
+    const d = v?.toDate ? v.toDate() : (v ? new Date(v) : null);
+    return d && !isNaN(d) ? d.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+});
+const resolveAge = mResident.resolveAge || ((rd = {}, r = {}) => {
+    if (rd.age || r.age) return rd.age || r.age;
+    const v = rd.birthDate || rd.birthday || rd.dob || r.birthDate || r.birthday;
+    const d = v?.toDate ? v.toDate() : (v ? new Date(v) : null);
+    return d && !isNaN(d) ? Math.floor((Date.now() - d) / 31557600000) : '';
+});
+const resolveAddress = mResident.resolveAddress || ((rd = {}, r = {}) =>
+    rd.address || r.address || [rd.street, rd.barangay || r.barangay, rd.city || r.city].filter(Boolean).join(', '));
+const openLightbox = mViewer.openLightbox || (src => window.open(src, '_blank'));
+const sendSMS = mSms.sendSMS || (async () => {});
+const mountRejectReasonPicker = mReasons.mountRejectReasonPicker || (ta => ({
+    reset() { if (ta) ta.value = ''; },
+    getResult() {
+        const reason = (ta?.value || '').trim();
+        return reason ? { ok: true, reason, code: 'other' } : { ok: false, error: 'Please enter a reason for rejection.' };
+    }
+}));
+
 const firebaseConfig = {
     apiKey: "AIzaSyDqRAX7DEFl2r6JbDpdsEOkip3jblgRTag",
     authDomain: "barangaydocs-df957.firebaseapp.com",
@@ -33,605 +68,300 @@ const firebaseConfig = {
     appId: "1:1006488581565:web:b1269001298ff935838ed4",
     measurementId: "G-YG0Y575BRD"
 };
-
-const app = initializeApp(firebaseConfig);
+const app  = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+const db   = getFirestore(app);
 
 const el = (id) => document.getElementById(id);
+let templateView = null;                       // used by the certificate preview below
 
-// Live map of documentName → icon filename, populated from Firestore
-const docsIconMap = {};
+const params   = new URLSearchParams(location.search);
+const EMBED    = params.get('embed') === '1';
+const OPEN_ID  = params.get('open');
+const IS_ALL   = !!el('tab-scroll');           // all-requests page has the status tabs
+const PAGE_STATUSES = IS_ALL ? null : ['pending', 'processing', 'approved'];
 
-// Home page cards link here with ?doc=<document id>; used once to preselect + open the modal
-let deepLinkDocId = new URLSearchParams(location.search).get('doc');
-
-// Shows the admin-made template (documentTemplates/{documentId}) through the shared
-// doctemplate.js — the SAME renderer the admin preview/print uses.
-// null → no template for this document type, the built-in certificate is shown.
-let templateView = null;
+let allDocs = [];                              // [{ id, ...data }] live
+let activeTab = 'all';
+let embedHandled = false;
 
 // =============================================
-// Helpers
+// Small helpers
 // =============================================
+function showToast(msg) {
+    const t = el('toast'); if (!t) return;
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2800);
+}
 function formatDate(val) {
     if (!val) return '—';
     const d = val?.toDate ? val.toDate() : new Date(val);
-    return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
+    return d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 }
+const esc = (v) => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const BADGE_LABEL = { pending:'Submitted', processing:'Processing', approved:'Awaiting Signature', ready:'Ready', released:'Released', rejected:'Rejected' };
 
-function generateRef() {
-    const year = new Date().getFullYear();
-    const rand = String(Math.floor(10000 + Math.random() * 90000));
-    return `BRY-${year}-${rand}`; // Format: BRY-2026-XXXXX
-}
-
-function getInitials(name) {
-    if (!name) return '?';
-    const parts = name.trim().split(' ');
-    return (parts[0][0] + (parts[parts.length - 1][0] || '')).toUpperCase();
-}
-
-// =============================================
-// Auth Guard
-// =============================================
-onAuthStateChanged(auth, async (user) => {
-    if (!user) {
-        window.location.href = 'barangaydocs_login.html';
-        return;
-    }
-
-    const userDoc = await getDoc(doc(db, 'residents', user.uid));
-    if (!userDoc.exists()) {
-        await signOut(auth);
-        window.location.href = 'barangaydocs_login.html';
-        return;
-    }
-
-    const userData = userDoc.data();
-
-    if (userData.status === 'pending') {
-        alert('Your account is still pending admin approval.');
-        await signOut(auth);
-        window.location.href = 'barangaydocs_login.html';
-        return;
-    }
-
-    if (userData.status === 'rejected') {
-        alert('Your account was rejected. Please contact the barangay office.');
-        await signOut(auth);
-        window.location.href = 'barangaydocs_login.html';
-        return;
-    }
-
-    // Passed — init the page
-    initPage(user, userData);
-});
-
-// =============================================
-// Init Page
-// =============================================
-function initPage(user, userData) {
-    const fullName = [
-        userData.firstName,
-        userData.middleName ? userData.middleName.charAt(0) + '.' : '',
-        userData.lastName
-    ].filter(Boolean).join(' ');
-
-    // Populate sidebar
-    const avatar = el('sidebarAvatar');
-    const name = el('sidebarName');
-    const role = el('sidebarRole');
-    if (avatar) avatar.textContent = getInitials(fullName);
-    if (name) name.textContent = fullName.toUpperCase();   // display only
-    if (role) role.textContent = 'Resident';
-
-    // Load active document types from Firestore (real-time)
-    listenDocumentTypes();
-
-    // Query without orderBy to avoid composite index requirement
-    const q = query(
-        collection(db, 'requests'),
-        where('uid', '==', user.uid)
-    );
-
-    onSnapshot(q, (snapshot) => {
-        // Sort client-side by createdAt descending
-        const sorted = snapshot.docs.slice().sort((a, b) => {
-            const aTime = a.data().createdAt?.toMillis?.() || 0;
-            const bTime = b.data().createdAt?.toMillis?.() || 0;
-            return bTime - aTime;
-        });
-        renderRequestList(sorted, snapshot.empty);
-    });
-
-    // Submit request button
-    wireRequestPhoto();
-    wireRequestSteps();
-    el('submitRequestBtn')?.addEventListener('click', () => {
-        submitRequest(user, userData, fullName);
-    });
-
-    // New request button
-    document.querySelector('.new-req-btn')?.addEventListener('click', openModal);
-
-    // Logout
-    el('logoutBtn')?.addEventListener('click', (e) => {
-        e.preventDefault();
-        el('logoutModal')?.classList.add('show');
-    });
-
-    el('confirmLogout')?.addEventListener('click', async () => {
-        await signOut(auth);
-        window.location.href = 'barangaydocs_login.html';
-    });
-}
-
-// =============================================
-// Render Request List
-// =============================================
-function renderRequestList(sortedDocs, isEmpty) {
-    const listEl = el('requestList');
-    if (!listEl) return;
-
-    listEl.querySelectorAll('.request-card').forEach(c => c.remove());
-
-    const emptyState = el('emptyState');
-
-    if (isEmpty || sortedDocs.length === 0) {
-        if (emptyState) emptyState.classList.add('show');
-        return;
-    }
-    if (emptyState) emptyState.classList.remove('show');
-
-    sortedDocs.forEach(docSnap => {
-        const card = buildRequestCard(docSnap.id, docSnap.data());
-        listEl.insertBefore(card, emptyState);
-    });
-
-    const activeTab = document.querySelector('.tab.active');
-    if (activeTab) filterByStatus(activeTab.dataset.status || 'all');
-}
-
-// =============================================
-// Build Request Card
-// =============================================
-function buildRequestCard(id, r) {
-    const statusConfig = {
-        pending: { label: 'Submitted', cls: 'pending' },
-        processing: { label: 'Processing', cls: 'processing' },
-        approved: { label: 'Approved', cls: 'processing' },
-        ready: { label: 'Ready for Pickup', cls: 'ready' },
-        released: { label: 'Released', cls: 'ready' },
-        rejected: { label: 'Rejected', cls: 'rejected' }
+const docsIconMap = {};
+function docIcon(name) {
+    if (docsIconMap[name]) return docsIconMap[name];
+    const fallback = {
+        'Barangay Clearance': 'Icons/barangayclearance.png',
+        'Cert. of Residency': 'Icons/certificateofresidency.png',
+        'Cert. of Indigency': 'Icons/certificateofindigency.png',
+        'Business Clearance': 'Icons/barangaybusinessclearance.png',
+        'Job Seeker Cert.': 'Icons/firsttimejobseekercertificate.png',
+        'Good Moral Char.': 'Icons/certificateofgoodmoralcharacter.png',
+        'Solo Parent Cert.': 'Icons/soloparentcertificate.png',
+        'Working Permit': 'Icons/workingpermit.png'
     };
-
-    const cfg = statusConfig[r.status] || statusConfig.pending;
-    const submitted = r.createdAt ? formatDate(r.createdAt) : '—';
-    const pickup = r.readyAt ? formatDate(r.readyAt) : '—';
-
-    const card = document.createElement('div');
-    card.className = 'request-card';
-    card.dataset.status = r.status;
-    card.dataset.id = id;
-
-    card.innerHTML = `
-        <div class="card-top">
-            <div class="req-icon">
-                <img src="${docIcon(r.documentType)}" alt=""
-                     onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
-                <div class="req-ph" style="display:none;"></div>
-            </div>
-            <div class="req-name">
-                <h3>${r.documentType || '—'}</h3>
-                <p>Ref: ${r.referenceNo || '—'} &bull; ${submitted}</p>
-            </div>
-            <span class="badge ${cfg.cls}">${cfg.label}</span>
-        </div>
-        <div class="card-details">
-            <div class="detail-pair">
-                <div>
-                    <div class="d-label">Submitted</div>
-                    <div class="d-val">${submitted}</div>
-                </div>
-                <div>
-                    <div class="d-label">Purpose</div>
-                    <div class="d-val">${r.purpose || '—'}</div>
-                </div>
-                ${r.status === 'ready' || r.status === 'released' ? `
-                <div>
-                    <div class="d-label">Ready For Pickup</div>
-                    <div class="d-val">${pickup}</div>
-                </div>
-                <div>
-                    <div class="d-label">Document Code</div>
-                    <div class="d-val" style="font-family:'Poppins',sans-serif;color:var(--primary);font-weight:800;">${r.docCode || r.referenceNo || '—'}</div>
-                </div>
-                <div>
-                    <div class="d-label">Reference No</div>
-                    <div class="d-val" style="font-family:'Poppins',sans-serif;color:var(--primary);font-weight:800;">${r.referenceNo || '—'}</div>
-                </div>` : ''}
-                ${r.status === 'rejected' && r.rejectReason ? `
-                <div>
-                    <div class="d-label">Reason</div>
-                    <div class="d-val" style="color:var(--red);">${escapeHtml(r.rejectReason)}</div>
-                </div>` : ''}
-            </div>
-            <button class="track-btn" data-id="${id}">Track Progress</button>
-            ${(r.status === 'ready' || r.status === 'released') ? `<button class="view-doc-btn">View Document</button>` : ''}
-        </div>
-        <div class="progress-track" id="track-${id}">
-            <div class="track-row">${buildTrackSteps(r.status)}</div>
-        </div>
-    `;
-
-    // Wire track button
-    card.querySelector('.track-btn').addEventListener('click', (e) => {
-        const track = el(`track-${id}`);
-        const btn = e.currentTarget;
-        track.classList.toggle('show');
-        btn.textContent = track.classList.contains('show') ? 'Hide' : 'Track Progress';
-    });
-
-    // Wire View Document button (only for ready/released)
-    card.querySelector('.view-doc-btn')?.addEventListener('click', () => {
-        openDocumentPreview(id, r);
-    });
-
-    return card;
+    return fallback[name] || 'Icons/barangayclearance.png';
 }
 
 // =============================================
-// Build Track Steps
+// Notify the resident (audit log + in-app + SMS) for every status change
 // =============================================
-function buildTrackSteps(status) {
-    const isRejected = status === 'rejected';
+async function notifyStatus(docId, status, reason) {
+    let r;
+    try {
+        const rs = await getDoc(doc(db, 'requests', docId));
+        if (!rs.exists()) return;
+        r = rs.data();
+    } catch (err) { console.error('Notify: could not load request', err); return; }
 
-    const steps = isRejected
-        ? [
-            { label: 'Submitted', done: true, active: false, rejected: false },
-            { label: 'Processing', done: false, active: false, rejected: true },
-            { label: 'Rejected', done: false, active: true, rejected: true }
-        ]
-        : [
-            { label: 'Submitted', done: ['processing', 'approved', 'ready', 'released'].includes(status), active: status === 'pending' },
-            { label: 'Processing', done: ['approved', 'ready', 'released'].includes(status), active: status === 'processing' },
-            { label: 'Approved', done: ['ready', 'released'].includes(status), active: status === 'approved' },
-            { label: 'Ready for Pickup', done: status === 'released', active: status === 'ready' },
-            { label: 'Released', done: false, active: status === 'released' }
-        ];
+    const ref = `${r.referenceNo} (${r.documentType})`;
+    const T = {
+        processing: ['Request Processing', `BarangayDocs: Your request ${ref} is now being processed.`],
+        approved:   ['Request Approved',   `BarangayDocs: Your request ${ref} was approved and is waiting for the Barangay Captain's signature.`],
+        ready:      ['Ready for Pickup',   `BarangayDocs: Your ${r.documentType} (${r.referenceNo}) is ready for pickup.`],
+        released:   ['Document Released',  `BarangayDocs: Your ${r.documentType} (${r.referenceNo}) has been released. Thank you!`],
+        rejected:   ['Request Rejected',   `BarangayDocs: Request ${r.referenceNo} was rejected.${reason ? ' Reason: ' + reason : ' Check the app for details.'}`]
+    }[status];
+    if (!T) return;
+    const [title, message] = T;
 
-    let html = '';
-    steps.forEach((s, i) => {
-        let dotClass = '';
-        let content = i + 1;
+    try {
+        await addDoc(collection(db, 'auditLogs'), {
+            action: 'request_' + status, targetType: 'request', targetId: docId,
+            referenceNo: r.referenceNo || '', residentName: r.residentName || '',
+            residentUid: r.uid || '', documentType: r.documentType || '',
+            details: status === 'rejected' && reason ? 'Reason: ' + reason : '',
+            adminUid: auth.currentUser?.uid || '', adminEmail: auth.currentUser?.email || '',
+            createdAt: serverTimestamp()
+        });
+    } catch (err) { console.error('Audit log failed (check Firestore rules):', err); }
 
-        if (s.rejected) { dotClass = 'rejected'; content = '✕'; }
-        else if (s.done) { dotClass = 'done'; content = '✓'; }
-        else if (s.active) { dotClass = 'active'; }
-
-        html += `
-            <div class="track-step">
-                <div class="track-dot ${dotClass}">${content}</div>
-                <div class="track-label">${s.label}</div>
-            </div>`;
-
-        if (i < steps.length - 1) {
-            html += `<div class="track-connector ${s.done && !isRejected ? 'done' : ''}"></div>`;
-        }
-    });
-
-    return html;
-}
-
-// =============================================
-// Listen to Active Document Types (real-time)
-// =============================================
-function listenDocumentTypes() {
-    const q = query(
-        collection(db, 'documents'),
-        where('status', '==', 'active')
-    );
-
-    onSnapshot(q, (snapshot) => {
-        const grid = el('docTypeGrid');
-        if (!grid) return;
-
-        // Rebuild the icon map
-        Object.keys(docsIconMap).forEach(k => delete docsIconMap[k]);
-
-        // Oldest first = the order the admin added them (same as the home page)
-        const docs = snapshot.docs
-            .map(d => ({ id: d.id, ...d.data() }))
-            .sort((a, b) => {
-                const at = a.createdAt?.toMillis?.() ?? 0;
-                const bt = b.createdAt?.toMillis?.() ?? 0;
-                return (at - bt) || (a.name || '').localeCompare(b.name || '');
+    try {
+        if (r.uid) {
+            await addDoc(collection(db, 'notifications'), {
+                uid: r.uid, requestId: docId, referenceNo: r.referenceNo || '',
+                type: 'request_status', status, title, message, read: false, createdAt: serverTimestamp()
             });
-
-        if (docs.length === 0) {
-            grid.innerHTML = '<div class="doc-type-grid-empty">No documents available at this time.</div>';
-            return;
         }
+    } catch (err) { console.error('Notify: in-app notification failed', err); }
 
-        // Rebuild icon map
-        docs.forEach(d => { docsIconMap[d.name] = d.icon || 'Icons/barangayclearance.png'; });
-
-        // Preserve the currently selected doc name (if any) across re-renders
-        let prevSelected = grid.querySelector('.doc-type-btn.selected')?.dataset.name || null;
-
-        // Deep link from the home page card: select that document and open the modal (once)
-        let openAfterRender = false;
-        if (deepLinkDocId) {
-            const target = docs.find(d => d.id === deepLinkDocId);
-            if (target) { prevSelected = target.name; openAfterRender = true; }
-            deepLinkDocId = null;
-            history.replaceState(null, '', location.pathname);
-        }
-
-        // Render buttons
-        grid.innerHTML = docs.map((d, i) => {
-            const icon = d.icon || 'Icons/barangayclearance.png';
-            const isFirst = i === 0;
-            // Re-select previously selected doc; fall back to first
-            const isSelected = prevSelected ? d.name === prevSelected : isFirst;
-            return `
-                <div class="doc-type-btn${isSelected ? ' selected' : ''}"
-                     data-name="${escapeHtml(d.name)}"
-                     onclick="selectDoc(this)">
-                    <img class="doc-type-icon"
-                         src="${icon}"
-                         alt="${d.name}"
-                         onerror="this.src='Icons/barangayclearance.png'">
-                    ${escapeHtml(d.name)}
-                </div>`;
-        }).join('');
-
-        if (openAfterRender) window.openModal();
-    });
-}
-
-// =============================================
-// Required current photo (camera / upload -> Cloudinary)
-// =============================================
-const CLOUDINARY_CLOUD_NAME = 'ddizbxtdd';
-const CLOUDINARY_UPLOAD_PRESET = 'barangaydocs_preset';
-
-async function uploadToCloudinary(file, folder = 'barangaydocs/request_photos') {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-    formData.append('folder', folder);
-    const res = await fetch(
-        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
-        { method: 'POST', body: formData }
-    );
-    if (!res.ok) throw new Error('Photo upload failed');
-    const data = await res.json();
-    return { url: data.secure_url, publicId: data.public_id };
-}
-
-let reqPhotoBlob = null;      // the captured / chosen photo (JPEG blob)
-let reqPhotoStream = null;    // live camera stream while open
-let reqPhotoPreviewUrl = null;
-
-function reqPhotoError(msg) {
-    const e = el('reqPhotoErr'); if (e) e.textContent = msg || '';
-    el('reqPhotoBox')?.classList.toggle('err', !!msg);
-}
-
-function reqPhotoStopStream() {
-    if (reqPhotoStream) { reqPhotoStream.getTracks().forEach(t => t.stop()); reqPhotoStream = null; }
-    const v = el('reqPhotoVideo'); if (v) v.srcObject = null;
-}
-
-function reqPhotoRender(state) {
-    const box = el('reqPhotoBox'); if (!box) return;
-    box.dataset.state = state;
-    box.classList.toggle('has-photo', state === 'done');
-    const cam = el('reqPhotoCamBtn'), snap = el('reqPhotoSnapBtn');
-    if (cam)  { cam.hidden = state === 'live'; cam.textContent = state === 'done' ? 'Retake' : 'Open Camera'; }
-    if (snap) snap.hidden = state !== 'live';
-}
-
-function reqPhotoReset() {
-    reqPhotoStopStream();
-    reqPhotoBlob = null;
-    if (reqPhotoPreviewUrl) { URL.revokeObjectURL(reqPhotoPreviewUrl); reqPhotoPreviewUrl = null; }
-    const img = el('reqPhotoImg'); if (img) img.removeAttribute('src');
-    reqPhotoError('');
-    const box = el('reqPhotoBox'); if (box) { box.style.width = ''; }
-    const nin = el('reqPhotoInput'); if (nin) nin.value = '';
-    reqPhotoOfferNative(false);
-    reqPhotoRender('idle');
-}
-
-function reqPhotoSet(blob) {
-    reqPhotoStopStream();
-    reqPhotoBlob = blob;
-    if (reqPhotoPreviewUrl) URL.revokeObjectURL(reqPhotoPreviewUrl);
-    reqPhotoPreviewUrl = URL.createObjectURL(blob);
-    el('reqPhotoImg').src = reqPhotoPreviewUrl;
-    reqPhotoError('');
-    reqPhotoRender('done');
-}
-
-/** Centre-crop to a tall portrait 3:4 picture (same area the camera box shows), max 1080px tall, as a normal JPEG */
-function reqPhotoToBlob(source, w, h) {
-    const sw = Math.min(w, h * 3 / 4), sh = sw * 4 / 3;
-    const sx = (w - sw) / 2, sy = (h - sh) / 2;
-    const scale = Math.min(1, 1080 / sh);
-    const c = document.createElement('canvas');
-    c.width = Math.round(sw * scale); c.height = Math.round(sh * scale);
-    c.getContext('2d').drawImage(source, sx, sy, sw, sh, 0, 0, c.width, c.height);
-    return new Promise((resolve, reject) =>
-        c.toBlob(b => b ? resolve(b) : reject(new Error('Could not read photo')), 'image/jpeg', 0.88));
-}
-
-/** The box is always a tall 3:4 portrait; size the oval guide inside it and keep it on screen */
-function reqPhotoLayoutOval() {
-    const box = el('reqPhotoBox'); if (!box) return;
-    box.style.width = '';
-    requestAnimationFrame(() => {
-        let r = box.getBoundingClientRect();
-        const maxH = window.innerHeight * 0.58;
-        if (r.height > maxH) { box.style.width = Math.round(maxH * 0.75) + 'px'; r = box.getBoundingClientRect(); }
-        let oh = r.height * 0.8, ow = oh * 0.75;
-        if (ow > r.width * 0.85) { ow = r.width * 0.85; oh = ow / 0.75; }
-        box.style.setProperty('--ow', ow + 'px');
-        box.style.setProperty('--oh', oh + 'px');
-    });
-}
-window.addEventListener('resize', () => { if (el('reqPhotoBox')?.dataset.state === 'live') reqPhotoLayoutOval(); });
-
-const reqIsPhone = () => window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
-
-/** Shows the "Use Phone Camera App" fallback (phones only, and only after the live camera failed) */
-function reqPhotoOfferNative(show) {
-    const b = el('reqPhotoNativeBtn'); if (b) b.hidden = !(show && reqIsPhone());
-}
-
-/** Opens the front camera (live only - no gallery uploads, so the photo is taken right now) */
-async function reqPhotoStartCamera() {
-    const video = el('reqPhotoVideo');
-    reqPhotoError('');
-    reqPhotoOfferNative(false);
-    if (!window.isSecureContext) {
-        reqPhotoOfferNative(true);
-        return reqPhotoError('The camera only works on a secure (https) connection. Open the https:// link of this website.');
-    }
-    if (!navigator.mediaDevices?.getUserMedia) {
-        reqPhotoOfferNative(true);
-        return reqPhotoError('This browser cannot open the camera. Try Chrome or Safari.');
-    }
     try {
-        reqPhotoStopStream();
-        reqPhotoStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user', width: { ideal: 1080 }, height: { ideal: 1440 } },
-            audio: false
-        });
-        video.srcObject = reqPhotoStream;
-        await video.play();
-        reqPhotoRender('live');
-        reqPhotoLayoutOval();
-    } catch (err) {
-        console.error('Camera error:', err);
-        reqPhotoStopStream();
-        reqPhotoRender('idle');
-        reqPhotoOfferNative(true);
-        reqPhotoError('Could not open the camera. Allow camera access in your browser settings, then tap "Open Camera".');
-    }
+        let phone = r.contactNumber || null;
+        if (r.uid) {
+            const res = await getDoc(doc(db, 'residents', r.uid));
+            if (res.exists()) { const x = res.data(); phone = x.contactNumber || x.phone || x.mobile || phone; }
+        }
+        await sendSMS(phone, message);
+    } catch (err) { console.error('Notify: SMS failed', err); }
 }
 
-function wireRequestPhoto() {
-    const camBtn = el('reqPhotoCamBtn'), snapBtn = el('reqPhotoSnapBtn'), video = el('reqPhotoVideo');
-    if (!camBtn || !snapBtn) return;
+// =============================================
+// Reject popup + View Request modal (details, live photo, valid ID)
+// =============================================
+function openRejectPopup(docId, r) {
+    document.getElementById('reject-popup')?.remove();
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay show';
+    overlay.id = 'reject-popup';
+    overlay.innerHTML = `
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Reject Request</h3>
+                <button class="modal-close" type="button" data-rj="close">✕</button>
+            </div>
+            <div style="padding:0 0 16px;">
+                <label style="font-size:11px;font-weight:800;color:var(--text-sub);text-transform:uppercase;letter-spacing:0.4px;display:block;margin-bottom:8px;">Reason for Rejection</label>
+                <textarea id="dash-reject-reason" placeholder="Please specify the reason for rejection…" maxlength="200" style="width:100%;height:90px;border:2px solid var(--border);border-radius:10px;padding:10px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--text-main);background:var(--bg);outline:none;resize:none;"></textarea>
+            </div>
+            <div class="modal-btn-row" style="margin-top:0;">
+                <button type="button" class="modal-btn-cancel" data-rj="close">Cancel</button>
+                <button type="button" class="modal-btn-save" data-rj="confirm" style="background:var(--red);">Confirm Rejection</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
 
-    camBtn.addEventListener('click', reqPhotoStartCamera);   // also serves as "Retake"
+    const picker = mountRejectReasonPicker(overlay.querySelector('#dash-reject-reason'));
+    picker.reset();
+    const close = () => { picker.reset(); overlay.remove(); };
+    overlay.querySelectorAll('[data-rj="close"]').forEach(b => b.onclick = close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 
-    // Phone-only fallback: opens the phone's own camera app (front camera)
-    const nativeBtn = el('reqPhotoNativeBtn'), nativeInput = el('reqPhotoInput');
-    nativeBtn?.addEventListener('click', () => nativeInput?.click());
-    nativeInput?.addEventListener('change', async () => {
-        const f = nativeInput.files && nativeInput.files[0];
-        if (!f) return;
-        if (!/^image\//.test(f.type)) return reqPhotoError('Please take a photo with the camera.');
+    const confirmBtn = overlay.querySelector('[data-rj="confirm"]');
+    confirmBtn.onclick = async () => {
+        const { ok, reason, code, error } = picker.getResult();
+        if (!ok) return alert(error);
+        confirmBtn.disabled = true;
         try {
-            const bmp = await createImageBitmap(f, { imageOrientation: 'from-image' });
-            reqPhotoSet(await reqPhotoToBlob(bmp, bmp.width, bmp.height));
-            reqPhotoOfferNative(false);
-        } catch (err) { reqPhotoError('That photo could not be read. Please try again.'); }
-    });
-
-    snapBtn.addEventListener('click', async () => {
-        if (!video.videoWidth) return reqPhotoError('Camera is still starting. Try again.');
-        try { reqPhotoSet(await reqPhotoToBlob(video, video.videoWidth, video.videoHeight)); }
-        catch (err) { reqPhotoError('Could not capture the photo. Please try again.'); }
-    });
-}
-
-// ---- Request flow: details popup  ->  (Next)  ->  photo popup ----
-function wireRequestSteps() {
-    if (!el('reqNextBtn')) return;
-    el('reqNextBtn').addEventListener('click', () => {
-        if (!document.querySelector('.doc-type-btn.selected')) return alert('Please select a document type.');
-        if (!el('purposeSelect')?.value) return alert('Please select a purpose.');
-        el('modalOverlay')?.classList.remove('show');
-        el('photoOverlay')?.classList.add('show');
-        // Next popup = take picture: start the camera right away (unless a photo is already taken)
-        if (!reqPhotoBlob) reqPhotoStartCamera();
-    });
-    el('reqBackBtn')?.addEventListener('click', () => {
-        reqPhotoStopStream();
-        el('photoOverlay')?.classList.remove('show');
-        el('modalOverlay')?.classList.add('show');
-    });
+            await updateDoc(doc(db, 'requests', docId), {
+                status: 'rejected', rejectReason: reason, rejectReasonCode: code,
+                updatedAt: serverTimestamp()
+            });
+            notifyStatus(docId, 'rejected', reason);
+            close();
+            showToast('Request rejected.');
+        } catch (err) {
+            console.error(err);
+            confirmBtn.disabled = false;
+            alert('Could not reject the request. Try again.');
+        }
+    };
 }
 
 // =============================================
-// Submit Request
+// View Request modal — details + valid ID (zoomable) + Process / Reject
+// Built in JS so the HTML needs no change. Same popup as the Requests page.
 // =============================================
-let isSubmittingRequest = false;
+const rdSafe = (fn, fallback, ...args) => { try { const v = fn(...args); return v ?? fallback; } catch (e) { console.error('Request modal helper failed:', e); return fallback; } };
 
-async function submitRequest(user, userData, fullName) {
-    if (isSubmittingRequest) return;            // ignore double-clicks while saving
+async function openRequestModal(docId, data, row) {
+  try {
+    await openRequestModalInner(docId, data, row);
+  } catch (err) {
+    console.error('Could not open request:', err);
+    showToast('Could not open this request. Check the console for details.');
+  }
+}
 
-    const selected = document.querySelector('.doc-type-btn.selected');
-    if (!selected) return alert('Please select a document type.');
-
-    const purpose = el('purposeSelect')?.value;
-    if (!purpose) return alert('Please select a purpose.');
-
-    if (!reqPhotoBlob) {
-        reqPhotoError('Please take a live photo to continue.');
-        return alert('Please take a live picture of yourself before requesting a document.');
-    }
-
-    const notes = el('notesInput')?.value.trim() || '';
-    const docName = selected.dataset.name;
-    const ref = generateRef();
-
-    isSubmittingRequest = true;
-    const submitBtn = el('submitRequestBtn');
-    const submitLabel = submitBtn?.textContent;
-    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting…'; }
-
+async function openRequestModalInner(docId, data, row) {
+    let r = data || {}, rd = {};
     try {
-        if (submitBtn) submitBtn.textContent = 'Uploading photo…';
-        const photo = await uploadToCloudinary(reqPhotoBlob);
-        if (submitBtn) submitBtn.textContent = 'Submitting…';
+        const snap = await getDoc(doc(db, 'requests', docId));
+        if (snap.exists()) r = snap.data();
+        if (r.uid) {
+            const rs = await getDoc(doc(db, 'residents', r.uid));
+            if (rs.exists()) rd = rs.data();
+        }
+    } catch (err) { console.error(err); }
 
-        await addDoc(collection(db, 'requests'), {
-            uid: user.uid,
-            residentName: fullName,
-            requestPhotoUrl: photo.url,
-            requestPhotoPublicId: photo.publicId,
-            documentType: docName,
-            purpose,
-            notes,
-            referenceNo: ref,
-            status: 'pending',
-            barangay: userData.barangay || 'Barangay Banicain',
-            city: userData.city || 'Olongapo City',
-            createdAt: serverTimestamp(),
-            readyAt: null,
-            rejectReason: null,
-            docCode: null,
-            qrContent: null
+    document.getElementById('request-detail-modal')?.remove();
+    const esc = v => String(v ?? '—').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const field = (label, val) => `<div class="modal-field"><label>${label}</label><p>${esc(val || '—')}</p></div>`;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay show';
+    overlay.id = 'request-detail-modal';
+    const faceSrc = rdSafe(() => [rd.faceUrl, rd.photoUrl, rd.profilePhoto, rd.profileUrl, rd.photo, rd.avatar].find(isImgSrc), '') || '';
+    const idImgs  = rdSafe(findIdImages, [], rd, r) || [];
+    const livePic = /^https?:\/\//i.test(r.requestPhotoUrl || '') ? r.requestPhotoUrl : '';
+    const initial = String(r.residentName || '?').trim().charAt(0).toUpperCase();
+    const imgBox  = (src, label) =>
+        `<img class="rd-zoom" src="${src}" alt="${label}" style="display:block;width:100%;max-height:200px;object-fit:contain;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;cursor:zoom-in;">`;
+    const birthTxt = rdSafe(formatBirthDate, '', rd, r);
+    const sexTxt   = rd.sex || rd.gender;
+
+    if (!document.getElementById('rd-compare-style')) {
+        const st = document.createElement('style');
+        st.id = 'rd-compare-style';
+        st.textContent = `
+          #request-detail-modal .modal-box { max-height:92vh; overflow-y:auto; }
+          .rd-compare { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap:20px; align-items:start; }
+          .rd-col-title { font-size:11px; font-weight:800; color:var(--text-sub); text-transform:uppercase; letter-spacing:.5px; margin:0 0 10px; }
+          .rd-info-grid { display:grid; grid-template-columns: 1fr 1fr; gap:0 14px; }
+          .rd-info-grid .modal-field.rd-wide { grid-column: 1 / -1; }
+          .rd-pic-col { position:sticky; top:0; }
+          .rd-pic-col img.rd-id { display:block; width:100%; max-height:70vh; object-fit:contain; background:var(--bg); border:1.5px solid var(--border); border-radius:10px; cursor:zoom-in; }
+          .rd-pic-col .rd-id + .rd-id { margin-top:10px; }
+          @media (max-width: 760px) {
+            .rd-compare { grid-template-columns: 1fr; }
+            .rd-pic-col { position:static; order:-1; }   /* picture on top, info underneath */
+          }
+        `;
+        document.head.appendChild(st);
+    }
+
+    const wide = (label, val) => `<div class="modal-field rd-wide"><label>${label}</label><p>${esc(val || '—')}</p></div>`;
+
+    overlay.innerHTML = `
+        <div class="modal-box" style="max-width:980px;width:96%;">
+            <div class="modal-header">
+                <h3>Request Details</h3>
+                <button class="modal-close" type="button" data-rd="close">✕</button>
+            </div>
+            <div class="rd-compare">
+                <!-- LEFT: resident information -->
+                <div class="rd-info-col">
+                    <p class="rd-col-title">Resident Information</p>
+                    <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+                        ${faceSrc
+                            ? `<img class="rd-zoom" src="${faceSrc}" alt="Profile" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid var(--border);flex-shrink:0;cursor:zoom-in;">`
+                            : `<div style="width:64px;height:64px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;flex-shrink:0;">${esc(initial)}</div>`}
+                        <div style="min-width:0;">
+                            <div style="font-size:16px;font-weight:800;color:var(--text-main);overflow-wrap:anywhere;">${esc(r.residentName)}</div>
+                            <div style="font-size:12px;color:var(--text-sub);">${esc(rd.civilStatus || '')}${rd.civilStatus && sexTxt ? ' · ' : ''}${esc(sexTxt || '')}</div>
+                        </div>
+                    </div>
+                    <div class="rd-info-grid">
+                        ${wide('Document', r.documentType)}
+                        ${field('Reference No.', r.referenceNo)}
+                        ${field('Submitted', formatDate(r.createdAt))}
+                        ${wide('Purpose', r.purpose)}
+                        ${field('Birthday', birthTxt)}
+                        ${field('Age', rdSafe(resolveAge, '', rd, r))}
+                        ${wide('Contact', rd.contactNumber || rd.phone || rd.mobile || r.contactNumber)}
+                        ${wide('Address', rdSafe(resolveAddress, '', rd, r))}
+                    </div>
+                </div>
+                <!-- RIGHT: valid ID picture, beside the details for easy comparison -->
+                <div class="rd-pic-col">
+                    <p class="rd-col-title">Live Photo taken at request (click to zoom)</p>
+                    ${livePic
+                        ? `<img class="rd-zoom rd-id" src="${esc(livePic)}" alt="Live photo">`
+                        : `<div class="modal-field"><p>No live photo on this request</p></div>`}
+                    <p class="rd-col-title" style="margin-top:16px;">Valid ID (click to zoom, drag to move)</p>
+                    ${idImgs.length
+                        ? idImgs.map((s, i) => `<img class="rd-zoom rd-id" src="${s}" alt="ID ${i + 1}">`).join('')
+                        : `<div class="modal-field"><p>No ID image found on this resident</p></div>`}
+                </div>
+            </div>
+            <div class="modal-btn-row" id="rd-buttons" style="margin-top:16px;"></div>
+        </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelectorAll('.rd-zoom').forEach(img => img.addEventListener('click', () => openLightbox(img.src)));
+    overlay.style.zIndex = '1000';
+
+    const close = () => overlay.remove();
+    overlay.querySelector('[data-rd="close"]').onclick = close;
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+    const btns = overlay.querySelector('#rd-buttons');
+    const mk = (text, cls, fn) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = cls; b.textContent = text; b.onclick = fn;
+        btns.appendChild(b);
+    };
+    mk('Close', 'modal-btn-cancel', close);
+    if (r.status === 'pending' || r.status === 'processing') {
+        mk('Reject', 'modal-btn-cancel', () => { close(); openRejectPopup(docId, r); });
+    }
+    if (r.status === 'pending') {
+        mk('Process', 'modal-btn-save', async () => {
+            try {
+                await updateDoc(doc(db, 'requests', docId), { status: 'processing', updatedAt: serverTimestamp() });
+                notifyStatus(docId, 'processing');
+                close();
+                showToast('✓ Request marked as Processing');
+            } catch (err) {
+                console.error(err);
+                showToast('Failed to update. Check Firestore rules.');
+            }
         });
-
-        closeModal();
-        if (el('successRef')) el('successRef').textContent = `Ref: ${ref}`;
-        el('successOverlay')?.classList.add('show');
-
-    } catch (err) {
-        console.error('Submit error:', err);
-        alert('Failed to submit request: ' + err.message);
-    } finally {
-        isSubmittingRequest = false;
-        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = submitLabel; }
     }
 }
+
 
 // =============================================
 // View Document Preview Modal
@@ -703,7 +433,7 @@ async function openDocumentPreview(requestId, cachedData) {
     const year   = issueDate.getFullYear();
 
     // Age — compute from dateOfBirth if present, else read direct age field
-    const age = resolveAge(residentData);
+    const age = resolveAgeLocal(residentData);
 
     // Occupation — fall back chain
     const occupation = residentData.occupation
@@ -1020,7 +750,7 @@ function ordinal(n) {
     return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-function resolveAge(rd) {
+function resolveAgeLocal(rd) {
     // Registration stores field as 'birthday' (plain string "YYYY-MM-DD")
     const dob = rd.birthday;
     if (!dob) return '—';
@@ -1045,69 +775,308 @@ function formatExpiryDate(val) {
     return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
+
+
 // =============================================
-// Tab Filter
+// Certificate preview (+ Approve button while the request is "processing")
 // =============================================
-function filterByStatus(status) {
-    const cards = document.querySelectorAll('.request-card');
-    let visible = 0;
-    cards.forEach(card => {
-        const show = status === 'all' || card.dataset.status === status;
-        card.style.display = show ? '' : 'none';
-        if (show) visible++;
-    });
-    el('emptyState')?.classList.toggle('show', visible === 0);
+async function openPreviewFor(id, r, { approve = false } = {}) {
+    await openDocumentPreview(id, r);
+    const overlay = el('doc-preview-modal');
+    if (!overlay) return;
+    const bar = overlay.querySelector('.doc-preview-toolbar > div');
+    el('dp-approve-admin')?.remove();
+
+    // docedit.js may already provide its own approve control; only add ours if it doesn't
+    if (approve && bar && !document.querySelector('#dp-approve, [data-dp-approve]')) {
+        const b = document.createElement('button');
+        b.id = 'dp-approve-admin';
+        b.type = 'button';
+        b.className = 'dp-btn dp-btn-primary';
+        b.textContent = '✓ Approve';
+        b.onclick = async () => {
+            if (!confirm('Approve this request? It will move to "Awaiting Signature".')) return;
+            b.disabled = true;
+            try {
+                await updateDoc(doc(db, 'requests', id), { status: 'approved', approvedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+                notifyStatus(id, 'approved');
+                overlay.classList.remove('show');
+                showToast('✓ Request approved');
+            } catch (err) {
+                console.error(err); b.disabled = false;
+                showToast('Failed to approve. Check Firestore rules.');
+            }
+        };
+        bar.insertBefore(b, bar.firstChild);
+    }
+    const closeBtn = el('dp-close');
+    if (closeBtn) closeBtn.onclick = () => overlay.classList.remove('show');
 }
 
-// Expose for inline onclick in HTML tabs
-window.filterTab = function (status, tabEl) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    tabEl.classList.add('active');
-    filterByStatus(status);
-};
+// =============================================
+// Ready modal: generate QR + expiry date (mode "make"), or just show it (mode "view")
+// =============================================
+function genDocCode() {
+    const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let s = ''; for (let i = 0; i < 8; i++) s += abc[Math.floor(Math.random() * abc.length)];
+    return 'DOC-' + s;
+}
+function fillDays() {
+    const m = +el('expiry-month').value, y = +el('expiry-year').value || new Date().getFullYear();
+    const sel = el('expiry-day'), keep = sel.value;
+    const n = m ? new Date(y, m, 0).getDate() : 31;
+    sel.innerHTML = '<option value="">Day</option>' + Array.from({ length: n }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('');
+    if (keep && +keep <= n) sel.value = keep;
+}
+function drawQR(value) {
+    try { new QRious({ element: el('qr-canvas'), value, size: 200, foreground: '#1B3A6B', background: '#ffffff', level: 'H' }); }
+    catch (e) { console.error('QR failed', e); }
+}
+function openReadyModal(id, r, mode) {
+    const modal = el('qr-modal'); if (!modal) return;
+    const viewOnly = mode === 'view';
+    const docCode   = r.docCode || genDocCode();
+    const qrContent = r.qrContent || `BARANGAYDOCS|${docCode}|${r.referenceNo || ''}`;
 
-// =============================================
-// Modal Controls (exposed for HTML onclick)
-// =============================================
-window.openModal = function () {
-    el('modalOverlay')?.classList.add('show');
-};
-window.closeModal = function () {
-    el('modalOverlay')?.classList.remove('show');
-    el('photoOverlay')?.classList.remove('show');
-    reqPhotoReset();
-};
-window.closeModalOutside = function (e) {
-    if (e.target === el('modalOverlay')) window.closeModal();
-};
-window.selectDoc = function (btn) {
-    document.querySelectorAll('.doc-type-btn').forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
-};
-window.closeDone = function () {
-    el('successOverlay')?.classList.remove('show');
-};
+    el('modal-doc-code').textContent = docCode;
+    el('modal-ref-no').textContent   = r.referenceNo || '—';
+    el('modal-resident').textContent = r.residentName || '—';
+    el('modal-doc-type').textContent = r.documentType || '—';
+    drawQR(qrContent);
 
-// =============================================
-// Doc Icon Map
-// Falls back to hardcoded map if Firestore icon isn't loaded yet
-// =============================================
-function docIcon(name) {
-    if (docsIconMap[name]) return docsIconMap[name];
-    const fallback = {
-        'Barangay Clearance': 'Icons/barangayclearance.png',
-        'Cert. of Residency': 'Icons/certificateofresidency.png',
-        'Cert. of Indigency': 'Icons/certificateofindigency.png',
-        'Business Clearance': 'Icons/barangaybusinessclearance.png',
-        'Job Seeker Cert.': 'Icons/firsttimejobseekercertificate.png',
-        'Good Moral Char.': 'Icons/certificateofgoodmoralcharacter.png',
-        'Solo Parent Cert.': 'Icons/soloparentcertificate.png',
-        'Working Permit': 'Icons/workingpermit.png'
+    el('expiry-picker').style.display    = viewOnly ? 'none' : '';
+    el('modal-expiry-row').style.display = viewOnly ? '' : 'none';
+    el('confirm-ready').style.display    = viewOnly ? 'none' : '';
+    el('cancel-ready').textContent       = viewOnly ? 'Close' : 'Cancel';
+    el('expiry-error').style.display = 'none';
+    if (viewOnly) {
+        const d = r.expiresAt?.toDate ? r.expiresAt.toDate() : (r.expiresAt ? new Date(r.expiresAt) : null);
+        el('modal-expiry-display').textContent = d ? d.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }) : '—';
+    } else {
+        el('expiry-month').value = '';
+        el('expiry-year').value  = new Date().getFullYear();
+        fillDays(); el('expiry-day').value = '';
+    }
+
+    const close = () => modal.classList.remove('show');
+    el('cancel-ready').onclick = close;
+    el('expiry-month').onchange = fillDays;
+    el('expiry-year').oninput   = fillDays;
+    el('confirm-ready').onclick = async () => {
+        const m = +el('expiry-month').value, d = +el('expiry-day').value, y = +el('expiry-year').value;
+        const err = el('expiry-error');
+        const fail = (t) => { err.textContent = t; err.style.display = 'block'; };
+        if (!m || !d || !y) return fail('Please choose the full expiration date.');
+        const exp = new Date(y, m - 1, d, 23, 59, 59);
+        if (isNaN(exp) || exp.getMonth() !== m - 1) return fail('That date does not exist.');
+        if (exp <= new Date()) return fail('Expiration must be a future date.');
+        err.style.display = 'none';
+        const btn = el('confirm-ready'); btn.disabled = true;
+        try {
+            await updateDoc(doc(db, 'requests', id), {
+                status: 'ready', docCode, qrContent,
+                expiresAt: Timestamp.fromDate(exp),
+                readyAt: serverTimestamp(), updatedAt: serverTimestamp()
+            });
+            notifyStatus(id, 'ready');
+            close();
+            showToast('✓ Marked as Ready for pickup');
+        } catch (e) {
+            console.error(e); showToast('Failed to update. Check Firestore rules.');
+        } finally { btn.disabled = false; }
     };
-    return fallback[name] || 'Icons/barangayclearance.png';
+    modal.classList.add('show');
 }
 
-// Reasons can contain admin-typed text ("Other"), so escape before innerHTML
-function escapeHtml(v) {
-    return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+async function releaseRequest(id, r) {
+    if (!confirm(`Mark ${r.referenceNo || 'this request'} as Released to the resident?`)) return false;
+    try {
+        await updateDoc(doc(db, 'requests', id), { status: 'released', releasedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        notifyStatus(id, 'released');
+        showToast('✓ Marked as Released');
+        return true;
+    } catch (e) { console.error(e); showToast('Failed to update. Check Firestore rules.'); return false; }
 }
+
+// =============================================
+// List rendering
+// =============================================
+function actionButtons(id, s) {
+    const b = (cls, act, label) => `<button type="button" class="${cls}" data-act="${act}" data-id="${id}">${label}</button>`;
+    switch (s) {
+        case 'pending':    return b('btn-process', 'view', 'View Request');
+        case 'processing': return b('btn-approve', 'approve', 'Preview &amp; Approve') + b('btn-reject', 'reject', 'Reject');
+        case 'approved':   return b('btn-approve', 'ready', 'Mark as Ready') + b('btn-view', 'doc', 'View');
+        case 'ready':      return b('btn-approve', 'release', 'Mark as Released') + b('btn-view', 'qr', 'View QR') + b('btn-view-doc', 'doc', 'View Document');
+        case 'released':   return b('btn-view-doc', 'doc', 'View Document');
+        case 'rejected':   return b('btn-view', 'view', 'View Request');
+        default:           return '';
+    }
+}
+function validityCell(r) {
+    if (!['ready', 'released'].includes(r.status) || !r.expiresAt) return '<span style="font-size:12px;color:var(--text-light);">—</span>';
+    const d = r.expiresAt?.toDate ? r.expiresAt.toDate() : new Date(r.expiresAt);
+    const expired = d < new Date();
+    return `<span class="badge validity ${expired ? 'expired' : 'active'}">${expired ? 'Expired' : 'Active'}</span>`;
+}
+function buildRow(r) {
+    const row = document.createElement('div');
+    row.className = 'table-row';
+    row.dataset.id = r.id; row.dataset.status = r.status;
+    row.innerHTML = `
+        <div class="col-icon"><div class="doc-icon-sm"><img src="${esc(docIcon(r.documentType))}" alt="" onerror="this.style.display='none'"></div></div>
+        <div class="col-name"><h4>${esc(r.documentType || '—')}</h4><p>${esc(r.referenceNo || '—')}</p></div>
+        <div class="col-user"><span>${esc(r.residentName || '—')}</span></div>
+        <div class="col-date"><span>${esc(formatDate(r.createdAt))}</span></div>
+        <div class="col-purpose"><span>${esc(r.purpose || '—')}</span></div>
+        <div class="col-status"><span class="badge ${esc(r.status || 'pending')}">${esc(BADGE_LABEL[r.status] || r.status || '—')}</span></div>
+        ${IS_ALL ? `<div class="col-validity">${validityCell(r)}</div>` : ''}
+        <div class="col-action"><div class="action-row">${actionButtons(r.id, r.status)}</div></div>`;
+    return row;
+}
+function visibleDocs() {
+    const q = (el('search-input')?.value || '').trim().toLowerCase();
+    const f = (el('doc-filter')?.value || 'all').toLowerCase();
+    return allDocs.filter(r => {
+        if (PAGE_STATUSES && !PAGE_STATUSES.includes(r.status)) return false;
+        if (IS_ALL && activeTab !== 'all' && r.status !== activeTab) return false;
+        if (f !== 'all' && String(r.documentType || '').toLowerCase() !== f) return false;
+        if (q && !`${r.residentName || ''} ${r.referenceNo || ''}`.toLowerCase().includes(q)) return false;
+        return true;
+    }).sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+}
+function renderList() {
+    const body = el('requests-body'); if (!body) return;
+    const list = visibleDocs();
+    body.innerHTML = '';
+    if (!list.length) {
+        body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-sub);font-size:13px;">No requests found.</div>';
+    } else {
+        list.forEach(r => body.appendChild(buildRow(r)));
+    }
+    const open = allDocs.filter(r => ['pending', 'processing', 'approved'].includes(r.status)).length;
+    const badge = el('pending-requests-badge');
+    if (badge) { badge.textContent = open; badge.style.display = open ? '' : 'none'; }
+}
+
+// One click handler for every row button
+function wireList() {
+    el('requests-body')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-act]'); if (!btn) return;
+        const r = allDocs.find(x => x.id === btn.dataset.id); if (!r) return;
+        runAction(btn.dataset.act, r);
+    });
+    el('search-input')?.addEventListener('input', renderList);
+    el('doc-filter')?.addEventListener('change', renderList);
+    document.querySelectorAll('.tab-btn').forEach(t => t.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(x => x.classList.toggle('active', x === t));
+        activeTab = t.dataset.status || 'all';
+        renderList();
+    }));
+}
+function runAction(act, r) {
+    const id = r.id;
+    if (act === 'view')    return openRequestModal(id, r);
+    if (act === 'approve') return openPreviewFor(id, r, { approve: true });
+    if (act === 'doc')     return openPreviewFor(id, r);
+    if (act === 'ready')   return openReadyModal(id, r, 'make');
+    if (act === 'qr')      return openReadyModal(id, r, 'view');
+    if (act === 'release') return releaseRequest(id, r);
+    if (act === 'reject')  return openRejectPopup(id, r);
+}
+
+// =============================================
+// Pop-up mode over the dashboard (?embed=1&open=<id>)
+// =============================================
+function setupEmbed() {
+    if (!EMBED) return;
+    const st = document.createElement('style');
+    st.textContent = `html, body { background: transparent !important; }
+        body > *:not(.modal-overlay):not(.toast):not(script):not(style) { display: none !important; }`;
+    document.head.appendChild(st);
+
+    let timer = null;
+    const check = () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+            if (embedHandled && !document.querySelector('.modal-overlay.show')) {
+                parent.postMessage({ type: 'requests-embed-close' }, location.origin);
+            }
+        }, 250);
+    };
+    new MutationObserver(check).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+}
+function handleEmbedOpen() {
+    if (!EMBED || embedHandled || !OPEN_ID) return;
+    const r = allDocs.find(x => x.id === OPEN_ID);
+    if (!r) return;                       // wait for the next snapshot
+    embedHandled = true;
+    const byStatus = { pending: 'view', processing: 'approve', approved: 'ready', ready: 'release', released: 'doc', rejected: 'view' };
+    Promise.resolve(runAction(byStatus[r.status] || 'view', r)).finally(() => {
+        // actions that only show a confirm() and no modal still need to close the embed
+        setTimeout(() => { if (!document.querySelector('.modal-overlay.show')) parent.postMessage({ type: 'requests-embed-close' }, location.origin); }, 400);
+    });
+}
+setupEmbed();
+
+// =============================================
+// Reject popup from the page's own reject modal is unused: the JS-built popup above is used
+// everywhere so the dashboard and these pages behave the same.
+// =============================================
+
+// =============================================
+// Reject modal built into the page (kept hidden)  /  Sidebar + sign out
+// =============================================
+let sidebarOpen = true;
+window.toggleSidebar = function () {
+    const sidebar = el('sidebar'), main = el('mainContent');
+    if (window.matchMedia('(max-width: 900px)').matches) {
+        const open = sidebar.classList.toggle('open');
+        el('sidebar-backdrop')?.classList.toggle('show', open);
+        return;
+    }
+    sidebarOpen = !sidebarOpen;
+    sidebar.classList.toggle('collapsed', !sidebarOpen);
+    main?.classList.toggle('expanded', !sidebarOpen);
+};
+el('sign-out-btn')?.addEventListener('click', async () => {
+    await signOut(auth);
+    window.location.href = '../barangaydocs_login.html';
+});
+
+// =============================================
+// Auth guard (admins only) → start the live list
+// =============================================
+onAuthStateChanged(auth, async (user) => {
+    if (!user) { window.location.href = '../barangaydocs_login.html'; return; }
+    try {
+        const adminDoc = await getDoc(doc(db, 'admins', user.uid));
+        if (!adminDoc.exists() || adminDoc.data().role !== 'admin') {
+            alert('Access denied. Admins only.');
+            await signOut(auth);
+            window.location.href = '../barangaydocs_login.html';
+            return;
+        }
+        const a = adminDoc.data();
+        const initials = ((a.firstName?.[0] || '') + (a.lastName?.[0] || '')).toUpperCase() || 'A';
+        const avPh = document.querySelector('.av-ph'); if (avPh) avPh.textContent = initials;
+
+        wireList();
+        const body = el('requests-body');
+        if (body) body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-sub);font-size:13px;">Loading...</div>';
+
+        onSnapshot(collection(db, 'requests'), (snap) => {
+            allDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            renderList();
+            handleEmbedOpen();
+        }, (err) => {
+            console.error('Requests listener failed (check Firestore rules):', err);
+            if (body) body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--red-text);font-size:13px;">Could not load requests. Check Firestore rules and your connection.</div>';
+        });
+    } catch (err) {
+        console.error('Auth guard error:', err);
+        alert('Access denied. Admins only.');
+        await signOut(auth);
+        window.location.href = '../barangaydocs_login.html';
+    }
+});
