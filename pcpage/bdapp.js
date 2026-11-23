@@ -204,14 +204,15 @@ function populateSidebar(userData) {
     }
 
     const fullName = `${userData.firstName} ${userData.middleName ? userData.middleName.charAt(0) + '. ' : ''}${userData.lastName}`;
+    const displayName = fullName.toUpperCase();   // display only - stored data stays as typed
 
     // Avatar initials
     document.querySelectorAll('.user-avatar').forEach(av => {
-        setAvatar(av, userData.faceUrl, getInitials(fullName));
+        setAvatar(av, userData.faceUrl, getInitials(displayName));
     });
 
     // Name & role
-    document.querySelectorAll('.user-name').forEach(n => n.textContent = fullName);
+    document.querySelectorAll('.user-name').forEach(n => n.textContent = displayName);
     document.querySelectorAll('.user-role').forEach(r => {
         r.textContent = 'Resident';
 
@@ -275,11 +276,12 @@ async function doLogout() {
 // =============================================
 async function initHome(user, userData) {
     const fullName = `${userData.firstName} ${userData.middleName ? userData.middleName.charAt(0) + '. ' : ''}${userData.lastName}`;
+    const displayName = fullName.toUpperCase();   // display only - stored data stays as typed
 
     // Update user card
     const ucName = document.querySelector('.uc-name');
     const ucAddr = document.querySelector('.uc-addr');
-    if (ucName) ucName.textContent = fullName;
+    if (ucName) ucName.textContent = displayName;
     if (ucAddr) ucAddr.textContent = `${userData.barangay || 'Barangay Banicain'}, ${userData.city || 'Olongapo City'}`;
 
     // Available / unavailable documents (live from the admin's documents list)
@@ -1389,14 +1391,15 @@ function initChatbot(user, userData) {
 // =============================================
 function initAccount(user, userData) {
     const fullName = `${userData.firstName} ${userData.middleName ? userData.middleName.charAt(0) + '. ' : ''}${userData.lastName}`;
+    const displayName = fullName.toUpperCase();   // display only - stored data stays as typed
 
     // Profile band
     const profileAvatar = document.querySelector('.profile-avatar');
     const profileName   = document.querySelector('.profile-info h2');
     const profileSub    = document.querySelector('.profile-info p');
 
-    if (profileAvatar) setAvatar(profileAvatar, userData.faceUrl, getInitials(fullName));
-    if (profileName)   profileName.textContent   = fullName;
+    if (profileAvatar) setAvatar(profileAvatar, userData.faceUrl, getInitials(displayName));
+    if (profileName)   profileName.textContent   = displayName;
     if (profileSub)    profileSub.textContent     = getFullAddress(userData);
 
     // Live request stats
@@ -1435,7 +1438,7 @@ function initAccount(user, userData) {
         : '—';
 
     const setInfo = (id, val) => { const e = el(id); if (e) e.textContent = val || '—'; };
-    setInfo('infoFullName',    fullName);
+    setInfo('infoFullName',    displayName);
     setInfo('infoEmail',       userData.email);
     setInfo('infoContact',     userData.contactNumber);
     setInfo('infoBirthday',    birthday);

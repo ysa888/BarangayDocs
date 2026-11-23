@@ -123,7 +123,7 @@ function initPage(user, userData) {
     const name = el('sidebarName');
     const role = el('sidebarRole');
     if (avatar) avatar.textContent = getInitials(fullName);
-    if (name) name.textContent = fullName;
+    if (name) name.textContent = fullName.toUpperCase();   // display only
     if (role) role.textContent = 'Resident';
 
     // Load active document types from Firestore (real-time)
@@ -146,6 +146,7 @@ function initPage(user, userData) {
     });
 
     // Submit request button
+    wireRequestPhoto();
     el('submitRequestBtn')?.addEventListener('click', () => {
         submitRequest(user, userData, fullName);
     });
@@ -390,6 +391,120 @@ function listenDocumentTypes() {
 }
 
 // =============================================
+// Required current photo (camera / upload -> Cloudinary)
+// =============================================
+const CLOUDINARY_CLOUD_NAME = 'ddizbxtdd';
+const CLOUDINARY_UPLOAD_PRESET = 'barangaydocs_preset';
+
+async function uploadToCloudinary(file, folder = 'barangaydocs/request_photos') {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+    formData.append('folder', folder);
+    const res = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+        { method: 'POST', body: formData }
+    );
+    if (!res.ok) throw new Error('Photo upload failed');
+    const data = await res.json();
+    return { url: data.secure_url, publicId: data.public_id };
+}
+
+let reqPhotoBlob = null;      // the captured / chosen photo (JPEG blob)
+let reqPhotoStream = null;    // live camera stream while open
+let reqPhotoPreviewUrl = null;
+
+function reqPhotoError(msg) {
+    const e = el('reqPhotoErr'); if (e) e.textContent = msg || '';
+    el('reqPhotoBox')?.classList.toggle('err', !!msg);
+}
+
+function reqPhotoStopStream() {
+    if (reqPhotoStream) { reqPhotoStream.getTracks().forEach(t => t.stop()); reqPhotoStream = null; }
+    const v = el('reqPhotoVideo'); if (v) v.srcObject = null;
+}
+
+function reqPhotoRender(state) {
+    const box = el('reqPhotoBox'); if (!box) return;
+    box.dataset.state = state;
+    box.classList.toggle('has-photo', state === 'done');
+    const cam = el('reqPhotoCamBtn'), snap = el('reqPhotoSnapBtn');
+    if (cam)  { cam.hidden = state === 'live'; cam.textContent = state === 'done' ? 'Retake' : 'Open Camera'; }
+    if (snap) snap.hidden = state !== 'live';
+}
+
+function reqPhotoReset() {
+    reqPhotoStopStream();
+    reqPhotoBlob = null;
+    if (reqPhotoPreviewUrl) { URL.revokeObjectURL(reqPhotoPreviewUrl); reqPhotoPreviewUrl = null; }
+    const img = el('reqPhotoImg'); if (img) img.removeAttribute('src');
+    const input = el('reqPhotoInput'); if (input) input.value = '';
+    reqPhotoError('');
+    reqPhotoRender('idle');
+}
+
+function reqPhotoSet(blob) {
+    reqPhotoStopStream();
+    reqPhotoBlob = blob;
+    if (reqPhotoPreviewUrl) URL.revokeObjectURL(reqPhotoPreviewUrl);
+    reqPhotoPreviewUrl = URL.createObjectURL(blob);
+    el('reqPhotoImg').src = reqPhotoPreviewUrl;
+    reqPhotoError('');
+    reqPhotoRender('done');
+}
+
+/** Draw an image/video frame to a canvas (max 900px) and return a JPEG blob */
+function reqPhotoToBlob(source, w, h) {
+    const scale = Math.min(1, 900 / Math.max(w, h));
+    const c = document.createElement('canvas');
+    c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+    c.getContext('2d').drawImage(source, 0, 0, c.width, c.height);
+    return new Promise((resolve, reject) =>
+        c.toBlob(b => b ? resolve(b) : reject(new Error('Could not read photo')), 'image/jpeg', 0.85));
+}
+
+function wireRequestPhoto() {
+    const camBtn = el('reqPhotoCamBtn'), snapBtn = el('reqPhotoSnapBtn');
+    const upBtn = el('reqPhotoUploadBtn'), input = el('reqPhotoInput'), video = el('reqPhotoVideo');
+    if (!camBtn || !input) return;
+
+    camBtn.addEventListener('click', async () => {
+        reqPhotoError('');
+        if (!navigator.mediaDevices?.getUserMedia) {
+            return reqPhotoError('Camera is not available on this device. Use "Upload Instead".');
+        }
+        try {
+            reqPhotoStopStream();
+            reqPhotoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+            video.srcObject = reqPhotoStream;
+            await video.play();
+            reqPhotoRender('live');
+        } catch (err) {
+            console.error('Camera error:', err);
+            reqPhotoStopStream();
+            reqPhotoError('Could not open the camera. Allow camera access or use "Upload Instead".');
+        }
+    });
+
+    snapBtn.addEventListener('click', async () => {
+        if (!video.videoWidth) return reqPhotoError('Camera is still starting. Try again.');
+        try { reqPhotoSet(await reqPhotoToBlob(video, video.videoWidth, video.videoHeight)); }
+        catch (err) { reqPhotoError('Could not capture the photo. Please try again.'); }
+    });
+
+    upBtn.addEventListener('click', () => input.click());
+    input.addEventListener('change', async () => {
+        const f = input.files && input.files[0];
+        if (!f) return;
+        if (!/^image\//.test(f.type)) return reqPhotoError('Please choose an image file.');
+        try {
+            const bmp = await createImageBitmap(f);
+            reqPhotoSet(await reqPhotoToBlob(bmp, bmp.width, bmp.height));
+        } catch (err) { reqPhotoError('That image could not be read. Try another photo.'); }
+    });
+}
+
+// =============================================
 // Submit Request
 // =============================================
 let isSubmittingRequest = false;
@@ -403,6 +518,11 @@ async function submitRequest(user, userData, fullName) {
     const purpose = el('purposeSelect')?.value;
     if (!purpose) return alert('Please select a purpose.');
 
+    if (!reqPhotoBlob) {
+        reqPhotoError('Please take or upload a current photo to continue.');
+        return alert('Please take a current picture before requesting a document.');
+    }
+
     const notes = el('notesInput')?.value.trim() || '';
     const docName = selected.dataset.name;
     const ref = generateRef();
@@ -413,9 +533,15 @@ async function submitRequest(user, userData, fullName) {
     if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting…'; }
 
     try {
+        if (submitBtn) submitBtn.textContent = 'Uploading photo…';
+        const photo = await uploadToCloudinary(reqPhotoBlob);
+        if (submitBtn) submitBtn.textContent = 'Submitting…';
+
         await addDoc(collection(db, 'requests'), {
             uid: user.uid,
             residentName: fullName,
+            requestPhotoUrl: photo.url,
+            requestPhotoPublicId: photo.publicId,
             documentType: docName,
             purpose,
             notes,
@@ -884,6 +1010,7 @@ window.openModal = function () {
 };
 window.closeModal = function () {
     el('modalOverlay')?.classList.remove('show');
+    reqPhotoReset();
 };
 window.closeModalOutside = function (e) {
     if (e.target === el('modalOverlay')) window.closeModal();
