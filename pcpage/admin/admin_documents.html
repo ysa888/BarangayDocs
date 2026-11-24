@@ -8,6 +8,9 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap"
     rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0"
+    rel="stylesheet">
   <style>
     * {
       margin: 0;
@@ -526,7 +529,7 @@
     }
 
     .col-action {
-      width: 180px;
+      width: 230px;
       flex-shrink: 0;
       text-align: right;
     }
@@ -593,6 +596,72 @@
       text-align: center;
       color: var(--text-light);
       font-size: 13px;
+    }
+
+    /* Edit button */
+    .btn-edit {
+      padding: 5px 10px;
+      background: #E3EEFF;
+      color: var(--primary-light);
+      border: 1.5px solid #BBD2F5;
+      border-radius: 7px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    /* Icon picker (tiny squares) */
+    .icon-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .icon-tile {
+      width: 44px;
+      height: 44px;
+      padding: 6px;
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.15s, background 0.15s, transform 0.1s;
+    }
+
+    .icon-tile:hover {
+      border-color: var(--primary-light);
+      background: #fff;
+    }
+
+    .icon-tile.selected {
+      border-color: var(--primary);
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(42, 82, 152, 0.18);
+    }
+
+    .icon-tile img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      pointer-events: none;
+    }
+
+    .icon-tile.add-tile {
+      border-style: dashed;
+      color: var(--primary-light);
+    }
+
+    .icon-tile.add-tile .material-symbols-outlined {
+      font-size: 24px;
+    }
+
+    .icon-hint {
+      font-size: 11px;
+      color: var(--text-light);
     }
 
     /* ── ADD DOCUMENT MODAL ── */
@@ -1082,11 +1151,11 @@
   <div class="modal-overlay" id="add-doc-modal">
     <div class="modal-box">
       <div class="modal-top">
-        <h3>Add New Document Type</h3>
-        <p>This document will appear in the resident request form</p>
+        <h3 id="modal-title">Add New Document Type</h3>
+        <p id="modal-sub">This document will appear in the resident request form</p>
       </div>
       <div class="modal-header">
-        <h4>Document Details</h4>
+        <h4 id="modal-header-label">Document Details</h4>
         <button class="modal-close" id="close-add-modal">✕</button>
       </div>
       <div class="modal-body">
@@ -1100,17 +1169,10 @@
             placeholder="e.g. Required for employment, travel, and other legal purposes."></textarea>
         </div>
         <div class="form-group">
-          <label>Icon Filename</label>
-          <select id="input-icon">
-            <option value="Icons/barangayclearance.png">Barangay Clearance</option>
-            <option value="Icons/certificateofresidency.png">Certificate of Residency</option>
-            <option value="Icons/certificateofindigency.png">Certificate of Indigency</option>
-            <option value="Icons/barangaybusinessclearance.png">Business Clearance</option>
-            <option value="Icons/firsttimejobseekercertificate.png">Job Seeker Certificate</option>
-            <option value="Icons/certificateofgoodmoralcharacter.png">Good Moral Character</option>
-            <option value="Icons/soloparentcertificate.png">Solo Parent Certificate</option>
-            <option value="Icons/workingpermit.png">Working Permit</option>
-          </select>
+          <label>Icon</label>
+          <div class="icon-grid" id="icon-grid"></div>
+          <input id="icon-file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden>
+          <span class="icon-hint">Pick an icon, or use + to upload your own image.</span>
         </div>
       </div>
       <div class="modal-footer">
