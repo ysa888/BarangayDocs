@@ -458,7 +458,17 @@ function ensureEditor() {
         toolbar:
             'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | forecolor backcolor | ' +
             'alignleft aligncenter alignright alignjustify | lineheight | bullist numlist outdent indent | ' +
-            'table image imglayout hr | newpage blankpage | casebtn placeholders | removeformat',
+            'table image imglayout hr | textbox rectshape vline | newpage blankpage | casebtn placeholders | styles | removeformat',
+        style_formats: [
+            { title: 'Paragraph spacing: compact', selector: 'p', styles: { marginTop: '0', marginBottom: '2pt' } },
+            { title: 'Paragraph spacing: normal', selector: 'p', styles: { marginTop: '0', marginBottom: '8pt' } },
+            { title: 'Paragraph spacing: wide', selector: 'p', styles: { marginTop: '0', marginBottom: '16pt' } },
+            { title: 'Letter spacing: tight', inline: 'span', styles: { letterSpacing: '-0.3px' } },
+            { title: 'Letter spacing: normal', inline: 'span', styles: { letterSpacing: 'normal' } },
+            { title: 'Letter spacing: wide', inline: 'span', styles: { letterSpacing: '1.5px' } },
+            { title: 'Text box', block: 'div', classes: 'tpl-textbox', wrapper: true },
+            { title: 'Bordered section', block: 'div', classes: 'tpl-section-box', wrapper: true }
+        ],
         toolbar_mode: 'wrap',
         branding: false,
         promotion: false,
@@ -467,7 +477,13 @@ function ensureEditor() {
         elementpath: false,
         content_css: false,          // we supply the CSS so editor = printed result
         document_base_url: APP_ROOT, // so "Icons/…" images show inside the editor
-        content_style: editorCss,
+        content_style: editorCss + '\n' + [
+            '.tpl-textbox{display:block;box-sizing:border-box;min-height:42px;padding:8px 10px;border:1px solid #777;background:#fff;margin:6px 0;}',
+            '.tpl-section-box{display:block;box-sizing:border-box;padding:10px;border:1px solid #777;margin:8px 0;}',
+            '.tpl-shape-rect{display:inline-block;box-sizing:border-box;width:120px;height:48px;border:2px solid #16834a;background:#e9f5ee;vertical-align:middle;margin:4px;}',
+            '.tpl-shape-line{display:block;border:0;border-top:1px solid #333;height:0;margin:8px 0;}',
+            '.tpl-shape-vline{display:inline-block;width:0;height:80px;border-left:2px solid #16834a;vertical-align:middle;margin:0 8px;}'
+        ].join('\n'),
         font_family_formats: TINYMCE_FONTS,
         font_size_formats: '8pt 9pt 10pt 11pt 12pt 13pt 14pt 16pt 18pt 20pt 22pt 24pt 28pt 32pt 36pt 48pt',
         lineheight_formats: '1 1.15 1.4 1.5 1.9 2 2.5 3',
@@ -488,7 +504,7 @@ function ensureEditor() {
         file_picker_callback: pickImageFile,
         table_default_attributes: { border: '0' },
         table_default_styles: { width: '100%', 'border-collapse': 'collapse' },
-        extended_valid_elements: 'span[class|style|data-field]',
+        extended_valid_elements: 'span[class|style|data-field],div[class|style|contenteditable],hr[class|style],p[class|style],td[class|style|colspan|rowspan],th[class|style|colspan|rowspan]',
         setup: (ed) => {
             editor = ed;
 
@@ -503,6 +519,20 @@ function ensureEditor() {
 
             ed.ui.registry.addButton('newpage',   { text: 'New page',    tooltip: 'Start the following content on a new page', onAction: () => insertPageBreak(false) });
             ed.ui.registry.addButton('blankpage', { text: '+ Blank page', tooltip: 'Insert an empty page here',                onAction: () => insertPageBreak(true) });
+
+            // Layout building blocks: these work directly in the editor; no Word file is required.
+            ed.ui.registry.addButton('textbox', {
+                text: 'Text box', tooltip: 'Insert a bordered text area',
+                onAction: () => ed.insertContent('<div class=\"tpl-textbox\" contenteditable=\"true\">Type text here</div><p></p>')
+            });
+            ed.ui.registry.addButton('rectshape', {
+                text: 'Rectangle', tooltip: 'Insert a decorative rectangle',
+                onAction: () => ed.insertContent('<span class=\"tpl-shape-rect\" contenteditable=\"false\"></span>')
+            });
+            ed.ui.registry.addButton('vline', {
+                text: 'Vertical line', tooltip: 'Insert a vertical divider',
+                onAction: () => ed.insertContent('<span class=\"tpl-shape-vline\" contenteditable=\"false\"></span>')
+            });
 
             ed.ui.registry.addMenuButton('casebtn', {
                 text: 'Aa',
@@ -590,6 +620,18 @@ function ensureEditor() {
                 }, true);
 
                 let drag = null;
+                // Click anywhere that is not an overlay image or its grips → deselect (listens on the whole
+                // document, so it also works in "Drag on page" mode and when clicking the grey area around the sheet).
+                ed.getDoc().addEventListener('pointerdown', (e) => {
+                    if (e.button !== 0 || !selImg) return;
+                    if (grabTarget(e)) return;
+                    selImg = null;
+                    positionHandle();
+                    refreshImagePanel();
+                }, true);
+                ed.on('keydown', (e) => {
+                    if (e.key === 'Escape' && selImg) { selImg = null; positionHandle(); refreshImagePanel(); }
+                });
                 b.addEventListener('pointerdown', (e) => {
                     if (e.button !== 0) return;
                     const g = grabTarget(e);
@@ -632,7 +674,10 @@ function ensureEditor() {
                 refreshImagePanel();
             });
             ed.on('NodeChange', (e) => {
-                if (e.element && e.element.nodeName === 'IMG') selImg = e.element;
+                const n = e.element;
+                if (n && n.nodeName === 'IMG') selImg = n;
+                else if (selImg && !(n && n.closest && n.closest('#tpl-ovl'))) selImg = null;   // clicked text / elsewhere → deselect
+                positionHandle();
                 scheduleImageRefresh();
             });
             ed.on('SetContent input change ExecCommand undo redo', scheduleImageRefresh);
@@ -1050,6 +1095,7 @@ function paginateEditor() {
     window.__tplPages = pages;
     body.style.setProperty('min-height', `${(pages * P - PAGE_GAP_PX + 2 * bw).toFixed(1)}px`);
     drawSheets(body, doc2, pages, P, pageH, bw);
+    positionHandle();
 }
 
 // One white sheet per page with its own border and shadow; the grey gap between sheets is the page break.
@@ -1059,29 +1105,32 @@ function paginateEditor() {
 function drawSheets(body, doc2, pages, P, pageH, bw) {
     body.querySelectorAll('.tpl-sheet, #tpl-sheets').forEach(n => n.remove());   // clean up older versions
     const html = doc2.documentElement;
+    const win = doc2.defaultView;
     let wrap = doc2.getElementById('tpl-sheets');
     if (!wrap) {
         wrap = doc2.createElement('div');
         wrap.id = 'tpl-sheets';
         wrap.setAttribute('data-mce-bogus', 'all');
         wrap.setAttribute('aria-hidden', 'true');
-        wrap.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;pointer-events:none;user-select:none';
         html.insertBefore(wrap, body);          // before <body> so it paints underneath the text
     }
+    // The wrapper spans the same width as <body>'s containing block and centres its inner box with
+    // `margin:0 auto`, exactly like the body does. So the sheets keep following the body when the
+    // scrollbar appears / disappears, the window or side panels resize, or the focus changes. (They used to
+    // be placed with pixel coordinates measured once, which went stale and left the paper out of step
+    // with the text and the images, which are body-relative.)
+    const mt = parseFloat(win.getComputedStyle(body).marginTop) || 0;
+    wrap.style.cssText = `position:absolute;left:0;right:0;top:${mt}px;height:0;pointer-events:none;user-select:none`;
     const b = pageSettings.border;
     const border = (b.style !== 'none' && b.width > 0) ? `${b.width}px ${b.style} ${b.color}` : 'none';
-    const win = doc2.defaultView;
-    const br = body.getBoundingClientRect();
-    const x0 = br.left + (win.scrollX || 0);     // body border-box, in document coordinates
-    const y0 = br.top + (win.scrollY || 0);
-    const w = body.clientWidth;
-    let out = '';
+    const w = body.offsetWidth;                 // body border-box width
+    let out = `<div style="position:relative;width:${w}px;margin:0 auto;pointer-events:none">`;
     for (let i = 0; i < pages; i++) {
         out += `<div class="tpl-sheet" style="position:absolute;pointer-events:none;box-sizing:border-box;background:#fff;` +
-            `box-shadow:0 1px 8px rgba(0,0,0,.28);left:${x0.toFixed(1)}px;top:${(y0 + i * P).toFixed(1)}px;` +
-            `width:${w + 2 * bw}px;height:${(pageH + 2 * bw).toFixed(1)}px;border:${border}"></div>`;
+            `box-shadow:0 1px 8px rgba(0,0,0,.28);left:0;top:${(i * P).toFixed(1)}px;` +
+            `width:${w}px;height:${(pageH + 2 * bw).toFixed(1)}px;border:${border}"></div>`;
     }
-    wrap.innerHTML = out;
+    wrap.innerHTML = out + '</div>';
 }
 
 // ---------------------------------------------
@@ -1465,8 +1514,9 @@ function docxTransformDocument() {
 }
 
 // Mammoth HTML → HTML for TinyMCE: alignment classes → inline text-align, page breaks → editor page breaks.
-function docxHtmlForEditor(html) {
+function docxHtmlForEditor(html, textBoxes) {
     const d = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+    docxRestoreTextBoxes(d, textBoxes);
     d.body.querySelectorAll('[class*="tpl-al-"]').forEach((node) => {
         const m = /\btpl-al-(center|right|justify)\b/.exec(node.className);
         if (!m) return;
@@ -1488,14 +1538,1191 @@ function docxHtmlForEditor(html) {
     return d.body.innerHTML;
 }
 
-function docxMammothOptions() {
+// `state` (optional) = { infos, i }: infos come from docxImageInfos(); each converted image gets the
+// info of the picture at the same position in the Word file as a temporary data-dx attribute.
+function docxMammothOptions(state) {
     return {
         styleMap: docxStyleMap(),
         transformDocument: docxTransformDocument(),
         ignoreEmptyParagraphs: false,
-        convertImage: mammoth.images.imgElement((image) =>
-            image.read('base64').then((b64) => ({ src: `data:${image.contentType};base64,${b64}` })))
+        convertImage: mammoth.images.imgElement((image) => {
+            const idx = state ? state.i++ : -1;          // counted synchronously = document order
+            const info = state && state.infos ? state.infos[idx] : null;
+            return image.read('base64').then((b64) => {
+                const attrs = { src: `data:${image.contentType};base64,${b64}` };
+                if (info) attrs['data-dx'] = JSON.stringify(info);
+                return attrs;
+            });
+        })
     };
+}
+
+// ---------------------------------------------
+// Word picture layout (behind text / in front / wrapped / in line) and position
+// Mammoth only returns the picture itself, so the layout is read from the DrawingML in the .docx
+// (wp:inline / wp:anchor) and re-applied to the editor images afterwards (applyDocxImageLayouts).
+// ---------------------------------------------
+const DX_NS = {
+    w:  'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+    wp: 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing',
+    a:  'http://schemas.openxmlformats.org/drawingml/2006/main',
+    mc: 'http://schemas.openxmlformats.org/markup-compatibility/2006'
+};
+const DX_EMU_PX = 9525;   // EMU per CSS px
+
+/** One entry per picture, in document order (same order Mammoth converts them). null = not tracked. */
+function docxImageInfos(xmlString) {
+    const doc = new DOMParser().parseFromString(xmlString, 'application/xml');
+    const out = [];
+    const kid = (n, ns, name) => [...n.childNodes].find(c => c.nodeType === 1 && c.namespaceURI === ns && c.localName === name) || null;
+    const emu = (n) => { const v = n && parseFloat(n.textContent); return Number.isFinite(v) ? v / DX_EMU_PX : 0; };
+
+    const readDrawing = (drawing) => {
+        const anchor = kid(drawing, DX_NS.wp, 'anchor');
+        const inline = kid(drawing, DX_NS.wp, 'inline');
+        const host = anchor || inline;
+        if (!host) return;
+        const blips = [...drawing.getElementsByTagNameNS(DX_NS.a, 'blip')]
+            .filter(b => b.getAttribute('r:embed') || b.getAttribute('r:link'));
+        let info = { t: 'i' };
+        if (anchor) {
+            const ext = kid(anchor, DX_NS.wp, 'extent');
+            const wrapEl = [...anchor.childNodes].find(c => c.nodeType === 1 && c.namespaceURI === DX_NS.wp && /^wrap/.test(c.localName));
+            const ph = kid(anchor, DX_NS.wp, 'positionH'), pv = kid(anchor, DX_NS.wp, 'positionV');
+            const pos = (p) => p ? {
+                rel: p.getAttribute('relativeFrom') || '',
+                off: emu(kid(p, DX_NS.wp, 'posOffset')),
+                align: (kid(p, DX_NS.wp, 'align')?.textContent || '').trim()
+            } : { rel: '', off: 0, align: '' };
+            const H = pos(ph), V = pos(pv);
+            info = {
+                t: 'a',
+                behind: anchor.getAttribute('behindDoc') === '1',
+                wrap: wrapEl ? wrapEl.localName : 'wrapNone',
+                w: ext ? Math.round(parseFloat(ext.getAttribute('cx')) / DX_EMU_PX) || 0 : 0,
+                h: ext ? Math.round(parseFloat(ext.getAttribute('cy')) / DX_EMU_PX) || 0 : 0,
+                hrel: H.rel, hoff: H.off, halign: H.align,
+                vrel: V.rel, voff: V.off, valign: V.align
+            };
+        }
+        blips.forEach(() => out.push(info));
+    };
+
+    const walk = (n) => {
+        for (const c of n.childNodes) {
+            if (c.nodeType !== 1) continue;
+            if (c.namespaceURI === DX_NS.mc && c.localName === 'Fallback') continue;   // Word's duplicate copy
+            if (c.namespaceURI === DX_NS.w && c.localName === 'drawing') { readDrawing(c); continue; }
+            if (c.namespaceURI === DX_NS.w && c.localName === 'pict') {                  // old VML picture
+                [...c.getElementsByTagName('*')].filter(e => e.localName === 'imagedata').forEach(() => out.push(null));
+                continue;
+            }
+            walk(c);
+        }
+    };
+    walk(doc.documentElement);
+    return out;
+}
+
+// ---------------------------------------------
+// Word fidelity pre-pass (runs on a COPY of the package before Mammoth; the original is never touched)
+//   1) Alignment that comes from a Word *style* (or the document defaults) is written onto the
+//      paragraph as a direct <w:jc>, because Mammoth only sees direct alignment.
+//   2) Text boxes (Mammoth drops them) become one-cell tables, so each box stays a separate section
+//      with its own border / fill / width / alignment / inner text alignment.
+// ---------------------------------------------
+const DXT_NS = Object.assign({}, DX_NS, {
+    wps: 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape',
+    v:   'urn:schemas-microsoft-com:vml'
+});
+const dxKids = (n, ns, name) => [...n.childNodes].filter(c => c.nodeType === 1 && c.namespaceURI === ns && c.localName === name);
+const dxKid = (n, ns, name) => dxKids(n, ns, name)[0] || null;
+const dxUp = (n, ns, name) => {
+    for (let p = n.parentNode; p && p.nodeType === 1; p = p.parentNode) {
+        if (p.namespaceURI === ns && p.localName === name) return p;
+    }
+    return null;
+};
+
+function docxMaterializeAlignment(doc, stylesDoc) {
+    const W = DXT_NS.w;
+    const val = (el) => (el ? el.getAttributeNS(W, 'val') : '');
+    const jcOf = (pPr) => val(pPr && dxKid(pPr, W, 'jc'));
+    const styles = {};
+    let defaultPara = '', docDefault = '';
+    if (stylesDoc) {
+        const dd = stylesDoc.getElementsByTagNameNS(W, 'docDefaults')[0];
+        const ppd = dd && dxKid(dd, W, 'pPrDefault');
+        docDefault = jcOf(ppd && dxKid(ppd, W, 'pPr'));
+        for (const st of stylesDoc.getElementsByTagNameNS(W, 'style')) {
+            if (st.getAttributeNS(W, 'type') !== 'paragraph') continue;
+            const id = st.getAttributeNS(W, 'styleId');
+            styles[id] = { jc: jcOf(dxKid(st, W, 'pPr')), based: val(dxKid(st, W, 'basedOn')) };
+            if (st.getAttributeNS(W, 'default') === '1') defaultPara = id;
+        }
+    }
+    const fromStyle = (id) => {
+        const seen = new Set();
+        while (id && styles[id] && !seen.has(id)) {
+            seen.add(id);
+            if (styles[id].jc) return styles[id].jc;
+            id = styles[id].based;
+        }
+        return '';
+    };
+    let changed = 0;
+    for (const p of [...doc.getElementsByTagNameNS(W, 'p')]) {
+        let pPr = dxKid(p, W, 'pPr');
+        if (pPr && dxKid(pPr, W, 'jc')) continue;                       // direct alignment wins
+        const ps = pPr && dxKid(pPr, W, 'pStyle');
+        const eff = fromStyle(ps ? val(ps) : defaultPara) || docDefault;
+        if (!eff || eff === 'left' || eff === 'start') continue;
+        const jc = doc.createElementNS(W, 'w:jc');
+        jc.setAttributeNS(W, 'w:val', eff);
+        if (!pPr) { pPr = doc.createElementNS(W, 'w:pPr'); p.insertBefore(pPr, p.firstChild); }
+        pPr.insertBefore(jc, dxKid(pPr, W, 'rPr'));                     // null → appended
+        changed++;
+    }
+    return changed;
+}
+
+// shape look / size / position of one text box (DrawingML text box or old VML one)
+function docxReadTextBox(unit, T) {
+    const { wp: WP, a: A, wps: WPS, v: V } = DXT_NS;
+    const info = { w: 0, h: 0, halign: '', hrel: '', hoff: 0, border: 'none', fill: '', pad: [4.8, 9.6, 4.8, 9.6], valign: '' };
+    const clr = (fill) => {
+        const c = fill && dxKid(fill, A, 'srgbClr');
+        return c && /^[0-9a-f]{6}$/i.test(c.getAttribute('val') || '') ? '#' + c.getAttribute('val') : '';
+    };
+    const wsp = dxUp(T, WPS, 'wsp');
+    if (wsp) {
+        const spPr = dxKid(wsp, WPS, 'spPr');
+        const ext = spPr && dxKid(spPr, A, 'xfrm') && dxKid(dxKid(spPr, A, 'xfrm'), A, 'ext');
+        if (ext) { info.w = Math.round(parseFloat(ext.getAttribute('cx')) / DX_EMU_PX) || 0; info.h = Math.round(parseFloat(ext.getAttribute('cy')) / DX_EMU_PX) || 0; }
+        const ln = spPr && dxKid(spPr, A, 'ln');
+        if (ln) {
+            if (!dxKid(ln, A, 'noFill')) {
+                const wpx = Math.max(1, Math.round((parseFloat(ln.getAttribute('w')) || 9525) / DX_EMU_PX));
+                info.border = `${wpx}px solid ${clr(dxKid(ln, A, 'solidFill')) || '#000'}`;
+            }
+        } else if (dxKid(wsp, WPS, 'style')) info.border = '1px solid #000';
+        info.fill = clr(spPr && dxKid(spPr, A, 'solidFill'));
+        const bp = dxKid(wsp, WPS, 'bodyPr');
+        if (bp) {
+            ['tIns', 'rIns', 'bIns', 'lIns'].forEach((k, i) => {
+                const n = parseFloat(bp.getAttribute(k));
+                if (Number.isFinite(n)) info.pad[i] = Math.round(n / DX_EMU_PX * 10) / 10;
+            });
+            info.valign = { t: 'top', ctr: 'middle', b: 'bottom' }[bp.getAttribute('anchor')] || '';
+        }
+    }
+    const drawing = unit.localName === 'drawing' ? unit : unit.getElementsByTagNameNS(DXT_NS.w, 'drawing')[0];
+    const host = drawing && (dxKid(drawing, WP, 'anchor') || dxKid(drawing, WP, 'inline'));
+    if (host && !dxUp(T, DXT_NS.wps, 'wgp') && !(wsp && dxUp(wsp, 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup', 'wgp'))) {
+        const ext = dxKid(host, WP, 'extent');
+        if (ext && !info.w) { info.w = Math.round(parseFloat(ext.getAttribute('cx')) / DX_EMU_PX) || 0; info.h = Math.round(parseFloat(ext.getAttribute('cy')) / DX_EMU_PX) || 0; }
+        const ph = dxKid(host, WP, 'positionH');
+        if (ph) {
+            info.hrel = ph.getAttribute('relativeFrom') || '';
+            info.hoff = (parseFloat((dxKid(ph, WP, 'posOffset') || {}).textContent) || 0) / DX_EMU_PX;
+            info.halign = ((dxKid(ph, WP, 'align') || {}).textContent || '').trim();
+        }
+    }
+    // old VML text box: <v:shape style="width:..;height:.." stroked="f" ...><v:textbox>
+    const tb = dxUp(T, V, 'textbox');
+    if (tb && tb.parentNode && tb.parentNode.nodeType === 1) {
+        const sh = tb.parentNode, st = sh.getAttribute('style') || '';
+        const len = (k) => { const m = new RegExp('(?:^|;)\\s*' + k + '\\s*:\\s*([\\d.]+)(pt|px|in|cm|mm)?', 'i').exec(st); if (!m) return 0; const f = { pt: 96 / 72, px: 1, in: 96, cm: 96 / 2.54, mm: 96 / 25.4 }[(m[2] || 'px').toLowerCase()]; return Math.round(parseFloat(m[1]) * f); };
+        info.w = info.w || len('width'); info.h = info.h || len('height');
+        const stroked = (sh.getAttribute('stroked') || '').toLowerCase();
+        if (stroked === 'f' || stroked === 'false') info.border = 'none';
+        else {
+            const sw = /([\d.]+)pt/.exec(sh.getAttribute('strokeweight') || '');
+            const sc = sh.getAttribute('strokecolor') || '';
+            info.border = `${Math.max(1, Math.round((sw ? parseFloat(sw[1]) : 0.75) * 96 / 72))}px solid ${/^#[0-9a-f]{6}$/i.test(sc) ? sc : '#000'}`;
+        }
+        const fc = sh.getAttribute('fillcolor') || '';
+        if (/^#[0-9a-f]{6}$/i.test(fc)) info.fill = fc;
+        const mh = /mso-position-horizontal\s*:\s*(\w+)/i.exec(st);
+        if (mh) info.halign = mh[1];
+    }
+    return info;
+}
+
+// text boxes → one-cell tables (document order = infos order; a visible marker links table ↔ info)
+function docxTextBoxesToTables(doc) {
+    const { w: W, mc: MC } = DXT_NS;
+    const infos = [];
+    const mk = (n) => doc.createElementNS(W, 'w:' + n);
+    const isEl = (n) => n.nodeType === 1;
+    for (let pass = 0; pass < 6; pass++) {
+        const list = [...doc.getElementsByTagNameNS(W, 'txbxContent')]
+            .filter(t => !dxUp(t, MC, 'Fallback') && !dxUp(t, W, 'txbxContent'));
+        if (!list.length) break;
+        const units = new Map();                                        // shape → its text boxes (groups hold several)
+        for (const T of list) {
+            const unit = dxUp(T, MC, 'AlternateContent') || dxUp(T, W, 'pict') || dxUp(T, W, 'drawing');
+            if (!unit || !dxUp(unit, W, 'p')) continue;                 // can't place it → leave as is
+            if (!units.has(unit)) units.set(unit, []);
+            units.get(unit).push(T);
+        }
+        if (!units.size) break;
+        for (const [unit, boxes] of units) {
+            const host = dxUp(unit, W, 'p');
+            let after = host;
+            for (const T of boxes) {
+                const info = docxReadTextBox(unit, T);
+                const tbl = mk('tbl'), tblPr = mk('tblPr'), tblW = mk('tblW'), grid = mk('tblGrid'), gc = mk('gridCol');
+                tblW.setAttributeNS(W, 'w:w', '0'); tblW.setAttributeNS(W, 'w:type', 'auto'); tblPr.appendChild(tblW);
+                gc.setAttributeNS(W, 'w:w', String(Math.round((info.w || 400) * 15))); grid.appendChild(gc);
+                const tr = mk('tr'), tc = mk('tc');
+                while (T.firstChild) tc.appendChild(T.firstChild);
+                const els = [...tc.childNodes].filter(isEl);
+                if (!els.length || els[els.length - 1].localName !== 'p') tc.appendChild(mk('p'));
+                // marker in the first paragraph of the box
+                const marker = mk('r'), t = mk('t');
+                t.textContent = `[[TPLTB:${infos.length}]]`; marker.appendChild(t);
+                const first = [...tc.childNodes].filter(isEl)[0];
+                if (first.localName === 'p') {
+                    const pPr = dxKid(first, W, 'pPr');
+                    first.insertBefore(marker, pPr ? pPr.nextSibling : first.firstChild);
+                } else {
+                    const np = mk('p'); np.appendChild(marker); tc.insertBefore(np, first);
+                }
+                infos.push(info);
+                tr.appendChild(tc); tbl.appendChild(tblPr); tbl.appendChild(grid); tbl.appendChild(tr);
+                after.parentNode.insertBefore(tbl, after.nextSibling);
+                after = tbl;
+            }
+            unit.parentNode.removeChild(unit);                          // incl. Word's duplicate VML copy
+            // host paragraph left with nothing in it → drop it (not inside a table cell)
+            const hasStuff = ['t', 'drawing', 'pict', 'br', 'tab', 'sym', 'fldChar', 'instrText', 'object', 'sectPr']
+                .some(n => host.getElementsByTagNameNS(W, n).length);
+            if (!hasStuff && host.parentNode && host.parentNode.localName !== 'tc') host.parentNode.removeChild(host);
+        }
+    }
+    return infos;
+}
+
+// Prepares a copy of the package. Returns { buf, xml, textBoxes }; on any trouble the caller keeps the original.
+async function docxPrepare(buf) {
+    const zip = await JSZip.loadAsync(buf);
+    const f = zip.file('word/document.xml');
+    if (!f) throw new Error('no document.xml');
+    const parse = (s) => {
+        const d = new DOMParser().parseFromString(s, 'application/xml');
+        if (d.getElementsByTagName('parsererror').length) throw new Error('XML parse error');
+        return d;
+    };
+    const doc = parse(await f.async('string'));
+    const sf = zip.file('word/styles.xml');
+    const stylesDoc = sf ? parse(await sf.async('string')) : null;
+    const nAlign = docxMaterializeAlignment(doc, stylesDoc);
+    const textBoxes = docxTextBoxesToTables(doc);
+    const xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + new XMLSerializer().serializeToString(doc);
+    if (!nAlign && !textBoxes.length) return { buf, xml, textBoxes };
+    zip.file('word/document.xml', xml);
+    return { buf: await zip.generateAsync({ type: 'arraybuffer' }), xml, textBoxes };
+}
+
+// Gives each converted text-box table its Word look (border, fill, width, position, padding).
+function docxRestoreTextBoxes(d, textBoxes) {
+    const walker = d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) if (n.nodeValue.includes('[[TPLTB:')) nodes.push(n);
+    const leftPx = (typeof pageSettings !== 'undefined' && pageSettings?.margins?.left) ? pageSettings.margins.left * 96 / 25.4 : 0;
+    for (const node of nodes) {
+        const m = /\[\[TPLTB:(\d+)\]\]/.exec(node.nodeValue);
+        if (!m) continue;
+        node.nodeValue = node.nodeValue.replace(m[0], '');
+        const tbl = node.parentElement && node.parentElement.closest('table');
+        const info = textBoxes && textBoxes[+m[1]];
+        if (!tbl || !info) continue;
+        tbl.classList.add('tpl-textbox');
+        tbl.setAttribute('data-textbox', '1');
+        tbl.setAttribute('border', '0');
+        const s = tbl.style;
+        s.borderCollapse = 'collapse';
+        s.width = info.w ? info.w + 'px' : '100%';
+        s.maxWidth = '100%';
+        const gap = '6px';
+        if (info.halign === 'center') s.margin = `${gap} auto`;
+        else if (info.halign === 'right' || info.halign === 'outside') s.margin = `${gap} 0 ${gap} auto`;
+        else {
+            let off = info.hoff || 0;
+            if (info.hrel === 'page') off -= leftPx;
+            s.margin = `${gap} 0 ${gap} ${Math.min(700, Math.max(0, Math.round(off)))}px`;
+        }
+        const td = tbl.querySelector('td');
+        if (td) {
+            td.style.border = info.border;
+            if (info.fill) td.style.backgroundColor = info.fill;
+            td.style.padding = info.pad.map(v => v + 'px').join(' ');
+            if (info.h) td.style.height = info.h + 'px';
+            td.style.verticalAlign = info.valign || 'top';
+        }
+    }
+}
+
+// ---------------------------------------------
+// Full-fidelity Word -> HTML converter
+// Mammoth only produces *semantic* HTML (paragraphs, bold, headings) and throws away fonts, sizes,
+// colours, spacing, indents, borders and shading. This converter reads word/document.xml directly,
+// resolves the Word style chain (docDefaults -> table style -> paragraph style -> character style ->
+// direct formatting) and writes the result as inline CSS, so the editor shows what the Word file shows.
+//   - paragraphs: alignment, indents, spacing before/after, line spacing, borders, shading
+//   - runs: font, size, colour, bold/italic/underline/strike, highlight, caps, super/subscript
+//   - lists: real <ul>/<ol> with the right marker + level indent (odd marker formats become manual labels)
+//   - tables: grid widths, merged cells, borders, shading, cell padding, vertical alignment, row height
+//   - pictures: embedded as data: URLs with their Word size (layout info is attached via data-dx)
+// docxConvert() falls back to Mammoth if anything in here throws.
+// ---------------------------------------------
+const CXW = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+const CXR = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const CXWP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
+const CXA = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+const CXMC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+const CX_BREAK = { pageBreak: true };
+
+const cxKids = (n) => (n ? [...n.childNodes].filter(c => c.nodeType === 1) : []);
+const cxKid = (n, name, ns = CXW) => cxKids(n).find(c => c.localName === name && c.namespaceURI === ns) || null;
+const cxAttr = (n, name, ns = CXW) => (n && (n.getAttributeNS(ns, name) || n.getAttribute((ns === CXW ? 'w:' : ns === CXR ? 'r:' : '') + name))) || '';
+const cxVal = (n) => cxAttr(n, 'val');
+const cxNum = (s) => { const v = parseFloat(s); return Number.isFinite(v) ? v : undefined; };
+const cxOn = (n) => { if (!n) return undefined; const v = cxVal(n).toLowerCase(); return !(v === '0' || v === 'false' || v === 'off' || v === 'none'); };
+const cxEsc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const cxPx = (tw) => Math.round((tw / 15) * 100) / 100;            // twips -> CSS px
+const cxMerge = (...objs) => {
+    const out = {};
+    for (const o of objs) if (o) for (const k in o) if (o[k] !== undefined) out[k] = o[k];
+    return out;
+};
+
+const CX_HIGHLIGHT = {
+    yellow: '#ffff00', green: '#00ff00', cyan: '#00ffff', magenta: '#ff00ff', blue: '#0000ff', red: '#ff0000',
+    darkBlue: '#000080', darkCyan: '#008080', darkGreen: '#008000', darkMagenta: '#800080', darkRed: '#800000',
+    darkYellow: '#808000', darkGray: '#808080', lightGray: '#c0c0c0', black: '#000000', white: '#ffffff'
+};
+const CX_THEME_ALIAS = {
+    text1: 'dk1', background1: 'lt1', text2: 'dk2', background2: 'lt2', dark1: 'dk1', light1: 'lt1',
+    dark2: 'dk2', light2: 'lt2', hyperlink: 'hlink', followedHyperlink: 'folHlink'
+};
+const CX_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', jpe: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp', svg: 'image/svg+xml' };
+
+function cxFont(f) {
+    const n = String(f).replace(/['"]/g, '');
+    const generic = /mono|courier|consolas/i.test(n) ? 'monospace'
+        : /arial|helvetica|calibri|verdana|tahoma|segoe|trebuchet|sans|candara|corbel|gill|franklin|lucida|roboto|open/i.test(n) ? 'sans-serif'
+        : 'serif';
+    return `'${n}',${generic}`;
+}
+
+function cxHex(val, themeName, tint, shade, theme) {
+    if (/^[0-9a-f]{6}$/i.test(val || '')) return '#' + val;
+    if (!themeName) return '';
+    let hex = theme.colors[CX_THEME_ALIAS[themeName] || themeName];
+    if (!/^[0-9a-f]{6}$/i.test(hex || '')) return '';
+    let c = [0, 2, 4].map(i => parseInt(hex.substr(i, 2), 16));
+    const sh = tint ? null : (shade ? parseInt(shade, 16) / 255 : null);
+    if (tint) { const t = parseInt(tint, 16) / 255; c = c.map(v => 255 - (255 - v) * t); }
+    if (sh !== null) c = c.map(v => v * sh);
+    return '#' + c.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+}
+
+function cxParseTheme(doc) {
+    const t = { major: '', minor: '', colors: {} };
+    if (!doc) return t;
+    const font = (tag) => {
+        const e = doc.getElementsByTagNameNS(CXA, tag)[0];
+        const l = e && cxKid(e, 'latin', CXA);
+        return l ? (l.getAttribute('typeface') || '') : '';
+    };
+    t.major = font('majorFont'); t.minor = font('minorFont');
+    const cs = doc.getElementsByTagNameNS(CXA, 'clrScheme')[0];
+    cxKids(cs).forEach(c => {
+        const x = cxKids(c)[0];
+        const v = x && (x.getAttribute('val') || x.getAttribute('lastClr'));
+        if (v) t.colors[c.localName] = v;
+    });
+    return t;
+}
+
+// ---- property readers ------------------------------------------------------------------------
+function cxRPr(rPr, ctx) {
+    const o = {};
+    for (const c of cxKids(rPr)) {
+        switch (c.localName) {
+            case 'rFonts': {
+                let f = cxAttr(c, 'ascii') || cxAttr(c, 'hAnsi');
+                const th = cxAttr(c, 'asciiTheme') || cxAttr(c, 'hAnsiTheme');
+                if (!f && th) f = /major/i.test(th) ? ctx.theme.major : ctx.theme.minor;
+                if (f) o.font = f;
+                break;
+            }
+            case 'sz': { const v = cxNum(cxVal(c)); if (v) o.size = v / 2; break; }
+            case 'b': o.b = cxOn(c); break;
+            case 'i': o.i = cxOn(c); break;
+            case 'u': o.u = !!cxVal(c) && cxVal(c) !== 'none'; break;
+            case 'strike': case 'dstrike': o.strike = cxOn(c); break;
+            case 'caps': o.caps = cxOn(c); break;
+            case 'smallCaps': o.smallCaps = cxOn(c); break;
+            case 'vanish': o.hidden = cxOn(c); break;
+            case 'color': {
+                const h = cxHex(cxVal(c), cxAttr(c, 'themeColor'), cxAttr(c, 'themeTint'), cxAttr(c, 'themeShade'), ctx.theme);
+                if (h) o.color = h;
+                break;
+            }
+            case 'highlight': { const h = CX_HIGHLIGHT[cxVal(c)]; if (h) o.highlight = h; break; }
+            case 'shd': {
+                const h = cxHex(cxAttr(c, 'fill'), cxAttr(c, 'themeFill'), cxAttr(c, 'themeFillTint'), cxAttr(c, 'themeFillShade'), ctx.theme);
+                if (h) o.bg = h;
+                break;
+            }
+            case 'vertAlign': { const v = cxVal(c); if (v === 'superscript' || v === 'subscript') o.va = v; break; }
+            case 'spacing': { const v = cxNum(cxVal(c)); if (v) o.ls = v / 20; break; }
+        }
+    }
+    return o;
+}
+
+function cxBorderOf(c, ctx) {
+    const val = cxVal(c);
+    if (!val || val === 'nil' || val === 'none') return { none: true };
+    const sz = cxNum(cxAttr(c, 'sz')) || 4;
+    const color = cxHex(cxAttr(c, 'color'), cxAttr(c, 'themeColor'), cxAttr(c, 'themeTint'), cxAttr(c, 'themeShade'), ctx.theme) || '#000000';
+    return { val, sz, color, space: cxNum(cxAttr(c, 'space')) || 0 };
+}
+function cxBorderCss(b) {
+    if (!b) return '';
+    if (b.none) return 'none';
+    const style = /double/i.test(b.val) ? 'double' : /dotted/i.test(b.val) ? 'dotted' : /dash/i.test(b.val) ? 'dashed' : 'solid';
+    let px = Math.max(1, Math.round(b.sz / 6));
+    if (style === 'double') px = Math.max(3, px);
+    return `${px}px ${style} ${b.color}`;
+}
+function cxBorders(node, ctx) {
+    const o = {};
+    for (const c of cxKids(node)) {
+        const n = { start: 'left', end: 'right' }[c.localName] || c.localName;
+        if (['top', 'left', 'bottom', 'right', 'insideH', 'insideV', 'between'].includes(n)) o[n] = cxBorderOf(c, ctx);
+    }
+    return o;
+}
+function cxMar(node) {
+    const o = {};
+    for (const c of cxKids(node)) {
+        const n = { start: 'left', end: 'right' }[c.localName] || c.localName;
+        const v = cxNum(cxAttr(c, 'w'));
+        if (['top', 'left', 'bottom', 'right'].includes(n) && v !== undefined) o[n] = v;
+    }
+    return o;
+}
+
+function cxPPr(pPr, ctx) {
+    const o = {};
+    for (const c of cxKids(pPr)) {
+        switch (c.localName) {
+            case 'pStyle': o.style = cxVal(c); break;
+            case 'jc': o.jc = cxVal(c); break;
+            case 'ind': {
+                const l = cxNum(cxAttr(c, 'left') || cxAttr(c, 'start')), r = cxNum(cxAttr(c, 'right') || cxAttr(c, 'end'));
+                const fl = cxNum(cxAttr(c, 'firstLine')), h = cxNum(cxAttr(c, 'hanging'));
+                if (l !== undefined) o.left = l;
+                if (r !== undefined) o.right = r;
+                if (h !== undefined) o.first = -h; else if (fl !== undefined) o.first = fl;
+                break;
+            }
+            case 'spacing': {
+                const b = cxNum(cxAttr(c, 'before')), a = cxNum(cxAttr(c, 'after')), l = cxNum(cxAttr(c, 'line'));
+                if (b !== undefined) o.before = b;
+                if (a !== undefined) o.after = a;
+                if (cxAttr(c, 'beforeAutospacing') === '1') o.before = 280;
+                if (cxAttr(c, 'afterAutospacing') === '1') o.after = 280;
+                if (l !== undefined) { o.line = l; o.lineRule = cxAttr(c, 'lineRule') || 'auto'; }
+                break;
+            }
+            case 'contextualSpacing': o.ctxSpacing = cxOn(c); break;
+            case 'shd': { const h = cxHex(cxAttr(c, 'fill'), cxAttr(c, 'themeFill'), cxAttr(c, 'themeFillTint'), cxAttr(c, 'themeFillShade'), ctx.theme); if (h) o.bg = h; break; }
+            case 'pBdr': o.bdr = cxBorders(c, ctx); break;
+            case 'numPr': {
+                const id = cxKid(c, 'numId'), lv = cxKid(c, 'ilvl');
+                if (id) o.numId = cxVal(id);
+                if (lv) o.ilvl = cxVal(lv);
+                break;
+            }
+            case 'pageBreakBefore': o.pbb = cxOn(c); break;
+            case 'sectPr': o.sect = c; break;
+            case 'rPr': o.markR = cxRPr(c, ctx); break;
+        }
+    }
+    return o;
+}
+
+// ---- styles / numbering ----------------------------------------------------------------------
+function cxParseStyles(doc, ctx) {
+    const S = { map: {}, defP: {}, defR: {}, defaultPara: '', defaultTable: '' };
+    if (!doc) return S;
+    const dd = doc.getElementsByTagNameNS(CXW, 'docDefaults')[0];
+    if (dd) {
+        const r = cxKid(dd, 'rPrDefault'), p = cxKid(dd, 'pPrDefault');
+        S.defR = cxRPr(cxKid(r, 'rPr'), ctx);
+        S.defP = cxPPr(cxKid(p, 'pPr'), ctx);
+    }
+    for (const st of doc.getElementsByTagNameNS(CXW, 'style')) {
+        const id = cxAttr(st, 'styleId'), type = cxAttr(st, 'type');
+        const tblPr = cxKid(st, 'tblPr');
+        S.map[id] = {
+            id, type,
+            name: cxVal(cxKid(st, 'name')),
+            basedOn: cxVal(cxKid(st, 'basedOn')),
+            pPr: cxPPr(cxKid(st, 'pPr'), ctx),
+            rPr: cxRPr(cxKid(st, 'rPr'), ctx),
+            tbl: { borders: cxBorders(cxKid(tblPr, 'tblBorders'), ctx), mar: cxMar(cxKid(tblPr, 'tblCellMar')) }
+        };
+        if (cxAttr(st, 'default') === '1') {
+            if (type === 'paragraph') S.defaultPara = id;
+            if (type === 'table') S.defaultTable = id;
+        }
+    }
+    return S;
+}
+function cxChain(S, id) {
+    const chain = [], seen = new Set();
+    while (id && S.map[id] && !seen.has(id)) { seen.add(id); chain.unshift(S.map[id]); id = S.map[id].basedOn; }
+    return chain;
+}
+const cxStyleP = (S, id) => cxMerge(...cxChain(S, id).map(s => s.pPr));
+const cxStyleR = (S, id) => cxMerge(...cxChain(S, id).map(s => s.rPr));
+
+function cxParseNumbering(doc) {
+    const N = { abs: {}, num: {} };
+    if (!doc) return N;
+    for (const a of doc.getElementsByTagNameNS(CXW, 'abstractNum')) {
+        const lvls = {};
+        for (const l of cxKids(a).filter(k => k.localName === 'lvl')) {
+            const pPr = cxKid(l, 'pPr'), ind = cxKid(pPr, 'ind');
+            const left = cxNum(cxAttr(ind, 'left') || cxAttr(ind, 'start')), h = cxNum(cxAttr(ind, 'hanging')), fl = cxNum(cxAttr(ind, 'firstLine'));
+            lvls[cxAttr(l, 'ilvl')] = {
+                fmt: cxVal(cxKid(l, 'numFmt')) || 'decimal',
+                text: cxVal(cxKid(l, 'lvlText')),
+                start: cxNum(cxVal(cxKid(l, 'start'))) ?? 1,
+                left, first: h !== undefined ? -h : fl
+            };
+        }
+        N.abs[cxAttr(a, 'abstractNumId')] = { lvls };
+    }
+    for (const n of doc.getElementsByTagNameNS(CXW, 'num')) {
+        const ov = {};
+        for (const o of cxKids(n).filter(k => k.localName === 'lvlOverride')) {
+            const so = cxKid(o, 'startOverride');
+            if (so) ov[cxAttr(o, 'ilvl')] = cxNum(cxVal(so));
+        }
+        N.num[cxAttr(n, 'numId')] = { abs: cxVal(cxKid(n, 'abstractNumId')), overrides: ov, started: false };
+    }
+    return N;
+}
+
+const CX_BULLET_MAP = { '\uF0B7': 'disc', '\uF0A7': 'square', '\uF0A8': 'square', '\uF076': 'square', '\u2022': 'disc', '\u25CF': 'disc', 'o': 'circle', '\u25E6': 'circle', '\u25AA': 'square', '\u25A0': 'square', '\u00A7': 'square' };
+function cxFormatNumber(n, fmt) {
+    const roman = (v) => { const m = [[1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'], [100, 'c'], [90, 'xc'], [50, 'l'], [40, 'xl'], [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i']]; let s = ''; for (const [k, r] of m) while (v >= k) { s += r; v -= k; } return s; };
+    const alpha = (v) => { let s = ''; while (v > 0) { v--; s = String.fromCharCode(97 + (v % 26)) + s; v = Math.floor(v / 26); } return s; };
+    switch (fmt) {
+        case 'lowerLetter': return alpha(n);
+        case 'upperLetter': return alpha(n).toUpperCase();
+        case 'lowerRoman': return roman(n);
+        case 'upperRoman': return roman(n).toUpperCase();
+        case 'decimalZero': return (n < 10 ? '0' : '') + n;
+        default: return String(n);
+    }
+}
+const CX_LIST_TYPE = { decimal: 'decimal', decimalZero: 'decimal-leading-zero', lowerLetter: 'lower-alpha', upperLetter: 'upper-alpha', lowerRoman: 'lower-roman', upperRoman: 'upper-roman', ordinal: 'decimal', cardinalText: 'decimal', ordinalText: 'decimal' };
+
+/** Counter value for this list paragraph (Word counts per abstract list, restarting deeper levels). */
+function cxCount(ctx, numId, ilvl) {
+    const num = ctx.N.num[numId], abs = num && ctx.N.abs[num.abs];
+    if (!abs) return null;
+    const c = (ctx.counters[num.abs] = ctx.counters[num.abs] || []);
+    if (!num.started) {
+        num.started = true;
+        for (const k in num.overrides) c[+k] = num.overrides[k] - 1;
+    }
+    const lv = +ilvl;
+    const def = abs.lvls[ilvl] || abs.lvls['0'] || { start: 1 };
+    c[lv] = (c[lv] === undefined ? (def.start - 1) : c[lv]) + 1;
+    for (let j = lv + 1; j < c.length; j++) c[j] = undefined;
+    return { n: c[lv], all: c.slice(), abs };
+}
+
+// ---- inline content --------------------------------------------------------------------------
+function cxRunCss(eff, base) {
+    const css = [];
+    if (eff.font && eff.font !== base.font) css.push('font-family:' + cxFont(eff.font));
+    if (eff.size && eff.size !== base.size) css.push(`font-size:${eff.size}pt`);
+    if (eff.color && eff.color !== base.color) css.push('color:' + eff.color);
+    const bg = eff.highlight || eff.bg;
+    if (bg && bg !== (base.highlight || base.bg)) css.push('background-color:' + bg);
+    if (!!eff.caps !== !!base.caps) css.push('text-transform:' + (eff.caps ? 'uppercase' : 'none'));
+    if (!!eff.smallCaps !== !!base.smallCaps) css.push('font-variant:' + (eff.smallCaps ? 'small-caps' : 'normal'));
+    if (eff.ls && eff.ls !== base.ls) css.push(`letter-spacing:${eff.ls}pt`);
+    return css;
+}
+function cxWrap(inner, eff, base) {
+    let h = inner;
+    if (eff.va) h = `<${eff.va === 'superscript' ? 'sup' : 'sub'}>${h}</${eff.va === 'superscript' ? 'sup' : 'sub'}>`;
+    if (eff.strike && !base.strike) h = `<s>${h}</s>`;
+    if (eff.u && !base.u) h = `<u>${h}</u>`;
+    const css = cxRunCss(eff, base);
+    if (!!eff.i !== !!base.i) { if (eff.i) h = `<em>${h}</em>`; else css.push('font-style:normal'); }
+    if (!!eff.b !== !!base.b) { if (eff.b) h = `<strong>${h}</strong>`; else css.push('font-weight:normal'); }
+    if (css.length) h = `<span style="${cxEsc(css.join(';'))}">${h}</span>`;
+    return h;
+}
+const cxText = (s) => cxEsc(s).replace(/ {2,}/g, m => ' ' + '&nbsp;'.repeat(m.length - 1));
+const CX_TAB = '<span style="display:inline-block;width:48px">&nbsp;</span>';
+
+function cxImageHtml(ctx, rid, w, h, alt, info) {
+    const src = ctx.images[rid];
+    if (!src) return '';
+    const style = w > 0 ? ` style="width:${Math.round(w)}px;height:auto"` : '';
+    const dx = info ? ` data-dx="${cxEsc(JSON.stringify(info))}"` : '';
+    return `<img src="${src}" alt="${cxEsc(alt || '')}"${style}${dx}>`;
+}
+
+/** Pictures inside one run child (w:drawing / w:pict / mc:AlternateContent). One entry per picture, in document order. */
+function cxMedia(ctx, node) {
+    let out = '';
+    const state = ctx.state;
+    if (node.namespaceURI === CXMC) {
+        const ch = node.localName === 'AlternateContent' ? cxKid(node, 'Choice', CXMC) : null;
+        for (const k of cxKids(ch)) out += cxMedia(ctx, k);
+        return out;
+    }
+    if (node.namespaceURI !== CXW) return out;
+    if (node.localName === 'drawing') {
+        const host = cxKid(node, 'inline', CXWP) || cxKid(node, 'anchor', CXWP);
+        if (!host) return out;
+        const ext = cxKid(host, 'extent', CXWP), pr = cxKid(host, 'docPr', CXWP);
+        const w = ext ? (parseFloat(ext.getAttribute('cx')) || 0) / 9525 : 0;
+        const blips = [...node.getElementsByTagNameNS(CXA, 'blip')].filter(b => cxAttr(b, 'embed', CXR) || cxAttr(b, 'link', CXR));
+        for (const b of blips) {
+            const idx = state ? state.i++ : -1;
+            const info = state && state.infos ? state.infos[idx] : null;
+            const rid = cxAttr(b, 'embed', CXR) || cxAttr(b, 'link', CXR);
+            const html = cxImageHtml(ctx, rid, blips.length === 1 ? w : 0, 0, pr ? pr.getAttribute('descr') : '', info);
+            if (!html) ctx.messages.push('A picture could not be embedded (unsupported format, e.g. EMF/WMF).');
+            out += html;
+        }
+    } else if (node.localName === 'pict') {
+        for (const im of [...node.getElementsByTagName('*')].filter(e => e.localName === 'imagedata')) {
+            if (state) state.i++;
+            const rid = cxAttr(im, 'id', CXR);
+            let w = 0;
+            const shape = im.parentNode;
+            const m = shape && /width:\s*([\d.]+)pt/i.exec(shape.getAttribute('style') || '');
+            if (m) w = parseFloat(m[1]) * 4 / 3;
+            out += cxImageHtml(ctx, rid, w, 0, '', null);
+        }
+    }
+    return out;
+}
+
+function cxRun(ctx, r, base, items) {
+    const rPr = cxKid(r, 'rPr');
+    const rs = cxKid(rPr, 'rStyle');
+    const eff = cxMerge(base, rs ? cxStyleR(ctx.S, cxVal(rs)) : null, cxRPr(rPr, ctx));
+    let inner = '';
+    const flush = () => { if (inner) { items.push(cxWrap(inner, eff, base)); inner = ''; } };
+    for (const c of cxKids(r)) {
+        if (c.namespaceURI === CXMC || c.localName === 'drawing' || c.localName === 'pict') {
+            flush();
+            const m = cxMedia(ctx, c);
+            if (m) items.push(m);
+            continue;
+        }
+        if (c.namespaceURI !== CXW || eff.hidden) continue;
+        switch (c.localName) {
+            case 't': inner += cxText(c.textContent); break;
+            case 'tab': inner += CX_TAB; break;
+            case 'br': {
+                const t = cxAttr(c, 'type');
+                if (t === 'page') { flush(); items.push(CX_BREAK); }
+                else if (t !== 'column') inner += '<br>';
+                break;
+            }
+            case 'cr': inner += '<br>'; break;
+            case 'noBreakHyphen': inner += '\u2011'; break;
+            case 'sym': { const ch = cxAttr(c, 'char'); if (ch) inner += cxEsc(String.fromCharCode(parseInt(ch, 16))); break; }
+        }
+    }
+    flush();
+}
+
+function cxInline(ctx, node, base, items) {
+    for (const c of cxKids(node)) {
+        if (c.namespaceURI === CXMC) {
+            const ch = c.localName === 'AlternateContent' ? cxKid(c, 'Choice', CXMC) : null;
+            if (ch) cxInline(ctx, ch, base, items);
+            continue;
+        }
+        if (c.namespaceURI !== CXW) continue;
+        switch (c.localName) {
+            case 'r': cxRun(ctx, c, base, items); break;
+            case 'hyperlink': {
+                const rid = cxAttr(c, 'id', CXR);
+                const rel = rid && ctx.rels[rid];
+                const href = rel && rel.external && /^(https?:|mailto:|tel:)/i.test(rel.target) ? rel.target : '';
+                const sub = [];
+                cxInline(ctx, c, base, sub);
+                if (href && sub.every(s => typeof s === 'string')) items.push(`<a href="${cxEsc(href)}" target="_blank" rel="noopener">${sub.join('')}</a>`);
+                else items.push(...sub);
+                break;
+            }
+            case 'ins': case 'moveTo': case 'smartTag': case 'customXml': case 'fldSimple': case 'sdt': case 'sdtContent':
+                cxInline(ctx, c.localName === 'sdt' ? (cxKid(c, 'sdtContent') || c) : c, base, items);
+                break;
+            // w:del / w:moveFrom (deleted text), bookmarks, proofing marks: ignored
+        }
+    }
+}
+
+// ---- paragraphs ------------------------------------------------------------------------------
+function cxParaInfo(ctx, p, scope) {
+    const direct = cxPPr(cxKid(p, 'pPr'), ctx);
+    const styleId = direct.style || ctx.S.defaultPara;
+    const sp = cxStyleP(ctx.S, styleId);
+    const sr = cxStyleR(ctx.S, styleId);
+    const numId = direct.numId !== undefined ? direct.numId : sp.numId;
+    const ilvl = direct.ilvl !== undefined ? direct.ilvl : (sp.ilvl !== undefined ? sp.ilvl : '0');
+    let lvl = null, num = null;
+    if (numId && numId !== '0' && ctx.N.num[numId]) {
+        num = ctx.N.num[numId];
+        const abs = ctx.N.abs[num.abs];
+        lvl = abs && (abs.lvls[ilvl] || abs.lvls['0']) || null;
+    }
+    const lvlInd = lvl ? { left: lvl.left, first: lvl.first } : null;
+    const pr = cxMerge(ctx.S.defP, scope.tblP, sp, lvlInd, direct);
+    const base = cxMerge(ctx.S.defR, scope.tblR, sr);
+    const style = ctx.S.map[styleId];
+    const sname = (style && style.name || '').toLowerCase();
+    let tag = 'p';
+    const hm = /^heading (\d)$/.exec(sname);
+    if (hm) tag = 'h' + Math.min(6, +hm[1]);
+    else if (sname === 'title') tag = 'h1';
+    else if (sname === 'subtitle') tag = 'h2';
+    return { p, direct, pr, base, styleId, tag, numId: lvl ? numId : null, ilvl, lvl, mark: direct.markR || {} };
+}
+
+function cxParaCss(info, opts) {
+    const { pr, base } = info;
+    const css = [];
+    const jc = { center: 'center', right: 'right', end: 'right', both: 'justify', distribute: 'justify' }[pr.jc];
+    if (jc) css.push('text-align:' + jc);
+    const top = opts.noTop ? 0 : cxPx(pr.before || 0), bottom = opts.noBottom ? 0 : cxPx(pr.after || 0);
+    if (opts.list) css.push(`margin-top:${top}px;margin-bottom:${bottom}px`);
+    else css.push(`margin:${top}px ${cxPx(pr.right || 0)}px ${bottom}px ${cxPx(pr.left || 0)}px`);
+    if (!opts.list && pr.first) css.push(`text-indent:${cxPx(pr.first)}px`);
+    if (pr.line) {
+        if (!pr.lineRule || pr.lineRule === 'auto') {
+            const f = /calibri|segoe|candara|corbel/i.test(base.font || '') ? 1.22 : 1.15;
+            css.push(`line-height:${Math.round((pr.line / 240) * f * 1000) / 1000}`);
+        } else css.push(`line-height:${cxPx(pr.line)}px`);
+    }
+    if (pr.bg) css.push('background-color:' + pr.bg);
+    if (pr.bdr) {
+        for (const side of ['top', 'bottom', 'left', 'right']) {
+            const b = pr.bdr[side];
+            if (b && !b.none) css.push(`border-${side}:${cxBorderCss(b)};padding-${side}:${Math.round((b.space || 1) * 4 / 3)}px`);
+        }
+    }
+    const b = opts.empty ? cxMerge(base, info.mark) : base;
+    if (b.font) css.push('font-family:' + cxFont(b.font));
+    if (b.size) css.push(`font-size:${b.size}pt`);
+    if (b.color) css.push('color:' + b.color);
+    if (b.b) css.push('font-weight:bold'); else if (/^h\d$/.test(info.tag)) css.push('font-weight:normal');
+    if (b.i) css.push('font-style:italic');
+    if (b.caps) css.push('text-transform:uppercase');
+    if (b.smallCaps) css.push('font-variant:small-caps');
+    if (b.ls) css.push(`letter-spacing:${b.ls}pt`);
+    if (b.u || b.strike) css.push('text-decoration:' + [b.u ? 'underline' : '', b.strike ? 'line-through' : ''].filter(Boolean).join(' '));
+    if (/^h\d$/.test(info.tag)) css.push('font-size:' + (b.size || 12) + 'pt');
+    return css.join(';');
+}
+
+function cxItemsHtml(items) {
+    return items.filter(i => typeof i === 'string').join('');
+}
+
+// ---- blocks (paragraphs, lists, tables) ------------------------------------------------------
+function cxBlocks(parent) {
+    const out = [];
+    const walk = (n) => cxKids(n).forEach(c => {
+        if (c.namespaceURI === CXMC) { const ch = c.localName === 'AlternateContent' ? cxKid(c, 'Choice', CXMC) : null; if (ch) walk(ch); return; }
+        if (c.namespaceURI !== CXW) return;
+        if (c.localName === 'p' || c.localName === 'tbl') out.push(c);
+        else if (c.localName === 'sdt') walk(cxKid(c, 'sdtContent') || c);
+        else if (['sdtContent', 'ins', 'customXml', 'smartTag'].includes(c.localName)) walk(c);
+    });
+    walk(parent);
+    return out;
+}
+
+const CX_NO_SCOPE = { tblP: null, tblR: null };
+
+function cxBlocksHtml(ctx, blocks, scope) {
+    const infos = blocks.map(b => (b.localName === 'p' ? cxParaInfo(ctx, b, scope) : null));
+    let out = '';
+    const stack = [];     // open lists: { level, tag, key, left }
+    const closeAll = () => { while (stack.length) { out += `</li></${stack.pop().tag}>`; } };
+
+    blocks.forEach((b, i) => {
+        if (b.localName === 'tbl') { closeAll(); out += cxTable(ctx, b); return; }
+        const info = infos[i];
+        const prev = infos[i - 1], next = infos[i + 1];
+        const cs = info.pr.ctxSpacing;
+        const opts = {
+            noTop: cs && prev && prev.styleId === info.styleId,
+            noBottom: cs && next && next.styleId === info.styleId
+        };
+
+        const items = [];
+        cxInline(ctx, b, info.base, items);
+        if (info.direct.pbb) items.unshift(CX_BREAK);
+        const sect = info.direct.sect;
+        const sectType = sect ? (cxVal(cxKid(sect, 'type')) || 'nextPage') : '';
+        const hasContent = items.some(it => it !== CX_BREAK && String(it).replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim() !== '' || /<img/i.test(String(it)));
+        const hasText = items.some(it => it !== CX_BREAK);
+
+        // ---- list item
+        if (info.numId) {
+            const counter = cxCount(ctx, info.numId, info.ilvl);
+            const lvl = info.lvl;
+            const text = lvl.text || '';
+            const placeholders = (text.match(/%\d/g) || []).length;
+            const isBullet = lvl.fmt === 'bullet';
+            const nativeOrdered = !isBullet && lvl.fmt !== 'none' && placeholders === 1 && /^%\d\.?$/.test(text) && /\.$/.test(text) === true;
+            if (isBullet || nativeOrdered) {
+                const L = +info.ilvl;
+                const tag = isBullet ? 'ul' : 'ol';
+                let type = isBullet ? (CX_BULLET_MAP[text.charAt(0)] || (text.trim() ? `"${text.charAt(0)}  "` : 'disc')) : (CX_LIST_TYPE[lvl.fmt] || 'decimal');
+                const key = info.numId + '|' + tag + '|' + type;
+                const left = Math.max(cxPx(info.pr.left || 0), 18);
+                while (stack.length && (stack[stack.length - 1].level > L || (stack[stack.length - 1].level === L && stack[stack.length - 1].key !== key))) {
+                    out += `</li></${stack.pop().tag}>`;
+                }
+                if (stack.length && stack[stack.length - 1].level === L) out += '</li>';
+                else {
+                    const parentLeft = stack.length ? stack[stack.length - 1].left : 0;
+                    const start = (!isBullet && counter && counter.n !== 1) ? ` start="${counter.n}"` : '';
+                    out += `<${tag}${start} style="margin:0;padding-left:${Math.max(left - parentLeft, 14)}px;list-style-type:${cxEsc(type)}">`;
+                    stack.push({ level: L, tag, key, left });
+                }
+                const lcss = cxParaCss(info, Object.assign({}, opts, { list: true, empty: !hasText }));
+                out += `<li style="${cxEsc(lcss)}">${hasText ? cxItemsHtml(items) : '<br>'}`;
+                return;
+            }
+            // other marker formats: "(a)", "1.1", "a)" ... -> manual label with a hanging indent
+            closeAll();
+            let label = text;
+            if (lvl.fmt === 'none') label = '';
+            else {
+                label = label.replace(/%(\d)/g, (m, d) => {
+                    const k = +d - 1;
+                    const lv = counter.abs.lvls[String(k)] || lvl;
+                    const v = counter.all[k] === undefined ? lv.start : counter.all[k];
+                    return cxFormatNumber(v, lv.fmt);
+                });
+            }
+            const hang = Math.max(cxPx(-(info.pr.first || 0)), 18);
+            const lab = label ? `<span style="display:inline-block;min-width:${hang}px;text-indent:0">${cxEsc(label)}</span>` : '';
+            const css = cxParaCss(info, Object.assign({}, opts, { empty: !hasText }));
+            out += `<${info.tag} style="${cxEsc(css)}">${lab}${hasText ? cxItemsHtml(items) : ''}${!hasText && !lab ? '<br>' : ''}</${info.tag}>`;
+            return;
+        }
+
+        // ---- ordinary paragraph (split at page breaks)
+        closeAll();
+        if (sect && !hasContent && !items.some(it => it === CX_BREAK)) {          // empty paragraph that only carries a section break
+            if (sectType !== 'continuous' && i < blocks.length) out += '<hr class="tpl-pagebreak">';
+            return;
+        }
+        const chunks = [[]];
+        for (const it of items) { if (it === CX_BREAK) chunks.push([]); else chunks[chunks.length - 1].push(it); }
+        chunks.forEach((chunk, ci) => {
+            const text = chunk.join('');
+            const empty = !text.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim() && !/<img/i.test(text) && !chunk.length;
+            if (ci > 0) out += '<hr class="tpl-pagebreak">';
+            if (ci > 0 && !chunk.length) return;                                     // nothing after the break
+            if (ci === 0 && !chunk.length && chunks.length > 1) return;              // paragraph was only a page break
+            const css = cxParaCss(info, Object.assign({}, opts, { empty }));
+            out += `<${info.tag} style="${cxEsc(css)}">${chunk.length ? text : '<br>'}</${info.tag}>`;
+        });
+        if (sect && sectType !== 'continuous') out += '<hr class="tpl-pagebreak">';
+    });
+    closeAll();
+    return out;
+}
+
+// ---- tables ----------------------------------------------------------------------------------
+function cxTable(ctx, tbl) {
+    const tblPr = cxKid(tbl, 'tblPr');
+    const styleId = cxVal(cxKid(tblPr, 'tblStyle')) || ctx.S.defaultTable;
+    const chain = cxChain(ctx.S, styleId);
+    const scope = { tblP: cxMerge(...chain.map(s => s.pPr)), tblR: cxMerge(...chain.map(s => s.rPr)) };
+    const borders = Object.assign({}, ...chain.map(s => s.tbl.borders), cxBorders(cxKid(tblPr, 'tblBorders'), ctx));
+    const mar = Object.assign({ top: 0, bottom: 0, left: 108, right: 108 }, ...chain.map(s => s.tbl.mar), cxMar(cxKid(tblPr, 'tblCellMar')));
+
+    let grid = cxKids(cxKid(tbl, 'tblGrid')).map(g => cxNum(cxAttr(g, 'w')) || 0);
+    const trs = cxKids(tbl).filter(c => c.localName === 'tr' && c.namespaceURI === CXW);
+
+    // model: rows -> cells with their grid column
+    const rows = trs.map(tr => {
+        const trPr = cxKid(tr, 'trPr');
+        const cells = [];
+        let col = cxNum(cxVal(cxKid(trPr, 'gridBefore'))) || 0;
+        const before = col;
+        const collect = (parent) => cxKids(parent).forEach(c => {
+            if (c.namespaceURI !== CXW) return;
+            if (c.localName === 'sdt') { collect(cxKid(c, 'sdtContent') || c); return; }
+            if (c.localName !== 'tc') return;
+            const tcPr = cxKid(c, 'tcPr');
+            const span = cxNum(cxVal(cxKid(tcPr, 'gridSpan'))) || 1;
+            const vm = cxKid(tcPr, 'vMerge');
+            cells.push({ tc: c, tcPr, col, span, vm: vm ? (cxVal(vm) === 'restart' ? 'restart' : 'cont') : '' , rowspan: 1 });
+            col += span;
+        });
+        collect(tr);
+        const hRow = cxKid(trPr, 'trHeight');
+        return { cells, before, after: cxNum(cxVal(cxKid(trPr, 'gridAfter'))) || 0, height: hRow ? cxNum(cxAttr(hRow, 'val')) : 0, ncols: col };
+    });
+    const maxCols = Math.max(grid.length, ...rows.map(r => r.ncols + r.after), 1);
+    if (!grid.length) {
+        grid = new Array(maxCols).fill(0);
+        rows.forEach(r => r.cells.forEach(c => { const w = cxNum(cxAttr(cxKid(c.tcPr, 'tcW'), 'w')); if (w && c.span === 1 && !grid[c.col]) grid[c.col] = w; }));
+        grid = grid.map(w => w || 1440);
+    }
+    // vertical merges -> rowspan
+    rows.forEach((r, ri) => r.cells.forEach(c => {
+        if (c.vm !== 'restart') return;
+        for (let k = ri + 1; k < rows.length; k++) {
+            const below = rows[k].cells.find(x => x.col === c.col);
+            if (below && below.vm === 'cont') { c.rowspan++; below.skip = true; } else break;
+        }
+    }));
+
+    // table-level geometry
+    const tw = cxKid(tblPr, 'tblW');
+    const twType = cxAttr(tw, 'type'), twVal = cxNum(cxAttr(tw, 'w'));
+    const sum = grid.reduce((a, b) => a + b, 0);
+    let width = `${cxPx(sum)}px`;
+    if (twType === 'pct' && twVal) width = (twVal > 100 ? twVal / 50 : twVal) + '%';
+    else if (twType === 'dxa' && twVal) width = `${cxPx(twVal)}px`;
+    const jc = cxVal(cxKid(tblPr, 'jc'));
+    const ind = cxNum(cxAttr(cxKid(tblPr, 'tblInd'), 'w')) || 0;
+    const align = jc === 'center' ? 'margin-left:auto;margin-right:auto' : (jc === 'right' || jc === 'end') ? 'margin-left:auto;margin-right:0' : `margin-left:${cxPx(ind)}px`;
+
+    let html = `<table style="border-collapse:collapse;table-layout:fixed;width:${width};max-width:100%;${align}"><colgroup>` +
+        grid.map(w => `<col style="width:${cxPx(w)}px">`).join('') + '</colgroup><tbody>';
+
+    rows.forEach((r, ri) => {
+        html += `<tr${r.height ? ` style="height:${cxPx(r.height)}px"` : ''}>`;
+        if (r.before) html += `<td colspan="${r.before}" style="border:none;padding:0"></td>`;
+        r.cells.forEach(c => {
+            if (c.skip) return;
+            const lastRow = ri + c.rowspan - 1 >= rows.length - 1;
+            const lastCol = c.col + c.span >= grid.length;
+            const own = cxBorders(cxKid(c.tcPr, 'tcBorders'), ctx);
+            const edge = {
+                top: own.top || (ri === 0 ? borders.top : borders.insideH),
+                bottom: own.bottom || (lastRow ? borders.bottom : borders.insideH),
+                left: own.left || (c.col === 0 ? borders.left : borders.insideV),
+                right: own.right || (lastCol ? borders.right : borders.insideV)
+            };
+            const css = [];
+            for (const side of ['top', 'right', 'bottom', 'left']) { const v = cxBorderCss(edge[side]); if (v) css.push(`border-${side}:${v}`); }
+            const cm = Object.assign({}, mar, cxMar(cxKid(c.tcPr, 'tcMar')));
+            css.push(`padding:${cxPx(cm.top)}px ${cxPx(cm.right)}px ${cxPx(cm.bottom)}px ${cxPx(cm.left)}px`);
+            const shd = cxKid(c.tcPr, 'shd');
+            const fill = shd && cxHex(cxAttr(shd, 'fill'), cxAttr(shd, 'themeFill'), cxAttr(shd, 'themeFillTint'), cxAttr(shd, 'themeFillShade'), ctx.theme);
+            if (fill) css.push('background-color:' + fill);
+            const va = cxVal(cxKid(c.tcPr, 'vAlign'));
+            css.push('vertical-align:' + (va === 'center' ? 'middle' : va === 'bottom' ? 'bottom' : 'top'));
+            const inner = cxBlocksHtml(ctx, cxBlocks(c.tc), scope);
+            html += `<td${c.span > 1 ? ` colspan="${c.span}"` : ''}${c.rowspan > 1 ? ` rowspan="${c.rowspan}"` : ''} style="${cxEsc(css.join(';'))}">${inner || '<p><br></p>'}</td>`;
+        });
+        if (r.after) html += `<td colspan="${r.after}" style="border:none;padding:0"></td>`;
+        html += '</tr>';
+    });
+    return html + '</tbody></table>';
+}
+
+// ---- entry point -----------------------------------------------------------------------------
+/** @returns {Promise<{value:string, messages:Array}>} same shape Mammoth returns. */
+async function docxToHtmlFull(buf, state) {
+    const zip = await JSZip.loadAsync(buf);
+    const read = async (path) => { const f = zip.file(path); return f ? f.async('string') : ''; };
+    const parse = (s, strict) => {
+        if (!s) return null;
+        const d = new DOMParser().parseFromString(s, 'application/xml');
+        if (d.getElementsByTagName('parsererror').length) { if (strict) throw new Error('XML parse error'); return null; }
+        return d;
+    };
+    const docXml = parse(await read('word/document.xml'), true);
+    const body = docXml.getElementsByTagNameNS(CXW, 'body')[0];
+    if (!body) throw new Error('document has no body');
+
+    const ctx = { theme: cxParseTheme(parse(await read('word/theme/theme1.xml'))), messages: [], counters: {}, images: {}, rels: {}, state };
+    ctx.S = cxParseStyles(parse(await read('word/styles.xml')), ctx);
+    ctx.N = cxParseNumbering(parse(await read('word/numbering.xml')));
+
+    // relationships (images are read up-front so the conversion itself can stay synchronous)
+    const relDoc = parse(await read('word/_rels/document.xml.rels'));
+    if (relDoc) {
+        for (const r of relDoc.getElementsByTagName('Relationship')) {
+            const id = r.getAttribute('Id'), target = r.getAttribute('Target') || '';
+            const external = r.getAttribute('TargetMode') === 'External';
+            ctx.rels[id] = { target, external };
+            if (!/\/image$/.test(r.getAttribute('Type') || '') || external) continue;
+            const parts = (target.startsWith('/') ? target.slice(1) : 'word/' + target).split('/');
+            const path = []; parts.forEach(p => { if (p === '..') path.pop(); else if (p !== '.') path.push(p); });
+            const f = zip.file(path.join('/'));
+            const mime = CX_MIME[(path[path.length - 1].split('.').pop() || '').toLowerCase()];
+            if (f && mime) ctx.images[id] = `data:${mime};base64,${await f.async('base64')}`;
+        }
+    }
+    const value = cxBlocksHtml(ctx, cxBlocks(body), CX_NO_SCOPE);
+    return { value, messages: [...new Set(ctx.messages)].map(m => ({ type: 'warning', message: m })) };
+}
+
+/** Converts the Word file (full-fidelity converter, Mammoth as fallback) with picture infos attached; if the picture count doesn't match, no layout is applied. */
+async function docxConvert(buf, xmlForInfos) {
+    let prepared = { buf, xml: xmlForInfos, textBoxes: [] };
+    try { prepared = await docxPrepare(buf); }
+    catch (err) { console.warn('Alignment / text-box pre-pass skipped:', err); }
+    let infos = null;
+    try { infos = docxImageInfos(prepared.xml); } catch (err) { console.warn('Could not read picture layout:', err); }
+    const state = { infos, i: 0 };
+    let res;
+    try {
+        // Full-fidelity converter: keeps fonts, sizes, colours, spacing, indents, borders, shading...
+        res = await docxToHtmlFull(prepared.buf, state);
+    } catch (err) {
+        console.warn('Full-fidelity .docx converter failed, using the basic converter instead:', err);
+        state.i = 0;
+        res = await mammoth.convertToHtml({ arrayBuffer: prepared.buf }, docxMammothOptions(state));
+    }
+    if (infos && state.i !== infos.length) {
+        console.warn(`Picture layout skipped: Word has ${infos.length} pictures, ${state.i} were converted.`);
+        res.value = res.value.replace(/\sdata-dx="[^"]*"/g, '');
+    }
+    res.textBoxes = prepared.textBoxes;
+    return res;
+}
+
+/**
+ * Turns the temporary data-dx info into real image layout:
+ *   behind text -> "Behind text" (free position)      in front / no wrap -> "In front" (free position)
+ *   wrapped (square / tight / through) -> wrap left / right / centered      top & bottom -> centered
+ *   in line with text -> unchanged
+ * Position (page / margin / paragraph relative, offsets or alignment) and size come from the Word file.
+ */
+async function applyDocxImageLayouts() {
+    if (!editor || !editor.getBody) return;
+    const body = editor.getBody();
+    const imgs = [...body.querySelectorAll('img[data-dx]')];
+    if (!imgs.length) return;
+
+    // wait for the pictures so paragraph positions are final
+    await Promise.race([
+        Promise.all(imgs.map(i => i.complete ? null : new Promise(r => { i.addEventListener('load', r, { once: true }); i.addEventListener('error', r, { once: true }); }))),
+        new Promise(r => setTimeout(r, 3000))
+    ]);
+
+    const items = [];
+    imgs.forEach(img => {
+        let info = null;
+        try { info = JSON.parse(img.getAttribute('data-dx')); } catch (_) { /* ignore */ }
+        img.removeAttribute('data-dx');
+        if (info && info.t === 'a') items.push({ img, info });
+    });
+    if (!items.length) { schedulePaginate(); return; }
+
+    // take free-position pictures out of the text flow first, so they don't push the paragraphs down
+    items.forEach(({ img, info }) => {
+        if (info.behind || info.wrap === 'wrapNone') img.style.position = 'absolute';
+    });
+    paginateEditor();
+
+    const g = pageGeometry(pageSettings);
+    const mL = g.s.margins.left * MM_PX, mR = g.s.margins.right * MM_PX;
+    const mT = g.s.margins.top * MM_PX, mB = g.s.margins.bottom * MM_PX;
+    const pageW = g.w * MM_PX, pageH = g.h * MM_PX;
+    const P = sheetPitch();
+    const cs = editor.getWin().getComputedStyle(body);
+    const br = body.getBoundingClientRect();
+    const originTop = br.top + (parseFloat(cs.borderTopWidth) || 0);
+
+    // measure every anchor paragraph before anything changes
+    items.forEach(it => {
+        const holder = it.img.closest('p,h1,h2,h3,h4,h5,h6,li,td,th,div') || it.img.parentElement;
+        const r = holder.getBoundingClientRect();
+        it.paraTop = r.top - originTop;
+        it.hf = !!it.img.closest('.tpl-hf');
+        it.hfKind = it.img.closest('.tpl-hf')?.getAttribute('data-hf') || '';
+    });
+
+    editor.undoManager.ignore(() => {
+        items.forEach(({ img, info, paraTop, hf, hfKind }) => {
+            const w = info.w > 0 ? info.w : (img.naturalWidth || 100);
+            const h = info.h > 0 ? info.h : (img.naturalHeight || 100);
+            const k = hf ? 0 : Math.max(0, Math.floor(paraTop / P));
+            const pageTop = k * P;
+
+            // ---- horizontal (px from the page's left edge)
+            const hBase = { page: 0, margin: mL, column: mL, leftMargin: mL, insideMargin: mL, character: mL, paragraph: mL, rightMargin: pageW - mR, outsideMargin: pageW - mR };
+            const hArea = { page: pageW, margin: pageW - mL - mR, column: pageW - mL - mR, leftMargin: mL, rightMargin: mR, insideMargin: mL, outsideMargin: mR };
+            let x;
+            const hb = hBase[info.hrel] ?? 0, ha = hArea[info.hrel] ?? (pageW - mL - mR);
+            if (info.halign === 'left' || info.halign === 'inside') x = hb;
+            else if (info.halign === 'center') x = hb + (ha - w) / 2;
+            else if (info.halign === 'right' || info.halign === 'outside') x = hb + ha - w;
+            else x = hb + info.hoff;
+
+            // ---- vertical (px from the top of the document, page k)
+            let vBase, vArea;
+            switch (info.vrel) {
+                case 'margin': case 'topMargin': vBase = pageTop + mT; vArea = pageH - mT - mB; break;
+                case 'bottomMargin':             vBase = pageTop + pageH - mB; vArea = mB; break;
+                case 'paragraph': case 'line': case 'insideMargin': case 'outsideMargin':
+                    vBase = hf ? (hfKind === 'footer' ? pageTop + pageH - mB : pageTop + 12.7 * MM_PX) : paraTop;
+                    vArea = h; break;
+                default:                         vBase = pageTop; vArea = pageH;          // page
+            }
+            let y;
+            if (info.valign === 'top') y = vBase;
+            else if (info.valign === 'center') y = vBase + (vArea - h) / 2;
+            else if (info.valign === 'bottom') y = vBase + vArea - h;
+            else y = vBase + info.voff;
+
+            // ---- layout
+            let mode;
+            if (info.behind) mode = 'behind';
+            else if (info.wrap === 'wrapNone') mode = 'front';
+            else if (info.wrap === 'wrapTopAndBottom') mode = 'center';
+            else {
+                const cx = x + w / 2;
+                if (info.halign === 'left' || cx < mL + (pageW - mL - mR) / 3) mode = 'left';
+                else if (info.halign === 'right' || cx > mL + 2 * (pageW - mL - mR) / 3) mode = 'right';
+                else mode = 'center';
+            }
+            const free = mode === 'behind' || mode === 'front';
+            applyImageLayout(img, mode, free
+                ? { x, y, width: w, repeat: hf }
+                : { width: w });
+        });
+    });
+
+    schedulePaginate();
+    refreshImagePanel();
 }
 
 // Mammoth only reads the document body, so Word headers / footers (letterhead logos, office name,
@@ -1531,6 +2758,7 @@ async function extractHeaderFooterHtml(buf) {
         try {
             const zip = await JSZip.loadAsync(buf);                       // fresh copy; never touch the original
             let partXml = await partFile.async('string');
+            const partXmlOriginal = partXml;
             const tag = kind === 'header' ? 'hdr' : 'ftr';
             partXml = partXml
                 .replace(/r:(embed|id|link)="([^"]+)"/g, 'r:$1="hf_$2"')  // avoid rId clashes with document rels
@@ -1550,10 +2778,8 @@ async function extractHeaderFooterHtml(buf) {
                 zip.file('word/_rels/document.xml.rels', rels);
             }
 
-            const res = await mammoth.convertToHtml(
-                { arrayBuffer: await zip.generateAsync({ type: 'arraybuffer' }) },
-                docxMammothOptions());
-            const html = docxHtmlForEditor(res.value);
+            const res = await docxConvert(await zip.generateAsync({ type: 'arraybuffer' }), partXmlOriginal);
+            const html = docxHtmlForEditor(res.value, res.textBoxes);
             if (html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim() || /<img/i.test(html)) out[kind] = html;
         } catch (err) {
             console.warn(`Could not read the Word ${kind}:`, err);
@@ -1608,10 +2834,6 @@ async function onDocxChosen(e) {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file || !editor) return;
-    if (typeof mammoth === 'undefined') {
-        showToast('The .docx import library could not be loaded.', 5000);
-        return;
-    }
     if (typeof JSZip === 'undefined') {
         showToast('The .docx reader (JSZip) could not be loaded.', 5000);
         return;
@@ -1633,7 +2855,7 @@ async function onDocxChosen(e) {
 
         // 2) Convert for display in TinyMCE (images stay embedded as data: URLs; they are
         //    uploaded to the image host when the template is saved).
-        const result = await mammoth.convertToHtml({ arrayBuffer: buf }, docxMammothOptions());
+        const result = await docxConvert(buf, await zip.file('word/document.xml').async('string'));
         const hf = await extractHeaderFooterHtml(buf);
 
         // 3) Only now replace the previously stored original, so a failed import keeps the old one.
@@ -1660,9 +2882,11 @@ async function onDocxChosen(e) {
 
         setEditorContent(
             (hf.header ? `<div class="tpl-hf" data-hf="header">${hf.header}</div>` : '') +
-            docxHtmlForEditor(result.value) +
+            docxHtmlForEditor(result.value, result.textBoxes) +
             (hf.footer ? `<div class="tpl-hf" data-hf="footer">${hf.footer}</div>` : ''));
         applyPageToEditor();
+        try { await applyDocxImageLayouts(); }
+        catch (err) { console.warn('Could not apply the Word picture layout:', err); }
         setDirty(true);
         const n = (result.messages || []).length;
         const hfNote = (hf.header || hf.footer)
@@ -1733,30 +2957,8 @@ async function exportOriginalDocx() {
 async function exportDocx() {
     if (!editor || !current) return;
 
-    // Original saved earlier → reload it from the image host so its headers / footers survive a page reload.
-    if (!originalDocxBuffer && storedOriginal?.url) {
-        try {
-            const r = await fetch(storedOriginal.url);
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            originalDocxBuffer = await r.arrayBuffer();
-            originalDocxFile = { name: storedOriginal.name };
-        } catch (err) {
-            console.warn('Could not load stored original .docx:', err);
-        }
-    }
-
-    // An original .docx is available (imported now, or restored from the image host) → export that file as-is.
-    if (originalDocxBuffer) {
-        try {
-            await exportOriginalDocx();
-        } catch (err) {
-            console.error(err);
-            showToast('Export failed: ' + (err.message || err), 5000);
-        }
-        return;
-    }
-
-    // No imported original → keep the previous behaviour (editor content → .docx via html-docx-js)
+    // Always export the current editor content. An imported/original DOCX is optional;
+    // edits made in this template editor must never be bypassed during export.
     if (typeof htmlDocx === 'undefined') {
         showToast('The .docx export library could not be loaded.', 5000);
         return;
@@ -1767,23 +2969,23 @@ async function exportDocx() {
 
         const mm = (v) => Math.round(v * 56.7); // mm → twips
         const m = pageSettings.margins;
-        const full = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${baseCss('body')}</style></head><body>${html}</body></html>`;
+        const full = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${baseCss('body')}
+` +
+            '.tpl-textbox{box-sizing:border-box;border:1px solid #777;padding:8px 10px;margin:6px 0;min-height:42px;} ' +
+            '.tpl-section-box{box-sizing:border-box;border:1px solid #777;padding:10px;margin:8px 0;} ' +
+            '.tpl-shape-rect{display:inline-block;width:120px;height:48px;border:2px solid #16834a;background:#e9f5ee;} ' +
+            '.tpl-shape-vline{display:inline-block;width:0;height:80px;border-left:2px solid #16834a;} ' +
+            '</style></head><body>' + html + '</body></html>';
         const blob = htmlDocx.asBlob(full, {
             orientation: pageSettings.orientation,
             margins: { top: mm(m.top), right: mm(m.right), bottom: mm(m.bottom), left: mm(m.left) }
         });
 
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `${current.name.replace(/[^a-zA-Z0-9._-]+/g, '_')}_template.docx`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-
+        const filename = `${current.name.replace(/[^a-zA-Z0-9._-]+/g, '_')}_template.docx`;
+        downloadBlob(blob, filename);
         showToast(failed
             ? `Exported. ${failed} image(s) could not be embedded (browser blocked access).`
-            : 'Template exported as .docx', 4500);
+            : 'Current template exported as .docx.', 4500);
     } catch (err) {
         console.error(err);
         showToast('Export failed: ' + (err.message || err), 5000);
