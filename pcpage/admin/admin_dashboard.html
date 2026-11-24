@@ -326,7 +326,7 @@
         <div>
           <div class="avail-label">Request Availability</div>
           <div class="avail-status"><span class="avail-dot"></span><span id="availTitle">Loading…</span></div>
-          <p class="avail-sub" id="availSub">Auto: opens 9:00 AM, closes 5:00 PM (Mon–Fri)</p>
+          <p class="avail-sub" id="availSub">Auto: opens 8:00 AM, closes 5:00 PM (Mon–Fri)</p>
         </div>
         <button class="avail-btn close" id="availToggle" type="button" disabled>…</button>
       </div>
@@ -418,7 +418,7 @@
     if (status.open) {
       sub.textContent = status.source === 'manual'
         ? 'Manually opened \u2022 auto-closes ' + formatReopen(status.closeAt).replace(/^today /, 'at ')
-        : 'Auto: open 9:00 AM \u2013 5:00 PM (Mon\u2013Fri)';
+        : 'Auto: open 8:00 AM \u2013 5:00 PM (Mon\u2013Fri)';
       btn.textContent = 'Close for now'; btn.className = 'avail-btn close';
     } else {
       closeForm();
