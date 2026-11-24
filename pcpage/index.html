@@ -527,6 +527,40 @@
       background: rgba(255,255,255,0.06);
     }
     .location-map iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+    .location-contact {
+      max-width: 1200px; margin: 40px auto 0;
+      padding-top: 32px;
+      border-top: 1px solid rgba(255,255,255,0.12);
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+    }
+    .contact-item {
+      display: flex; align-items: flex-start; gap: 14px;
+      padding: 18px 20px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 14px;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .contact-item:hover { background: rgba(255,255,255,0.11); border-color: rgba(79,195,247,0.3); }
+    .contact-icon {
+      flex-shrink: 0;
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      background: rgba(79,195,247,0.15);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .contact-icon svg { width: 20px; height: 20px; stroke: var(--accent); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .contact-label {
+      font-size: 12px; font-weight: 800; letter-spacing: 0.8px;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 4px;
+    }
+    .contact-value {
+      font-size: 14px; line-height: 1.6;
+      color: rgba(255,255,255,0.75);
+      text-decoration: none; word-break: break-word;
+    }
+    a.contact-value:hover { color: #fff; text-decoration: underline; }
     
     .hiw-section {
     background: #E3E4E5;
@@ -691,6 +725,7 @@
       .info-strip { padding: 60px 24px; }
       .location { padding: 56px 24px 40px; }
       .location-inner { grid-template-columns: 1fr; gap: 28px; }
+      .location-contact { grid-template-columns: 1fr; margin-top: 32px; padding-top: 24px; }
       footer { flex-direction: column; gap: 16px; text-align: center; }
       .footer-links { flex-wrap: wrap; justify-content: center; }
       .final-cta { padding: 60px 24px; }
@@ -864,27 +899,7 @@
           </a>
         </div>
 
-        <div class="hero-doc-types">
-          <p>Available documents</p>
-          <div class="doc-chips">
-            <div class="doc-chip">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              Barangay Clearance
-            </div>
-            <div class="doc-chip">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              Certificate of Residency
-            </div>
-            <div class="doc-chip">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              Certificate of Indigency
-            </div>
-            <div class="doc-chip">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              Business Clearance
-            </div>
-          </div>
-        </div>
+        
       </div>
     </div>
   </section>
@@ -1124,6 +1139,35 @@
         <iframe title="Barangay Banicain Hall location"
           src="https://www.google.com/maps?q=Barangay+Banicain+Hall+Olongapo+City&output=embed"
           loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
+      </div>
+    </div>
+    <div class="location-contact fade-in">
+      <div class="contact-item">
+        <div class="contact-icon">
+          <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <div>
+          <div class="contact-label">Location</div>
+          <div class="contact-value">Barangay Banicain Hall, Olongapo City, Zambales</div>
+        </div>
+      </div>
+      <div class="contact-item">
+        <div class="contact-icon">
+          <svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        </div>
+        <div>
+          <div class="contact-label">Contact Number</div>
+          <a class="contact-value" href="tel:+630000000000">(0XX) XXX-XXXX</a>
+        </div>
+      </div>
+      <div class="contact-item">
+        <div class="contact-icon">
+          <svg viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        </div>
+        <div>
+          <div class="contact-label">Email</div>
+          <a class="contact-value" href="mailto:barangaybanicain@example.com">barangaybanicain@example.com</a>
+        </div>
       </div>
     </div>
   </section>
