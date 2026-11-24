@@ -407,10 +407,47 @@ async function closeEditor() {
     setView('list');
 }
 
+/** Saves each free-position image's spot in data- attributes, which survive saving (inline position styles were being lost). */
+function syncOverlayData() {
+    if (!editor) return;
+    editor.getBody().querySelectorAll('img[data-layout="behind"],img[data-layout="front"]').forEach(img => {
+        const x = parseFloat(img.style.left), y = parseFloat(img.style.top), w = parseFloat(img.style.width);
+        if (Number.isFinite(x) && Number.isFinite(y)) {
+            img.setAttribute('data-x', x.toFixed(1));
+            img.setAttribute('data-y', y.toFixed(1));
+        }
+        if (Number.isFinite(w)) img.setAttribute('data-w', w.toFixed(1));
+    });
+}
+
+/** Puts behind / in-front images back at their saved spot after a template is loaded. */
+function restoreOverlayPositions() {
+    if (!editor) return;
+    editor.getBody().querySelectorAll('img[data-layout="behind"],img[data-layout="front"]').forEach(img => {
+        if (img.style.position === 'absolute') return;
+        const x = parseFloat(img.getAttribute('data-x')), y = parseFloat(img.getAttribute('data-y'));
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+        const w = parseFloat(img.getAttribute('data-w'));
+        applyImageLayout(img, img.getAttribute('data-layout'),
+            { x, y, width: w > 0 ? w : undefined, repeat: img.hasAttribute('data-repeat') });
+    });
+    // A paragraph holding ONLY free-position images collapses to zero height once they leave the flow,
+    // which pulls all the text below it upwards. Give it back its one empty line (a trailing <br> would be
+    // stripped by TinyMCE, so a non-breaking space is used).
+    editor.getBody().querySelectorAll('p').forEach(p => {
+        if (p.textContent.length !== 0 || p.querySelector('br')) return;
+        const kids = [...p.children];
+        if (!kids.length) return;
+        const onlyOverlays = kids.every(k => k.tagName === 'IMG' && ['behind', 'front'].includes(k.getAttribute('data-layout')));
+        if (onlyOverlays) p.appendChild(p.ownerDocument.createTextNode('\u00a0'));
+    });
+}
+
 function setEditorContent(html) {
     if (!editor) return;
     loadingContent = true;
     editor.setContent(html);
+    restoreOverlayPositions();
     editor.undoManager?.clear();
     editor.undoManager?.add();
     loadingContent = false;
@@ -1343,6 +1380,7 @@ async function saveTemplate() {
     setSaving(true);
     try {
         await editor.uploadImages();                    // push pasted / picked images to the image host
+        syncOverlayData();
         let html = editor.getContent();
         html = await externalizeDataImages(html);       // e.g. images that came from a .docx
         html = sanitizeHtml(html);
@@ -3168,7 +3206,7 @@ async function applyDocxImageLayouts() {
         const inFlow = [...holder.childNodes].some(n =>
             (n.nodeType === 3 && n.textContent.trim()) ||
             (n.nodeType === 1 && !(n.tagName === 'IMG' && n.style.position === 'absolute')));
-        if (!inFlow) holder.appendChild(holder.ownerDocument.createElement('br'));
+        if (!inFlow) holder.appendChild(holder.ownerDocument.createTextNode('\u00a0'));   // not <br>: TinyMCE drops a trailing <br> on save/reload
     });
     paginateEditor();
 
