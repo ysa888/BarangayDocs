@@ -133,8 +133,18 @@ function viewUser(uid, data) {
     statusBadge.textContent = lbl;
 
     // Valid ID + Face photo (shown for pending, approved and rejected users)
-    renderPhoto('modal-valid-id-wrap', 'modal-open-id-btn', data.validIdUrl, 'Valid ID', 'No ID uploaded');
+    const nonRes = data.residencyType === 'non-resident';
+    renderPhoto('modal-valid-id-wrap', 'modal-open-id-btn', data.validIdUrl, 'Valid ID',
+        nonRes ? 'No ID provided (optional for non-residents)' : 'No ID uploaded');
     renderPhoto('modal-face-wrap', 'modal-open-face-btn', data.faceUrl, 'Face photo', 'No face photo uploaded');
+
+    // Non-resident (boarder): tag, label change, and landlord consent image
+    el('modal-restype').style.display = nonRes ? 'inline-block' : 'none';
+    el('modal-years-label').textContent = nonRes ? 'Length of Stay' : 'Years of Residency';
+    el('modal-consent-section').style.display = nonRes ? 'block' : 'none';
+    if (nonRes) {
+        renderPhoto('modal-consent-wrap', 'modal-open-consent-btn', data.consentUrl, 'Landlord consent', 'No landlord consent uploaded');
+    }
 
     el('user-modal').classList.add('open');
 }
@@ -251,6 +261,7 @@ function buildRow(uid, data) {
         <div class="col-contact"><span>${data.contactNumber || '—'}</span></div>
         <div class="col-date"><span>${formatDate(data.createdAt)}</span></div>
         <div class="col-brgy"><span>${[data.houseNumber, data.street].filter(Boolean).join(' ') || '—'}</span></div>
+        <div class="col-restype">${data.residencyType === 'non-resident' ? '<span class="badge nonres">Non-Resident</span>' : '<span class="badge res">Resident</span>'}</div>
         <div class="col-status"><span class="badge waiting">Waiting</span></div>
         <div class="col-action">
             <div class="action-row">

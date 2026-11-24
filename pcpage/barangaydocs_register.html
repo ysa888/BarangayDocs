@@ -708,6 +708,145 @@
       object-fit: cover;
     }
 
+
+    /* =============================================
+       RESIDENCY TYPE + LANDLORD CONSENT STYLES
+       ============================================= */
+    .res-type-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .res-type-card {
+      position: relative;
+      margin-bottom: 0 !important;
+      display: block;
+      cursor: pointer;
+    }
+
+    .res-type-card input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .res-type-body {
+      height: 100%;
+      border: 2px solid var(--border);
+      border-radius: 13px;
+      padding: 14px 12px;
+      background: var(--bg);
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .res-type-body strong {
+      display: block;
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-sub);
+      text-align: center;
+    }
+
+    .res-type-body span {
+      display: block;
+      font-size: 12px;
+      color: var(--text-sub);
+      line-height: 1.45;
+      font-weight: 600;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .res-type-card:hover .res-type-body { border-color: var(--primary-light); }
+
+    .res-type-card input:checked + .res-type-body {
+      border-color: var(--primary-light);
+      background: #F2F6FC;
+    }
+
+    .res-type-card input:checked + .res-type-body strong {
+      color: var(--primary-light);
+    }
+
+    .res-type-card input:focus-visible + .res-type-body {
+      outline: 3px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .consent-section {
+      display: none;
+      border: 2px solid var(--border);
+      border-left: 5px solid var(--primary-light);
+      border-radius: 13px;
+      padding: 16px 16px 18px;
+      margin-bottom: 18px;
+      background: #FBFCFE;
+    }
+
+    .consent-section.show { display: block; }
+
+    .consent-note {
+      font-size: 12px;
+      color: var(--text-sub);
+      line-height: 1.6;
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+
+    .consent-section .field:last-child { margin-bottom: 0; }
+
+    .opt-tag {
+      font-weight: 700;
+      color: var(--text-light);
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .req-tag {
+      font-weight: 800;
+      color: var(--error);
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .cam-stage.doc-mode video { transform: none; }
+    .cam-stage.doc-mode .cam-guide { display: none; }
+
+    @media (max-width: 560px) {
+      .res-type-grid { grid-template-columns: 1fr; }
+    }
+
+    /* =============================================
+       VALIDATION ERRORS (soft red box + *)
+       ============================================= */
+    .field.has-error > label::after,
+    .terms-row.has-error > label::after {
+      content: ' *';
+      color: #E5707C;
+      font-weight: 800;
+    }
+
+    .field.has-error .input-wrap input,
+    .field.has-error .input-wrap select {
+      border-color: #F3BCC1;
+      background: #FFF9F9;
+    }
+
+    .field.has-error .id-upload-box,
+    .field.has-error .face-box,
+    .field.has-error .res-type-body {
+      border-color: #F3BCC1;
+      background: #FFF9F9;
+    }
+
+    .terms-row.has-error input[type="checkbox"] {
+      outline: 2px solid #F3BCC1;
+      outline-offset: 2px;
+    }
+
     /* Camera modal */
     .cam-box { max-width: 460px; }
 
@@ -1333,7 +1472,7 @@
       <div class="step-panel" id="panel2">
         <div class="form-header">
           <h1>Home Address, Valid ID & Face Photo</h1>
-          <p>Step 2 of 3 &bull; Enter your address, upload a valid ID, and add a face photo</p>
+          <p id="step2-subtitle">Step 2 of 3 &bull; Enter your address, upload a valid ID, and add a face photo</p>
         </div>
 
         <div class="field">
@@ -1392,9 +1531,9 @@
         </div>
 
         <div class="field">
-          <label>Years of Residency</label>
+          <label id="years-label">Years of Residency</label>
           <div class="input-wrap">
-            <input id="years-residency" type="number" placeholder="e.g. 5" min="0">
+            <input id="years-residency" type="number" placeholder="e.g. 5" min="0" step="any">
           </div>
         </div>
 
@@ -1403,9 +1542,73 @@
              Accepted: School ID, National ID, PhilHealth ID,
              Barangay ID, Passport, Driver's License
              ============================================= -->
+        <!-- Residency status -->
+        <div class="field">
+          <label>Residency Status</label>
+          <div class="res-type-grid" role="radiogroup" aria-label="Residency Status">
+            <label class="res-type-card">
+              <input type="radio" name="residency-type" id="res-type-resident" value="resident">
+              <div class="res-type-body">
+                <strong>Permanent Resident</strong>
+              </div>
+            </label>
+            <label class="res-type-card">
+              <input type="radio" name="residency-type" id="res-type-boarder" value="non-resident">
+              <div class="res-type-body">
+                <strong>Transient / Boarder</strong>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- =============================================
+             LANDLORD CONSENT (only for non-residents / boarders)
+             ============================================= -->
+        <div class="consent-section" id="consent-section">
+          <div class="consent-note">
+            Since you are staying in Banicain but are not a resident, please provide a signed consent from your
+            landlord or the owner of the place where you are staying. You can upload a photo or take a picture of it.
+          </div>
+
+          <div class="field">
+            <label>Landlord Consent <span class="req-tag">(required)</span></label>
+
+            <div class="face-box" id="consent-box">
+              <span class="id-upload-icon">📄</span>
+              <div class="id-upload-title">Add the landlord's consent letter</div>
+              <div class="id-upload-hint">JPG, PNG, WEBP &bull; Max 5MB</div>
+
+              <div class="face-actions">
+                <button type="button" class="face-btn primary" id="consent-camera-btn">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h4l2-3h6l2 3h4v11H3z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>
+                  Take a Picture
+                </button>
+                <button type="button" class="face-btn" id="consent-upload-btn">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"></path><path d="M7 9l5-5 5 5"></path><path d="M4 20h16"></path></svg>
+                  Upload Photo
+                </button>
+              </div>
+              <input type="file" id="consent-file" accept="image/*" hidden>
+
+              <div class="face-tips">
+                Make sure the whole letter is visible and readable,<br>
+                with the landlord's name and signature.
+              </div>
+            </div>
+
+            <div class="id-preview-area" id="consent-preview-area">
+              <img id="consent-preview-img" src="" alt="Landlord Consent Preview">
+              <div class="id-preview-info">
+                <span>Consent ready: <span id="consent-file-name"></span></span>
+                <button class="id-remove-btn" id="consent-remove-btn" type="button">✕ Remove</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="verify-grid">
         <div class="field">
-          <label>Upload Valid ID</label>
+          <label>Upload Valid ID <span class="opt-tag" id="id-optional-tag" style="display:none;">(optional)</span></label>
 
           <div class="id-upload-box" id="id-upload-box">
             <input type="file" id="valid-id" accept="image/*">
@@ -1598,8 +1801,8 @@
       <div class="modal-body">
         <h4>1. Data We Collect</h4>
         <p>We collect personal information including your full name, date of birth, sex, civil status, home address,
-          years of residency, contact number, and email address. We also collect a photo of your valid ID and a photo of
-          your face. These are used only by authorized Barangay personnel to confirm that you are the person on the
+          years of residency, contact number, and email address. We also collect a photo of your valid ID, a photo of
+          your face, and, for non-residents staying in the barangay, a landlord consent letter. These are used only by authorized Barangay personnel to confirm that you are the person on the
           ID and a resident of Barangay Banicain.</p>
 
         <h4>2. How We Use Your Data</h4>
@@ -1630,11 +1833,11 @@
   <div class="modal-overlay" id="modal-camera">
     <div class="modal-box cam-box">
       <div class="modal-header">
-        <h3>Take a Face Photo</h3>
+        <h3 id="cam-title">Take a Face Photo</h3>
         <button class="modal-close" id="close-camera" type="button">✕</button>
       </div>
       <div class="modal-body">
-        <div class="cam-stage">
+        <div class="cam-stage" id="cam-stage">
           <video id="cam-video" autoplay playsinline muted></video>
           <div class="cam-guide"></div>
         </div>
