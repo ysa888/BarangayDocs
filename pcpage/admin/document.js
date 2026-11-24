@@ -103,6 +103,21 @@ onAuthStateChanged(auth, async (user) => {
 let allDocs          = []; // cached list of { id, ...docData, requestCount }
 let pendingDeleteId  = null;
 let pendingDeleteName = '';
+let editingId        = null; // null = adding, otherwise the doc being edited
+let selectedIcon     = '';
+let sessionIcons     = []; // custom icons uploaded in this modal session
+
+const DEFAULT_ICON = 'Icons/barangayclearance.png';
+const BUILTIN_ICONS = [
+    { path: 'Icons/barangayclearance.png',               label: 'Barangay Clearance' },
+    { path: 'Icons/certificateofresidency.png',          label: 'Certificate of Residency' },
+    { path: 'Icons/certificateofindigency.png',          label: 'Certificate of Indigency' },
+    { path: 'Icons/barangaybusinessclearance.png',       label: 'Business Clearance' },
+    { path: 'Icons/firsttimejobseekercertificate.png',   label: 'Job Seeker Certificate' },
+    { path: 'Icons/certificateofgoodmoralcharacter.png', label: 'Good Moral Character' },
+    { path: 'Icons/soloparentcertificate.png',           label: 'Solo Parent Certificate' },
+    { path: 'Icons/workingpermit.png',                   label: 'Working Permit' }
+];
 
 // =============================================
 // Init Page
@@ -130,6 +145,7 @@ function initPage(user, adminData) {
         if (e.target === el('add-doc-modal')) closeAddModal();
     });
     el('save-doc-btn')?.addEventListener('click', saveDocument);
+    el('icon-file')?.addEventListener('change', handleIconUpload);
 
     // Delete confirm
     el('cancel-delete')?.addEventListener('click', closeDeleteModal);
@@ -241,6 +257,7 @@ function renderTable(docs) {
 
     // Wire buttons after DOM is updated
     docs.forEach(d => {
+        el(`edit-${d.id}`)?.addEventListener('click', () => openEditModal(d.id));
         el(`toggle-${d.id}`)?.addEventListener('click', () => toggleStatus(d.id, d.status));
         el(`delete-${d.id}`)?.addEventListener('click', () => openDeleteModal(d.id, d.name));
     });
@@ -260,7 +277,7 @@ function buildRow(d) {
         <div class="table-row">
             <div class="col-icon-sm">
                 <div class="doc-icon-sm">
-                    <img src="${escHtml(d.icon || 'Icons/barangayclearance.png')}" alt=""
+                    <img src="${escHtml(d.icon || DEFAULT_ICON)}" alt=""
                          onerror="this.style.display='none'">
                 </div>
             </div>
@@ -279,6 +296,7 @@ function buildRow(d) {
             </div>
             <div class="col-action">
                 <div class="action-row">
+                    <button class="btn-edit" id="edit-${d.id}">Edit</button>
                     <button class="${toggleClass}" id="toggle-${d.id}">${toggleLabel}</button>
                     <button class="btn-delete" id="delete-${d.id}">Delete</button>
                 </div>
@@ -301,20 +319,133 @@ async function toggleStatus(docId, currentStatus) {
 }
 
 // =============================================
-// Add Document Modal
+// Icon Picker
 // =============================================
-function openAddModal() {
-    el('input-name').value = '';
-    el('input-desc').value = '';
-    el('input-icon').selectedIndex = 0;
-    el('save-label').textContent   = 'Save Document';
-    el('save-doc-btn').disabled    = false;
+function customIconsFromDocs() {
+    // Custom (uploaded) icons already used by saved documents, de-duplicated
+    const builtins = new Set(BUILTIN_ICONS.map(i => i.path));
+    const seen = new Set();
+    allDocs.forEach(d => {
+        if (d.icon && !builtins.has(d.icon)) seen.add(d.icon);
+    });
+    return [...seen];
+}
+
+function renderIconPicker() {
+    const grid = el('icon-grid');
+    if (!grid) return;
+
+    const tiles = BUILTIN_ICONS.map(i => ({ path: i.path, label: i.label }));
+    const customs = [...new Set([...customIconsFromDocs(), ...sessionIcons])];
+    customs.forEach(p => tiles.push({ path: p, label: 'Custom icon' }));
+
+    // Keep an icon that is selected but not in the list (e.g. editing an old doc)
+    if (selectedIcon && !tiles.some(t => t.path === selectedIcon)) {
+        tiles.push({ path: selectedIcon, label: 'Current icon' });
+    }
+
+    grid.innerHTML = tiles.map(t => `
+        <button type="button" class="icon-tile${t.path === selectedIcon ? ' selected' : ''}"
+                data-icon="${escHtml(t.path)}" title="${escHtml(t.label)}">
+            <img src="${escHtml(t.path)}" alt="">
+        </button>
+    `).join('') + `
+        <button type="button" class="icon-tile add-tile" id="icon-add-btn" title="Upload custom icon">
+            <span class="material-symbols-outlined">add</span>
+        </button>
+    `;
+
+    grid.querySelectorAll('.icon-tile[data-icon]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            selectedIcon = btn.dataset.icon;
+            renderIconPicker();
+        });
+    });
+    el('icon-add-btn')?.addEventListener('click', () => el('icon-file')?.click());
+}
+
+// Resize to a small PNG data URL so it stays tiny inside Firestore
+function fileToIconDataUrl(file, size = 96) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Could not read file.'));
+        reader.onload = () => {
+            const img = new Image();
+            img.onerror = () => reject(new Error('That file is not a valid image.'));
+            img.onload = () => {
+                const scale = Math.min(size / img.width, size / img.height, 1);
+                const w = Math.max(1, Math.round(img.width * scale));
+                const h = Math.max(1, Math.round(img.height * scale));
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                resolve(canvas.toDataURL('image/png'));
+            };
+            img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+async function handleIconUpload(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking the same file later
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+        showToast('Please choose an image file.');
+        return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+        showToast('Image is too large (max 2 MB).');
+        return;
+    }
+
+    try {
+        const dataUrl = await fileToIconDataUrl(file);
+        sessionIcons.push(dataUrl);
+        selectedIcon = dataUrl;
+        renderIconPicker();
+    } catch (err) {
+        showToast(err.message);
+    }
+}
+
+// =============================================
+// Add / Edit Document Modal (one popup, two modes)
+// =============================================
+function openModal(doc = null) {
+    editingId     = doc ? doc.id : null;
+    sessionIcons  = [];
+    selectedIcon  = doc?.icon || DEFAULT_ICON;
+
+    el('modal-title').textContent        = doc ? 'Edit Document'  : 'Add New Document Type';
+    el('modal-sub').textContent          = doc ? 'Update the details shown to residents' : 'This document will appear in the resident request form';
+    el('modal-header-label').textContent = 'Document Details';
+
+    el('input-name').value = doc?.name || '';
+    el('input-desc').value = doc?.description || '';
+    el('save-label').textContent = doc ? 'Save Changes' : 'Save Document';
+    el('save-doc-btn').disabled  = false;
+
+    renderIconPicker();
     el('add-doc-modal')?.classList.add('open');
     setTimeout(() => el('input-name')?.focus(), 80);
 }
 
+function openAddModal() {
+    openModal(null);
+}
+
+function openEditModal(id) {
+    const d = allDocs.find(x => x.id === id);
+    if (d) openModal(d);
+}
+
 function closeAddModal() {
     el('add-doc-modal')?.classList.remove('open');
+    editingId = null;
 }
 
 async function saveDocument() {
@@ -325,9 +456,9 @@ async function saveDocument() {
         return;
     }
 
-    // Prevent duplicate names (case-insensitive)
+    // Prevent duplicate names (case-insensitive), ignoring the doc being edited
     const isDuplicate = allDocs.some(
-        d => d.name.toLowerCase() === name.toLowerCase()
+        d => d.id !== editingId && (d.name || '').toLowerCase() === name.toLowerCase()
     );
     if (isDuplicate) {
         showToast(`"${name}" already exists in the list.`);
@@ -336,7 +467,9 @@ async function saveDocument() {
     }
 
     const desc = el('input-desc')?.value.trim() || '';
-    const icon = el('input-icon')?.value        || 'Icons/barangayclearance.png';
+    const icon = selectedIcon || DEFAULT_ICON;
+    const isEdit = !!editingId;
+    const idleLabel = isEdit ? 'Save Changes' : 'Save Document';
 
     const btn   = el('save-doc-btn');
     const label = el('save-label');
@@ -344,20 +477,29 @@ async function saveDocument() {
     label.innerHTML  = '<div class="spinner"></div> Saving…';
 
     try {
-        await addDoc(collection(db, 'documents'), {
-            name,
-            description: desc,
-            icon,
-            status:    'active',
-            createdAt: serverTimestamp()
-        });
-
-        closeAddModal();
-        showToast(`"${name}" added successfully ✓`);
+        if (isEdit) {
+            await updateDoc(doc(db, 'documents', editingId), {
+                name,
+                description: desc,
+                icon
+            });
+            closeAddModal();
+            showToast(`"${name}" updated ✓`);
+        } else {
+            await addDoc(collection(db, 'documents'), {
+                name,
+                description: desc,
+                icon,
+                status:    'active',
+                createdAt: serverTimestamp()
+            });
+            closeAddModal();
+            showToast(`"${name}" added successfully ✓`);
+        }
     } catch (err) {
-        showToast('Failed to add document: ' + err.message);
-        btn.disabled    = false;
-        label.textContent = 'Save Document';
+        showToast('Failed to save document: ' + err.message);
+        btn.disabled      = false;
+        label.textContent = idleLabel;
     }
 }
 
