@@ -1570,6 +1570,13 @@ const DX_NS = {
 };
 const DX_EMU_PX = 9525;   // EMU per CSS px
 
+/** True for a DrawingML group (wpg) or a single shape (wps) – drawn by docxVectorsToPng(), not a plain picture. */
+function dxIsVector(drawing) {
+    const gd = drawing.getElementsByTagNameNS(DX_NS.a, 'graphicData')[0];
+    const uri = (gd && gd.getAttribute('uri')) || '';
+    return /wordprocessingGroup|wordprocessingShape/.test(uri);
+}
+
 /** One entry per picture, in document order (same order Mammoth converts them). null = not tracked. */
 function docxImageInfos(xmlString) {
     const doc = new DOMParser().parseFromString(xmlString, 'application/xml');
@@ -1584,6 +1591,8 @@ function docxImageInfos(xmlString) {
         if (!host) return;
         const blips = [...drawing.getElementsByTagNameNS(DX_NS.a, 'blip')]
             .filter(b => b.getAttribute('r:embed') || b.getAttribute('r:link'));
+        // Grouped / vector drawings (shapes, lines, pictures in one group) become ONE picture (see docxVectorsToPng)
+        const isVec = dxIsVector(drawing);
         let info = { t: 'i' };
         if (anchor) {
             const ext = kid(anchor, DX_NS.wp, 'extent');
@@ -1605,7 +1614,8 @@ function docxImageInfos(xmlString) {
                 vrel: V.rel, voff: V.off, valign: V.align
             };
         }
-        blips.forEach(() => out.push(info));
+        if (isVec) out.push(info);
+        else blips.forEach(() => out.push(info));
     };
 
     const walk = (n) => {
@@ -1749,6 +1759,30 @@ function docxReadTextBox(unit, T) {
     return info;
 }
 
+const DX_PIC_NS = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
+const DX_WPG_NS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup';
+
+/** True when `unit` is a drawing group that contains something besides text boxes (a shape, line or picture). */
+function dxGroupHasArt(unit) {
+    if (!unit.getElementsByTagNameNS(DX_WPG_NS, 'wgp').length) return false;
+    if (unit.getElementsByTagNameNS(DX_PIC_NS, 'pic').length) return true;
+    return [...unit.getElementsByTagNameNS(DXT_NS.wps, 'wsp')].some(s => !dxKid(s, DXT_NS.wps, 'txbx') && !s.hasAttribute('data-tpl-tb'));
+}
+
+/** Does the text of this text box already appear as normal text in the page body? (PDF→Word files often do that.) */
+function dxTextInBody(doc, T) {
+    const W = DXT_NS.w, MC = DXT_NS.mc;
+    const flat = (s) => s.replace(/\s+/g, '').toLowerCase();
+    const mine = flat([...T.getElementsByTagNameNS(W, 't')].map(t => t.textContent).join(''));
+    if (!mine) return true;                                                      // nothing to keep
+    let body = '';
+    for (const p of doc.getElementsByTagNameNS(W, 'p')) {
+        if (dxUp(p, W, 'txbxContent') || dxUp(p, MC, 'Fallback')) continue;
+        body += [...p.getElementsByTagNameNS(W, 't')].filter(t => !dxUp(t, W, 'txbxContent')).map(t => t.textContent).join('');
+    }
+    return flat(body).includes(mine);
+}
+
 // text boxes → one-cell tables (document order = infos order; a visible marker links table ↔ info)
 function docxTextBoxesToTables(doc) {
     const { w: W, mc: MC } = DXT_NS;
@@ -1769,8 +1803,22 @@ function docxTextBoxesToTables(doc) {
         if (!units.size) break;
         for (const [unit, boxes] of units) {
             const host = dxUp(unit, W, 'p');
+            // A group that also holds shapes / pictures (letterhead art, footer band...) is kept and drawn as ONE picture;
+            // only its text boxes are taken out (and skipped when the same text is already in the page body).
+            const keepUnit = dxGroupHasArt(unit);
             let after = host;
             for (const T of boxes) {
+                if (keepUnit) {
+                    // Text boxes inside a drawing group stay in the group and are drawn into its picture
+                    // (vxTextBox) – unless the same text is already normal body text, then they are dropped.
+                    const tx = T.parentNode;                                  // <wps:txbx>
+                    const wsp = tx && tx.parentNode;                          // <wps:wsp>
+                    if (dxTextInBody(doc, T) && tx && wsp) {
+                        wsp.setAttribute('data-tpl-tb', '1');
+                        wsp.removeChild(tx);
+                    }
+                    continue;
+                }
                 const info = docxReadTextBox(unit, T);
                 const tbl = mk('tbl'), tblPr = mk('tblPr'), tblW = mk('tblW'), grid = mk('tblGrid'), gc = mk('gridCol');
                 tblW.setAttributeNS(W, 'w:w', '0'); tblW.setAttributeNS(W, 'w:type', 'auto'); tblPr.appendChild(tblW);
@@ -1794,7 +1842,7 @@ function docxTextBoxesToTables(doc) {
                 after.parentNode.insertBefore(tbl, after.nextSibling);
                 after = tbl;
             }
-            unit.parentNode.removeChild(unit);                          // incl. Word's duplicate VML copy
+            if (!keepUnit) unit.parentNode.removeChild(unit);           // incl. Word's duplicate VML copy
             // host paragraph left with nothing in it → drop it (not inside a table cell)
             const hasStuff = ['t', 'drawing', 'pict', 'br', 'tab', 'sym', 'fldChar', 'instrText', 'object', 'sectPr']
                 .some(n => host.getElementsByTagNameNS(W, n).length);
@@ -1819,7 +1867,10 @@ async function docxPrepare(buf) {
     const stylesDoc = sf ? parse(await sf.async('string')) : null;
     const nAlign = docxMaterializeAlignment(doc, stylesDoc);
     const textBoxes = docxTextBoxesToTables(doc);
-    const xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + new XMLSerializer().serializeToString(doc);
+    // Some browsers already put an XML declaration in front of the serialised document; two of them are invalid XML
+    // (that used to make the full-fidelity converter fail and silently fall back to the basic one).
+    const xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+        new XMLSerializer().serializeToString(doc).replace(/^\s*<\?xml[^>]*\?>\s*/, '');
     if (!nAlign && !textBoxes.length) return { buf, xml, textBoxes };
     zip.file('word/document.xml', xml);
     return { buf: await zip.generateAsync({ type: 'arraybuffer' }), xml, textBoxes };
@@ -1912,9 +1963,13 @@ const CX_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', jpe: 
 function cxFont(f) {
     const n = String(f).replace(/['"]/g, '');
     const generic = /mono|courier|consolas/i.test(n) ? 'monospace'
-        : /arial|helvetica|calibri|verdana|tahoma|segoe|trebuchet|sans|candara|corbel|gill|franklin|lucida|roboto|open/i.test(n) ? 'sans-serif'
+        : /arial|helvetica|calibri|verdana|tahoma|segoe|trebuchet|sans|candara|corbel|gill|franklin|lucida|roboto|open|gothic|gotham|montserrat|poppins|nunito|lato|futura|avenir|century gothic|myriad|geneva|optima|source|noto/i.test(n) ? 'sans-serif'
         : 'serif';
-    return `'${n}',${generic}`;
+    // Fonts the viewer may not have get a look-alike before the generic family (Century Gothic is geometric, so its
+    // fallback must be sans-serif, not the browser's serif default).
+    const alt = /century gothic/i.test(n) ? `,'URW Gothic','Avant Garde','Questrial','Poppins','Nunito'`
+        : /calibri/i.test(n) ? `,'Carlito'` : /arial narrow/i.test(n) ? `,'Liberation Sans Narrow'` : '';
+    return `'${n}'${alt},${generic}`;
 }
 
 function cxHex(val, themeName, tint, shade, theme) {
@@ -1980,6 +2035,8 @@ function cxRPr(rPr, ctx) {
             }
             case 'vertAlign': { const v = cxVal(c); if (v === 'superscript' || v === 'subscript') o.va = v; break; }
             case 'spacing': { const v = cxNum(cxVal(c)); if (v) o.ls = v / 20; break; }
+            case 'w': { const v = cxNum(cxVal(c)); if (v && v !== 100) o.scale = v; break; }          // character width %
+            case 'position': { const v = cxNum(cxVal(c)); if (v) o.pos = v / 2; break; }             // raised (+) / lowered (-) in pt
         }
     }
     return o;
@@ -2048,6 +2105,17 @@ function cxPPr(pPr, ctx) {
                 const id = cxKid(c, 'numId'), lv = cxKid(c, 'ilvl');
                 if (id) o.numId = cxVal(id);
                 if (lv) o.ilvl = cxVal(lv);
+                break;
+            }
+            case 'tabs': {
+                const t = [];
+                for (const tb of cxKids(c)) {
+                    if (tb.localName !== 'tab') continue;
+                    const pos = cxNum(cxAttr(tb, 'pos'));
+                    if (pos === undefined) continue;
+                    t.push({ pos, val: cxAttr(tb, 'val') || 'left' });
+                }
+                o.tabs = t;
                 break;
             }
             case 'pageBreakBefore': o.pbb = cxOn(c); break;
@@ -2163,14 +2231,21 @@ function cxRunCss(eff, base) {
     if (bg && bg !== (base.highlight || base.bg)) css.push('background-color:' + bg);
     if (!!eff.caps !== !!base.caps) css.push('text-transform:' + (eff.caps ? 'uppercase' : 'none'));
     if (!!eff.smallCaps !== !!base.smallCaps) css.push('font-variant:' + (eff.smallCaps ? 'small-caps' : 'normal'));
-    if (eff.ls && eff.ls !== base.ls) css.push(`letter-spacing:${eff.ls}pt`);
+    // Word's "scale" stretches glyphs horizontally; CSS can't, so it is approximated by extra letter spacing
+    // (an average glyph is ~0.5em wide) - close enough that lines wrap where they wrap in Word.
+    let ls = eff.ls || 0;
+    if (eff.scale && eff.scale !== (base.scale || 100)) ls += (eff.scale - (base.scale || 100)) / 100 * 0.5 * (eff.size || base.size || 11);
+    if (ls && Math.abs(ls - (base.ls || 0)) > 0.001) css.push(`letter-spacing:${Math.round(ls * 100) / 100}pt`);
+    // Raised / lowered text: Word makes the LINE taller to fit it (so the other text on that line, and everything below,
+    // ends up lower than the raised text). vertical-align does the same in a browser; position:relative did not.
+    if (eff.pos) css.push(`vertical-align:${eff.pos}pt`);
     return css;
 }
 function cxWrap(inner, eff, base) {
     let h = inner;
     if (eff.va) h = `<${eff.va === 'superscript' ? 'sup' : 'sub'}>${h}</${eff.va === 'superscript' ? 'sup' : 'sub'}>`;
-    if (eff.strike && !base.strike) h = `<s>${h}</s>`;
-    if (eff.u && !base.u) h = `<u>${h}</u>`;
+    if (eff.strike) h = `<s>${h}</s>`;
+    if (eff.u) h = `<u>${h}</u>`;
     const css = cxRunCss(eff, base);
     if (!!eff.i !== !!base.i) { if (eff.i) h = `<em>${h}</em>`; else css.push('font-style:normal'); }
     if (!!eff.b !== !!base.b) { if (eff.b) h = `<strong>${h}</strong>`; else css.push('font-weight:normal'); }
@@ -2203,6 +2278,20 @@ function cxMedia(ctx, node) {
         if (!host) return out;
         const ext = cxKid(host, 'extent', CXWP), pr = cxKid(host, 'docPr', CXWP);
         const w = ext ? (parseFloat(ext.getAttribute('cx')) || 0) / 9525 : 0;
+        if (dxIsVector(node)) {                                     // group / shape: one picture (pre-drawn by docxVectorsToPng)
+            const idx = state ? state.i++ : -1;
+            const info = state && state.infos ? state.infos[idx] : null;
+            const src = ctx.vec && ctx.vec.get(node);
+            if (!src) return out;
+            const h = ext ? (parseFloat(ext.getAttribute('cy')) || 0) / 9525 : 0;
+            const pad = (ctx.vecPad && ctx.vecPad.get(node)) || { x: 0, y: 0 };
+            if (info && info.t === 'a') {                           // keep the padded picture on the same spot
+                info.w = (info.w || w) + 2 * pad.x; info.h = (info.h || h) + 2 * pad.y;
+                info.hoff = (info.hoff || 0) - pad.x; info.voff = (info.voff || 0) - pad.y;
+            }
+            const dx = info ? ` data-dx="${cxEsc(JSON.stringify(info))}"` : '';
+            return out + `<img src="${src}" alt="" style="width:${Math.round((w + 2 * pad.x) * 100) / 100}px;height:${Math.round((h + 2 * pad.y) * 100) / 100}px"${dx}>`;
+        }
         const blips = [...node.getElementsByTagNameNS(CXA, 'blip')].filter(b => cxAttr(b, 'embed', CXR) || cxAttr(b, 'link', CXR));
         for (const b of blips) {
             const idx = state ? state.i++ : -1;
@@ -2226,12 +2315,23 @@ function cxMedia(ctx, node) {
     return out;
 }
 
+let cxMeasureCanvas = null;
 function cxRun(ctx, r, base, items) {
     const rPr = cxKid(r, 'rPr');
     const rs = cxKid(rPr, 'rStyle');
     const eff = cxMerge(base, rs ? cxStyleR(ctx.S, cxVal(rs)) : null, cxRPr(rPr, ctx));
     let inner = '';
     const flush = () => { if (inner) { items.push(cxWrap(inner, eff, base)); inner = ''; } };
+    const T = ctx.tab;
+    const measure = (txt) => {
+        try {
+            const cv = cxMeasureCanvas || (cxMeasureCanvas = document.createElement('canvas'));
+            const g = cv.getContext('2d');
+            g.font = `${eff.i ? 'italic ' : ''}${eff.b ? 'bold ' : ''}${(eff.size || 11) * 4 / 3}px ${cxFont(eff.font || 'Times New Roman')}`;
+            const ls = ((eff.ls || 0) + (eff.scale ? (eff.scale - 100) / 100 * 0.5 * (eff.size || 11) : 0)) * 4 / 3;
+            return g.measureText(txt).width + ls * txt.length;
+        } catch (_) { return txt.length * (eff.size || 11) * 0.5; }
+    };
     for (const c of cxKids(r)) {
         if (c.namespaceURI === CXMC || c.localName === 'drawing' || c.localName === 'pict') {
             flush();
@@ -2241,8 +2341,18 @@ function cxRun(ctx, r, base, items) {
         }
         if (c.namespaceURI !== CXW || eff.hidden) continue;
         switch (c.localName) {
-            case 't': inner += cxText(c.textContent); break;
-            case 'tab': inner += CX_TAB; break;
+            case 't': inner += cxText(c.textContent); if (T) T.x += measure(c.textContent); break;
+            case 'tab': {
+                if (!T) { inner += CX_TAB; break; }
+                // next tab stop to the right of the current position (custom stops, then Word's default 0.5in grid)
+                const xt = T.x * 15;
+                let stop = T.stops.find(p => p > xt + 1);
+                if (stop === undefined) stop = (Math.floor(xt / 720) + 1) * 720;
+                const w = Math.max(4, cxPx(stop) - T.x);
+                T.x += w;
+                inner += `<span style="display:inline-block;width:${Math.round(w * 100) / 100}px">&nbsp;</span>`;
+                break;
+            }
             case 'br': {
                 const t = cxAttr(c, 'type');
                 if (t === 'page') { flush(); items.push(CX_BREAK); }
@@ -2317,13 +2427,57 @@ function cxParaCss(info, opts) {
     const css = [];
     const jc = { center: 'center', right: 'right', end: 'right', both: 'justify', distribute: 'justify' }[pr.jc];
     if (jc) css.push('text-align:' + jc);
-    const top = opts.noTop ? 0 : cxPx(pr.before || 0), bottom = opts.noBottom ? 0 : cxPx(pr.after || 0);
+    // Word also keeps the full height of a raised run above the line; browsers only grew the line by the raise itself,
+    // which left text under raised numbers (phone / email rows of letterheads) a little high. Add the difference.
+    let raiseExtra = 0;
+    try {
+        if (info.p) for (const r of cxKids(info.p)) {
+            const pos = r.localName === 'r' ? cxKid(cxKid(r, 'rPr'), 'position') : null;
+            const v = pos ? (cxNum(cxAttr(pos, 'val')) || 0) / 2 : 0;       // points
+            if (v > 0) raiseExtra = Math.max(raiseExtra, v * 4 / 3 * 1.1);
+        }
+    } catch (_) { raiseExtra = 0; }
+    const top = (opts.noTop ? 0 : cxPx(pr.before || 0)) + Math.round(raiseExtra * 100) / 100, bottom = opts.noBottom ? 0 : cxPx(pr.after || 0);
     if (opts.list) css.push(`margin-top:${top}px;margin-bottom:${bottom}px`);
     else css.push(`margin:${top}px ${cxPx(pr.right || 0)}px ${bottom}px ${cxPx(pr.left || 0)}px`);
     if (!opts.list && pr.first) css.push(`text-indent:${cxPx(pr.first)}px`);
-    if (pr.line) {
+    // Word sizes a line from the text on it (+ the paragraph mark). Browsers also add a "strut" from the paragraph's own
+    // font, so a paragraph whose runs are ALL explicitly smaller than the paragraph default (e.g. 9pt Arial runs inside a
+    // Calibri 11pt default) came out ~40% too tall. When every run carries its own size, size the line from those runs.
+    let strut = 0, strutFont = '', strutFamily = '';
+    if (!opts.empty && info.p) {
+        try {
+            const runs = cxKids(info.p).filter(r => r.localName === 'r' && r.namespaceURI === CXW && cxKid(r, 't'));
+            const sizes = runs.map(r => { const sz = cxKid(cxKid(r, 'rPr'), 'sz'); return sz ? (cxNum(cxAttr(sz, 'val')) || 0) / 2 : 0; });
+            if (sizes.length && sizes.every(v => v > 0)) {
+                const m = Math.max(...sizes, (info.mark && info.mark.size) || 0);
+                if (base.size && m < base.size && (!pr.lineRule || pr.lineRule === 'auto')) {
+                    strut = m;
+                    const rf = cxKid(cxKid(runs[0], 'rPr'), 'rFonts');
+                    strutFont = (rf && (cxAttr(rf, 'ascii') || cxAttr(rf, 'hAnsi'))) || base.font || '';
+                    // when every run names the same font, the paragraph itself takes it too, so the line box is built
+                    // from one font (mixing Calibri's and Arial's ascent/descent made each line ~1px taller)
+                    const fams = runs.map(r2 => { const f2 = cxKid(cxKid(r2, 'rPr'), 'rFonts'); return f2 ? (cxAttr(f2, 'ascii') || cxAttr(f2, 'hAnsi')) : ''; });
+                    if (fams.every(f2 => f2 && f2 === fams[0])) strutFamily = fams[0];
+                }
+            }
+        } catch (_) { strut = 0; }
+    }
+    if (strut) {
+        const f = /calibri|segoe|candara|corbel/i.test(strutFont) ? 1.22 : 1.15;
+        css.push(`line-height:${Math.round(strut * 4 / 3 * f * ((pr.line || 240) / 240) * 100) / 100}px`);
+    } else if (pr.line) {
         if (!pr.lineRule || pr.lineRule === 'auto') {
-            const f = /calibri|segoe|candara|corbel/i.test(base.font || '') ? 1.22 : 1.15;
+            // "Auto" spacing is a multiple of the font's NATURAL line height, so the factor must come from the font the
+            // text is actually in (first text run), not the paragraph default: Arial runs inside a Calibri-default paragraph
+            // were getting 1.22 instead of 1.15, which made every multi-line block ~6% too tall.
+            let lhFont = base.font || '';
+            try {
+                const run = cxKids(info.p).find(r => r.localName === 'r' && r.namespaceURI === CXW && cxKid(r, 't') && cxKid(cxKid(r, 'rPr') || r, 'rFonts'));
+                const rf = run && cxKid(cxKid(run, 'rPr'), 'rFonts');
+                lhFont = (rf && (cxAttr(rf, 'ascii') || cxAttr(rf, 'hAnsi'))) || lhFont;
+            } catch (_) { /* keep paragraph font */ }
+            const f = /calibri|segoe|candara|corbel/i.test(lhFont) ? 1.22 : 1.15;
             css.push(`line-height:${Math.round((pr.line / 240) * f * 1000) / 1000}`);
         } else css.push(`line-height:${cxPx(pr.line)}px`);
     }
@@ -2335,15 +2489,16 @@ function cxParaCss(info, opts) {
         }
     }
     const b = opts.empty ? cxMerge(base, info.mark) : base;
-    if (b.font) css.push('font-family:' + cxFont(b.font));
-    if (b.size) css.push(`font-size:${b.size}pt`);
+    if (strutFamily) css.push('font-family:' + cxFont(strutFamily));
+    else if (b.font) css.push('font-family:' + cxFont(b.font));
+    if (strut) css.push(`font-size:${strut}pt`);      // every run carries its own size, so this only shapes the line box
+    else if (b.size) css.push(`font-size:${b.size}pt`);
     if (b.color) css.push('color:' + b.color);
     if (b.b) css.push('font-weight:bold'); else if (/^h\d$/.test(info.tag)) css.push('font-weight:normal');
     if (b.i) css.push('font-style:italic');
     if (b.caps) css.push('text-transform:uppercase');
     if (b.smallCaps) css.push('font-variant:small-caps');
     if (b.ls) css.push(`letter-spacing:${b.ls}pt`);
-    if (b.u || b.strike) css.push('text-decoration:' + [b.u ? 'underline' : '', b.strike ? 'line-through' : ''].filter(Boolean).join(' '));
     if (/^h\d$/.test(info.tag)) css.push('font-size:' + (b.size || 12) + 'pt');
     return css.join(';');
 }
@@ -2385,7 +2540,12 @@ function cxBlocksHtml(ctx, blocks, scope) {
         };
 
         const items = [];
+        ctx.tab = {                                         // running x (px) of the line, for real tab stops
+            x: cxPx((info.pr.left || 0) + (info.pr.first || 0)),
+            stops: (info.pr.tabs || []).filter(t => t.val !== 'clear').map(t => t.pos).concat((info.pr.first || 0) < 0 ? [info.pr.left || 0] : []).sort((a, b2) => a - b2)
+        };
         cxInline(ctx, b, info.base, items);
+        ctx.tab = null;
         if (info.direct.pbb) items.unshift(CX_BREAK);
         const sect = info.direct.sect;
         const sectType = sect ? (cxVal(cxKid(sect, 'type')) || 'nextPage') : '';
@@ -2555,6 +2715,353 @@ function cxTable(ctx, tbl) {
     return html + '</tbody></table>';
 }
 
+// ---- multi-column sections -------------------------------------------------------------------
+// A Word section with 2+ columns (PDF→Word files use them for "sidebar | text" layouts) becomes a borderless
+// table with one cell per column, split at the Word column break. Anything else flows as before.
+function cxSectionsHtml(ctx, blocks, bodySect) {
+    const secs = [];
+    let cur = [];
+    for (const b of blocks) {
+        cur.push(b);
+        const pPr = b.localName === 'p' ? cxKid(b, 'pPr') : null;
+        const sp = pPr && cxKid(pPr, 'sectPr');
+        if (sp) { secs.push({ blocks: cur, sect: sp }); cur = []; }
+    }
+    if (cur.length) secs.push({ blocks: cur, sect: bodySect || null });
+
+    let out = '';
+    for (const sec of secs) {
+        const cols = sec.sect && cxKid(sec.sect, 'cols');
+        const n = cols ? (cxNum(cxAttr(cols, 'num')) || 1) : 1;
+        const defs = cols ? cxKids(cols).filter(c => c.localName === 'col' && c.namespaceURI === CXW)
+            .map(c => ({ w: cxNum(cxAttr(c, 'w')) || 0, space: cxNum(cxAttr(c, 'space')) || 0 })) : [];
+        if (n >= 2 && defs.length === n && defs.every(d => d.w > 0)) {
+            const parts = [[]];
+            for (const b of sec.blocks) {
+                const hasColBreak = b.localName === 'p' &&
+                    [...b.getElementsByTagNameNS(CXW, 'br')].some(br => cxAttr(br, 'type') === 'column');
+                // In Word the column break sits INSIDE its paragraph: whatever follows it (here just the paragraph mark,
+                // often a big empty line with spacing-before) is the first line of the NEXT column. So a paragraph that
+                // holds nothing but the break starts the next column; one with text before the break stays in this one.
+                const breakOnly = hasColBreak && !(b.textContent || '').trim() &&
+                    !b.getElementsByTagNameNS(CXW, 'drawing').length && !b.getElementsByTagNameNS(CXW, 'pict').length;
+                if (hasColBreak && breakOnly && parts.length < n) { parts.push([b]); continue; }
+                parts[parts.length - 1].push(b);
+                if (hasColBreak && parts.length < n) parts.push([]);
+            }
+            if (parts.length === n && parts.every(p => p.length)) {
+                const cells = parts.map(p => cxBlocksHtml(ctx, p, CX_NO_SCOPE).replace(/<hr class="tpl-pagebreak">/g, ''));
+                let total = 0, cg = '', tds = '';
+                defs.forEach((d, i) => {
+                    total += d.w;
+                    cg += `<col style="width:${cxPx(d.w)}px">`;
+                    tds += `<td style="width:${cxPx(d.w)}px;vertical-align:top;padding:0;border:none">${cells[i] || '<p><br></p>'}</td>`;
+                    if (i < n - 1 && d.space) {
+                        total += d.space;
+                        cg += `<col style="width:${cxPx(d.space)}px">`;
+                        tds += `<td style="width:${cxPx(d.space)}px;padding:0;border:none"></td>`;
+                    }
+                });
+                out += `<table class="tpl-cols" border="0" style="border-collapse:collapse;table-layout:fixed;width:${cxPx(total)}px;max-width:100%;margin:0"><colgroup>${cg}</colgroup><tbody><tr>${tds}</tr></tbody></table>`;
+                continue;
+            }
+        }
+        out += cxBlocksHtml(ctx, sec.blocks, CX_NO_SCOPE);
+    }
+    return out;
+}
+
+// ---- Word drawing groups / shapes -> one PNG each ----------------------------------------------
+// Letterheads (colour bars, footer band, icons, divider lines, seal) are usually a DrawingML group. Mammoth-style
+// converters only see its pictures; here the whole group (vector shapes + pictures) is drawn as SVG, rasterised
+// to PNG and inserted as ONE picture that keeps the group's size and position (data-dx → applyDocxImageLayouts).
+const VX_WPS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
+const VX_WPG = 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup';
+const VX_PIC = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
+const VX_SCHEME = { tx1: 'dk1', bg1: 'lt1', tx2: 'dk2', bg2: 'lt2' };
+const vxNum = (v, d = 0) => { const n = parseFloat(v); return Number.isFinite(n) ? n : d; };
+const vxOf = (n, ns, name) => cxKids(n).find(c => c.namespaceURI === ns && c.localName === name) || null;
+
+function vxColor(fill, ctx) {
+    const c = cxKids(fill)[0];
+    if (!c) return null;
+    let color = '';
+    if (c.localName === 'srgbClr') color = '#' + (c.getAttribute('val') || '');
+    else if (c.localName === 'schemeClr') {
+        const k = c.getAttribute('val') || '';
+        color = cxHex('', VX_SCHEME[k] || k, '', '', ctx.theme);
+    } else if (c.localName === 'sysClr') color = '#' + (c.getAttribute('lastClr') || '');
+    if (!/^#[0-9a-f]{6}$/i.test(color)) return null;
+    const a = cxKids(c).find(x => x.localName === 'alpha');
+    return { color, alpha: a ? Math.max(0, Math.min(1, vxNum(a.getAttribute('val'), 100000) / 100000)) : 1 };
+}
+
+function vxPaint(spPr, ctx) {
+    let fill = 'none', fo = 1, stroke = 'none', so = 1, sw = 0, dash = '';
+    const sf = vxOf(spPr, CXA, 'solidFill');
+    const gf = vxOf(spPr, CXA, 'gradFill');
+    if (sf) { const c = vxColor(sf, ctx); if (c) { fill = c.color; fo = c.alpha; } }
+    else if (gf) {
+        const gs = vxOf(gf, CXA, 'gsLst');
+        const first = gs && cxKids(gs)[0];
+        const c = first && vxColor(first, ctx);
+        if (c) { fill = c.color; fo = c.alpha; }
+    }
+    const ln = vxOf(spPr, CXA, 'ln');
+    if (ln && !vxOf(ln, CXA, 'noFill')) {
+        const lf = vxOf(ln, CXA, 'solidFill');
+        const c = lf && vxColor(lf, ctx);
+        if (c) {
+            stroke = c.color; so = c.alpha;
+            sw = Math.max(vxNum(ln.getAttribute('w'), 9525), 6350);        // hairlines stay visible
+            const pd = vxOf(ln, CXA, 'prstDash');
+            const dv = pd ? pd.getAttribute('val') : '';
+            if (/^(dash|lgDash|sysDash)/.test(dv)) dash = ` stroke-dasharray="${sw * 4} ${sw * 3}"`;
+            else if (/^(dot|sysDot)/.test(dv)) dash = ` stroke-dasharray="${sw} ${sw * 2}"`;
+        }
+    }
+    return { fill, fo, stroke, so, sw, dash };
+}
+
+function vxPathD(path, ext) {
+    const pw = vxNum(path.getAttribute('w')), ph = vxNum(path.getAttribute('h'));
+    const sx = pw ? ext.cx / pw : 1, sy = ph ? ext.cy / ph : 1;
+    const pt = (el) => [vxNum(el.getAttribute('x')) * sx, vxNum(el.getAttribute('y')) * sy];
+    let d = '', cur = [0, 0];
+    for (const c of cxKids(path)) {
+        const pts = cxKids(c).filter(x => x.localName === 'pt').map(pt);
+        switch (c.localName) {
+            case 'moveTo': if (pts[0]) { d += `M${pts[0].join(' ')} `; cur = pts[0]; } break;
+            case 'lnTo': if (pts[0]) { d += `L${pts[0].join(' ')} `; cur = pts[0]; } break;
+            case 'cubicBezTo': if (pts.length >= 3) { d += `C${pts.slice(0, 3).map(p => p.join(' ')).join(' ')} `; cur = pts[2]; } break;
+            case 'quadBezTo': if (pts.length >= 2) { d += `Q${pts.slice(0, 2).map(p => p.join(' ')).join(' ')} `; cur = pts[1]; } break;
+            case 'arcTo': {
+                const wR = vxNum(c.getAttribute('wR')) * sx, hR = vxNum(c.getAttribute('hR')) * sy;
+                const st = vxNum(c.getAttribute('stAng')) / 60000 * Math.PI / 180;
+                const sw = vxNum(c.getAttribute('swAng')) / 60000 * Math.PI / 180;
+                if (!wR || !hR) break;
+                const x0 = cur[0] - wR * Math.cos(st), y0 = cur[1] - hR * Math.sin(st);
+                const ex = x0 + wR * Math.cos(st + sw), ey = y0 + hR * Math.sin(st + sw);
+                d += `A${wR} ${hR} 0 ${Math.abs(sw) > Math.PI ? 1 : 0} ${sw > 0 ? 1 : 0} ${ex} ${ey} `;
+                cur = [ex, ey];
+                break;
+            }
+            case 'close': d += 'Z '; break;
+        }
+    }
+    return d.trim();
+}
+
+/** Text of a text box that sits inside a drawing group, laid out with canvas measuring and written as SVG <text>. */
+function vxTextBox(wsp, ctx, ext) {
+    const tx = vxOf(wsp, VX_WPS, 'txbx');
+    const content = tx && cxKid(tx, 'txbxContent');
+    if (!content) return '';
+    const bp = vxOf(wsp, VX_WPS, 'bodyPr');
+    const ins = (k, d) => { const v = bp && bp.getAttribute(k); return v !== null && v !== undefined && v !== '' ? vxNum(v, d) : d; };
+    const L = ins('lIns', 91440), T = ins('tIns', 45720), R = ins('rIns', 91440), B = ins('bIns', 45720);
+    const anchor = (bp && bp.getAttribute('anchor')) || 't';
+    const m = document.createElement('canvas').getContext('2d');
+    const TW = 635;                                            // EMU per twip
+    const PT = 12700;                                          // EMU per pt
+    const lines = [];                                          // { y, h, chunks:[{x,w,t,font,size,b,i,color}], jc }
+    let cy = 0;
+
+    for (const p of cxKids(content).filter(k => k.localName === 'p' && k.namespaceURI === CXW)) {
+        const pp = cxPPr(cxKid(p, 'pPr'), ctx);
+        const styleId = pp.style || ctx.S.defaultPara;
+        const sp = cxStyleP(ctx.S, styleId);
+        const baseR = cxMerge(ctx.S.defR, cxStyleR(ctx.S, styleId));
+        const eff = cxMerge(ctx.S.defP, sp, pp);
+        const segs = [];
+        const addRuns = (node) => cxKids(node).forEach(c => {
+            if (c.namespaceURI === CXMC) { const ch = c.localName === 'AlternateContent' ? cxKid(c, 'Choice', CXMC) : null; if (ch) addRuns(ch); return; }
+            if (c.namespaceURI !== CXW) return;
+            if (c.localName === 'hyperlink' || c.localName === 'smartTag' || c.localName === 'ins') { addRuns(c); return; }
+            if (c.localName !== 'r') return;
+            const rPr = cxKid(c, 'rPr');
+            const rs = cxKid(rPr, 'rStyle');
+            const f = cxMerge(baseR, rs ? cxStyleR(ctx.S, cxVal(rs)) : null, cxRPr(rPr, ctx));
+            let t = '';
+            for (const k of cxKids(c)) {
+                if (k.namespaceURI !== CXW) continue;
+                if (k.localName === 't') t += k.textContent;
+                else if (k.localName === 'tab') t += '    ';
+            }
+            if (t && !f.hidden) segs.push({ t: f.caps ? t.toUpperCase() : t, font: f.font || ctx.theme.minor || 'Times New Roman', size: f.size || 11, b: !!f.b, i: !!f.i, color: f.color || '#000000' });
+        });
+        addRuns(p);
+
+        const left = (eff.left || 0) * TW, right = (eff.right || 0) * TW, first = (eff.first || 0) * TW;
+        const avail = Math.max(1, ext.cx - L - R - left - right);
+        cy += (pp.before !== undefined ? pp.before : (sp.before || 0)) * TW;
+        const maxSize = Math.max(11, ...segs.map(s => s.size));
+        let lh = maxSize * PT * 1.2;
+        if (eff.line) lh = (!eff.lineRule || eff.lineRule === 'auto') ? maxSize * PT * 1.2 * (eff.line / 240) : eff.line * TW;
+
+        // words with their style, greedy wrap
+        const words = [];
+        segs.forEach(s => s.t.split(/(\s+)/).forEach(w => { if (w) words.push({ ...s, t: w }); }));
+        const fontOf = (s) => `${s.i ? 'italic ' : ''}${s.b ? 'bold ' : ''}${s.size * 4 / 3}px ${cxFont(s.font)}`;
+        const widthOf = (s) => { m.font = fontOf(s); return m.measureText(s.t).width * DX_EMU_PX; };
+        let cur = { chunks: [], w: 0 }, rows = [], firstRow = true;
+        const flush = () => { rows.push(cur); cur = { chunks: [], w: 0 }; firstRow = false; };
+        for (const w of words) {
+            const ww = widthOf(w);
+            const room = avail - (firstRow ? first : 0);
+            if (cur.w + ww > room && cur.chunks.length && !/^\s+$/.test(w.t)) flush();
+            if (!cur.chunks.length && /^\s+$/.test(w.t) && rows.length) continue;     // no leading blank on wrapped lines
+            cur.chunks.push({ ...w, w: ww, x: cur.w });
+            cur.w += ww;
+        }
+        if (cur.chunks.length || !rows.length) flush();
+        rows.forEach((row, ri) => {
+            const startX = L + left + (ri === 0 ? first : 0);
+            const free = avail - (ri === 0 ? first : 0) - row.w;
+            const jc = pp.jc || ctx.S.defP.jc || '';
+            const dx = (jc === 'center') ? free / 2 : (jc === 'right' || jc === 'end') ? free : 0;
+            lines.push({ y: cy, h: lh, x0: startX + Math.max(0, dx), chunks: row.chunks, size: maxSize });
+            cy += lh;
+        });
+        cy += (pp.after !== undefined ? pp.after : (sp.after || 0)) * TW;
+    }
+    if (!lines.length) return '';
+    const room = ext.cy - T - B;
+    const top = T + (anchor === 'ctr' ? Math.max(0, (room - cy) / 2) : anchor === 'b' ? Math.max(0, room - cy) : 0);
+    let out = '';
+    for (const ln of lines) {
+        for (const c of ln.chunks) {
+            if (/^\s+$/.test(c.t)) continue;
+            // coordinates are in pt (scaled by PT below) – browsers misrender SVG text whose font-size is ~100000 user units
+            out += `<text x="${(ln.x0 + c.x) / PT}" y="${(top + ln.y + ln.h * 0.8) / PT}" font-family="${cxEsc(cxFont(c.font))}" font-size="${c.size}" ` +
+                `fill="${c.color}"${c.b ? ' font-weight="bold"' : ''}${c.i ? ' font-style="italic"' : ''} xml:space="preserve">${cxEsc(c.t)}</text>`;
+        }
+    }
+    return out ? `<g transform="scale(${PT})">${out}</g>` : '';
+}
+
+function vxShape(wsp, ctx, frame) {
+    if (wsp.hasAttribute('data-tpl-tb')) return '';                          // text box → handled as a table
+    const spPr = vxOf(wsp, VX_WPS, 'spPr');
+    if (!spPr) return '';
+    const xf = vxOf(spPr, CXA, 'xfrm');
+    const o = xf && vxOf(xf, CXA, 'off'), e = xf && vxOf(xf, CXA, 'ext');
+    const x = frame ? 0 : vxNum(o && o.getAttribute('x')), y = frame ? 0 : vxNum(o && o.getAttribute('y'));
+    const ext = { cx: e ? vxNum(e.getAttribute('cx')) : (frame ? frame.cx : 0), cy: e ? vxNum(e.getAttribute('cy')) : (frame ? frame.cy : 0) };
+    if (frame && frame.cx) { ext.cx = frame.cx; ext.cy = frame.cy; }
+    const rot = xf ? vxNum(xf.getAttribute('rot')) / 60000 : 0;
+    const fh = xf && xf.getAttribute('flipH') === '1', fv = xf && xf.getAttribute('flipV') === '1';
+    const p = vxPaint(spPr, ctx);
+    const attr = (fillOn, strokeOn) =>
+        `fill="${fillOn ? p.fill : 'none'}" fill-opacity="${p.fo}" stroke="${strokeOn ? p.stroke : 'none'}"` +
+        (strokeOn && p.stroke !== 'none' ? ` stroke-width="${p.sw}" stroke-opacity="${p.so}"${p.dash}` : '');
+
+    let g = '';
+    const cg = vxOf(spPr, CXA, 'custGeom');
+    if (p.fill === 'none' && p.stroke === 'none') { /* no visible outline / fill: only the text (if any) is drawn */ }
+    else if (cg) {
+        const pl = vxOf(cg, CXA, 'pathLst');
+        for (const path of cxKids(pl).filter(k => k.localName === 'path')) {
+            const d = vxPathD(path, ext);
+            if (!d) continue;
+            const fillOn = path.getAttribute('fill') !== 'none';
+            const strokeOn = !/^(0|false)$/.test(path.getAttribute('stroke') || '');
+            g += `<path d="${d}" ${attr(fillOn, strokeOn)}/>`;
+        }
+    } else {
+        const pg = vxOf(spPr, CXA, 'prstGeom');
+        const prst = (pg && pg.getAttribute('prst')) || 'rect';
+        if (/line|Connector/i.test(prst)) g = `<line x1="0" y1="0" x2="${ext.cx}" y2="${ext.cy}" ${attr(false, true)}/>`;
+        else if (prst === 'ellipse') g = `<ellipse cx="${ext.cx / 2}" cy="${ext.cy / 2}" rx="${ext.cx / 2}" ry="${ext.cy / 2}" ${attr(true, true)}/>`;
+        else if (prst === 'triangle') g = `<polygon points="${ext.cx / 2},0 ${ext.cx},${ext.cy} 0,${ext.cy}" ${attr(true, true)}/>`;
+        else g = `<rect x="0" y="0" width="${ext.cx}" height="${ext.cy}"${prst === 'roundRect' ? ` rx="${Math.min(ext.cx, ext.cy) / 6}"` : ''} ${attr(true, true)}/>`;
+    }
+    g += vxTextBox(wsp, ctx, ext);
+    if (!g) return '';
+    const tf = `translate(${x} ${y})` + (rot ? ` rotate(${rot} ${ext.cx / 2} ${ext.cy / 2})` : '') +
+        (fh || fv ? ` translate(${fh ? ext.cx : 0} ${fv ? ext.cy : 0}) scale(${fh ? -1 : 1} ${fv ? -1 : 1})` : '');
+    return `<g transform="${tf}">${g}</g>`;
+}
+
+function vxPic(pic, ctx) {
+    const blip = pic.getElementsByTagNameNS(CXA, 'blip')[0];
+    const src = blip && ctx.images[cxAttr(blip, 'embed', CXR)];
+    const spPr = vxOf(pic, VX_PIC, 'spPr');
+    const xf = spPr && vxOf(spPr, CXA, 'xfrm');
+    const o = xf && vxOf(xf, CXA, 'off'), e = xf && vxOf(xf, CXA, 'ext');
+    if (!src || !e) return '';
+    return `<image href="${src}" xlink:href="${src}" x="${vxNum(o && o.getAttribute('x'))}" y="${vxNum(o && o.getAttribute('y'))}" ` +
+        `width="${vxNum(e.getAttribute('cx'))}" height="${vxNum(e.getAttribute('cy'))}" preserveAspectRatio="none"/>`;
+}
+
+function vxGroup(grp, ctx, frame) {
+    const sp = cxKids(grp).find(c => c.localName === 'grpSpPr');
+    const xf = sp && vxOf(sp, CXA, 'xfrm');
+    const num = (name, a) => { const n = xf && vxOf(xf, CXA, name); return vxNum(n && n.getAttribute(a)); };
+    const off = { x: frame ? 0 : num('off', 'x'), y: frame ? 0 : num('off', 'y') };
+    const ext = { cx: frame ? frame.cx : num('ext', 'cx'), cy: frame ? frame.cy : num('ext', 'cy') };
+    const chOff = { x: num('chOff', 'x'), y: num('chOff', 'y') };
+    const chExt = { cx: num('chExt', 'cx') || ext.cx, cy: num('chExt', 'cy') || ext.cy };
+    let inner = '';
+    for (const c of cxKids(grp)) {
+        if (c.namespaceURI === VX_WPS && c.localName === 'wsp') inner += vxShape(c, ctx, null);
+        else if (c.namespaceURI === VX_PIC && c.localName === 'pic') inner += vxPic(c, ctx);
+        else if (c.localName === 'grpSp') inner += vxGroup(c, ctx, null);
+    }
+    if (!inner) return '';
+    const sx = chExt.cx ? ext.cx / chExt.cx : 1, sy = chExt.cy ? ext.cy / chExt.cy : 1;
+    return `<g transform="translate(${off.x} ${off.y}) scale(${sx} ${sy}) translate(${-chOff.x} ${-chOff.y})">${inner}</g>`;
+}
+
+async function vxRasterize(drawing, ctx) {
+    const host = cxKid(drawing, 'inline', CXWP) || cxKid(drawing, 'anchor', CXWP);
+    const ext = host && cxKid(host, 'extent', CXWP);
+    if (!ext) return '';
+    const cx = vxNum(ext.getAttribute('cx')), cy = vxNum(ext.getAttribute('cy'));
+    if (cx <= 0 || cy <= 0) return '';
+    const gd = drawing.getElementsByTagNameNS(CXA, 'graphicData')[0];
+    const node = gd && cxKids(gd)[0];
+    if (!node) return '';
+    const body = node.localName === 'wgp' ? vxGroup(node, ctx, { cx, cy })
+        : node.localName === 'wsp' ? vxShape(node, ctx, { cx, cy }) : '';
+    if (!body) return '';
+    // hairlines (a few EMU tall) get a little transparent padding so their stroke is not clipped
+    const padX = cx / DX_EMU_PX < 8 ? (8 - cx / DX_EMU_PX) / 2 : 0, padY = cy / DX_EMU_PX < 8 ? (8 - cy / DX_EMU_PX) / 2 : 0;
+    ctx.vecPad.set(drawing, { x: padX, y: padY });
+    const wpx = cx / DX_EMU_PX + 2 * padX, hpx = cy / DX_EMU_PX + 2 * padY;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${wpx}" height="${hpx}" ` +
+        `viewBox="${-padX * DX_EMU_PX} ${-padY * DX_EMU_PX} ${cx + 2 * padX * DX_EMU_PX} ${cy + 2 * padY * DX_EMU_PX}">${body}</svg>`;
+    const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    try {
+        const scale = Math.min(2, 3200 / Math.max(wpx, hpx));              // ~192 dpi, capped for very large drawings
+        const w = Math.max(1, Math.round(wpx * scale)), h = Math.max(1, Math.round(hpx * scale));
+        const img = new Image();
+        await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error('svg did not load')); img.src = svgUrl; });
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        return canvas.toDataURL('image/png');
+    } catch (err) {
+        console.warn('Drawing could not be rasterised, keeping it as SVG:', err);
+        return svgUrl;
+    }
+}
+
+async function docxVectorsToPng(docXml, ctx) {
+    ctx.vec = new Map();
+    ctx.vecPad = new Map();
+    const list = [...docXml.getElementsByTagNameNS(CXW, 'drawing')].filter(d => !dxUp(d, CXMC, 'Fallback') && dxIsVector(d));
+    for (const d of list) {
+        try {
+            const url = await vxRasterize(d, ctx);
+            if (url) ctx.vec.set(d, url);
+        } catch (err) {
+            console.warn('Drawing group skipped:', err);
+            ctx.messages.push('A drawing (shapes / lines) could not be converted.');
+        }
+    }
+}
+
 // ---- entry point -----------------------------------------------------------------------------
 /** @returns {Promise<{value:string, messages:Array}>} same shape Mammoth returns. */
 async function docxToHtmlFull(buf, state) {
@@ -2589,7 +3096,8 @@ async function docxToHtmlFull(buf, state) {
             if (f && mime) ctx.images[id] = `data:${mime};base64,${await f.async('base64')}`;
         }
     }
-    const value = cxBlocksHtml(ctx, cxBlocks(body), CX_NO_SCOPE);
+    await docxVectorsToPng(docXml, ctx);
+    const value = cxSectionsHtml(ctx, cxBlocks(body), cxKid(body, 'sectPr'));
     return { value, messages: [...new Set(ctx.messages)].map(m => ({ type: 'warning', message: m })) };
 }
 
@@ -2649,6 +3157,18 @@ async function applyDocxImageLayouts() {
     // take free-position pictures out of the text flow first, so they don't push the paragraphs down
     items.forEach(({ img, info }) => {
         if (info.behind || info.wrap === 'wrapNone') img.style.position = 'absolute';
+    });
+    // A paragraph that held nothing but floating pictures would collapse to zero height once they leave the flow,
+    // while in Word it keeps the height of its paragraph mark (letterhead files are full of these). Without this the
+    // text below slid up ~20px per such paragraph and ended up on top of the banner. A <br> restores that line.
+    items.forEach(({ img }) => {
+        if (img.style.position !== 'absolute') return;
+        const holder = img.closest('p,h1,h2,h3,h4,h5,h6,li');
+        if (!holder || holder.querySelector('br')) return;
+        const inFlow = [...holder.childNodes].some(n =>
+            (n.nodeType === 3 && n.textContent.trim()) ||
+            (n.nodeType === 1 && !(n.tagName === 'IMG' && n.style.position === 'absolute')));
+        if (!inFlow) holder.appendChild(holder.ownerDocument.createElement('br'));
     });
     paginateEditor();
 
@@ -2744,7 +3264,9 @@ async function extractHeaderFooterHtml(buf) {
 
     const sects = parse(docXml).getElementsByTagNameNS(W, 'sectPr');
     if (!sects.length) return out;
-    const sect = sects[sects.length - 1];
+    // The template is the FIRST page of the Word file, so its header / footer come from the FIRST section.
+    // (A first section with no header reference simply has none; later sections often repeat the letterhead.)
+    const sect = sects[0];
 
     for (const kind of ['header', 'footer']) {
         const refs = [...sect.getElementsByTagNameNS(W, kind + 'Reference')];
@@ -2795,8 +3317,8 @@ async function extractPageSettings(zip) {
     const xml = new DOMParser().parseFromString(await zip.file('word/document.xml').async('string'), 'application/xml');
     const sects = xml.getElementsByTagNameNS(W, 'sectPr');
     if (!sects.length) return null;
-    const sect = sects[sects.length - 1];
-    const attr = (node, name) => { const v = node && parseFloat(node.getAttributeNS(W, name)); return Number.isFinite(v) ? v : null; };
+    const sect = sects[0];            // first section = how the first page (the template) is set up
+    const attr =(node, name) => { const v = node && parseFloat(node.getAttributeNS(W, name)); return Number.isFinite(v) ? v : null; };
     const TW_MM = 56.7;   // twips per mm
     const out = {};
 
