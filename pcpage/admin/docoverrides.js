@@ -9,7 +9,27 @@
 // and printing always match.
 // =============================================
 
-export const DEFAULT_ADDRESS = 'Barangay Banicain, Olongapo City, Zambales';
+import { sanitizeEdits } from './doctextedit.js';
+
+// Which template placeholders map to which editable field (shared by docedit.js and doctemplate.js)
+export const FIELD_ALIASES = {
+    residentName:  ['residentname', 'fullname', 'name', 'resident.name', 'resident.fullname', 'resident'],
+    age:           ['age', 'resident.age'],
+    occupation:    ['occupation', 'work', 'job', 'jobtitle', 'resident.occupation'],
+    address:       ['address', 'resident.address', 'residentaddress'],
+    birthday:      ['birthday', 'birthdate', 'dateofbirth', 'dob', 'resident.birthday', 'resident.birthdate', 'resident.dateofbirth'],
+    contactNumber: ['contactnumber', 'contact', 'phone', 'mobile', 'resident.contactnumber', 'resident.contact', 'resident.phone'],
+    remarks:       ['remarks', 'additionalremarks', 'note', 'notes']
+};
+export const normKey = (k) => String(k || '').toLowerCase().replace(/[\s_\-]/g, '');
+export const keyForAlias = (dataField) => {
+    const nk = normKey(dataField);
+    return Object.keys(FIELD_ALIASES).find(k => FIELD_ALIASES[k].some(a => normKey(a) === nk));
+};
+// Fields that have their own box in the edit form and are edited through it
+export const INLINE_KEYS = ['residentName', 'age', 'occupation', 'address', 'contactNumber'];
+
+export const DEFAULT_ADDRESS ='Barangay Banicain, Olongapo City, Zambales';
 
 // Free-text fields an admin may correct on a single document
 export const TEXT_KEYS = ['residentName', 'age', 'occupation', 'address', 'birthday', 'contactNumber'];
@@ -80,6 +100,8 @@ export function effectiveValues(base, overrides) {
     out.showBirthday  = o.showBirthday === true;
     out.showContact   = o.showContact === true;
     out.remarks       = typeof o.remarks === 'string' ? o.remarks.trim() : '';
+    out.textBoxes     = Array.isArray(o.textBoxes) ? o.textBoxes : [];
+    out.textEdits     = Array.isArray(o.textEdits) ? o.textEdits : [];
     return out;
 }
 
@@ -94,6 +116,9 @@ export function buildOverrides(base, form) {
     if (form.showContact)  o.showContact = true;
     const r = String(form.remarks ?? '').trim();
     if (r) o.remarks = r;
+    if (Array.isArray(form.textBoxes) && form.textBoxes.length) o.textBoxes = form.textBoxes;
+    const edits = sanitizeEdits(form.textEdits);
+    if (edits.length) o.textEdits = edits;
     return o;
 }
 
@@ -112,9 +137,14 @@ export function formatDob(val) {
 let templatePainter = null;
 export function setTemplatePainter(fn) { templatePainter = typeof fn === 'function' ? fn : null; }
 
+// docedit.js registers this so the movable text boxes (docpaper.js) follow every paint.
+let boxPainter = null;
+export function setBoxPainter(fn) { boxPainter = typeof fn === 'function' ? fn : null; }
+
 /** Paint effective values into the certificate DOM */
 export function paintDocument(values) {
     if (templatePainter) templatePainter(values);
+    if (boxPainter) boxPainter(values);
     const set = (id, v) => {
         const n = document.getElementById(id);
         if (n) n.textContent = (v !== undefined && v !== null && v !== '') ? String(v) : '—';

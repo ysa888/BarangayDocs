@@ -25,7 +25,16 @@ import {
     DEFAULT_PAGE_SETTINGS, normalizePageSettings, buildValues, renderTemplateHtml,
     buildPages, printTemplateHtml, makeQrDataUrl
 } from "./templateengine.js";
-import { TEXT_KEYS, baseValues, formatDob, setTemplatePainter } from "./docoverrides.js";
+import { TEXT_KEYS, baseValues, formatDob, setTemplatePainter, keyForAlias, INLINE_KEYS } from "./docoverrides.js";
+import { transformHtml } from "./doctextedit.js";
+
+// Placeholders that have their own box in the edit form are edited there, not as free text
+const skipMappedField = (n) => {
+    const el = n.nodeType === 3 ? n.parentElement : n;
+    const f = el?.closest?.('[data-field]');
+    const k = f && keyForAlias(f.getAttribute('data-field'));
+    return !!k && INLINE_KEYS.includes(k);
+};
 
 // ---------------------------------------------
 // Loading
@@ -162,6 +171,8 @@ export function overridesFromPaintValues(values, base) {
     if (v.showContact)  ov.showContact = true;
     const r = String(v.remarks ?? '').trim();
     if (r) ov.remarks = r;
+    if (Array.isArray(v.textEdits) && v.textEdits.length) ov.textEdits = v.textEdits;   // free edits made on the paper
+    if (v.editTags) ov.__tag = true;                                                      // editing: mark text runs so they can be clicked
     return ov;
 }
 
@@ -185,8 +196,13 @@ export function createTemplateView(container) {
     function compose(ov) {
         const vals = applyOverridesToValues(st.baseVals, ov);
         const opts = { qrDataUrl: st.qr, baseUrl: document.baseURI };
-        const html = renderTemplateHtml(st.template.html, vals, opts) + buildExtraHtml(ov, vals, st.template.html);
-        return { vals, html, opts: { ...opts, values: vals } };
+        const raw = renderTemplateHtml(st.template.html, vals, opts) + buildExtraHtml(ov, vals, st.template.html);
+        const edits = ov?.textEdits;
+        const tagged = !!ov?.__tag;
+        // html = what is shown (tagged while editing); printHtml = the same text without the editing marks
+        const html = transformHtml(raw, edits, { tag: tagged, skipNode: skipMappedField });
+        const printHtml = tagged ? transformHtml(raw, edits, { tag: false, skipNode: skipMappedField }) : html;
+        return { vals, html, printHtml, opts: { ...opts, values: vals } };
     }
 
     async function render(ov) {
@@ -196,7 +212,7 @@ export function createTemplateView(container) {
         if (my !== seq || st !== mine || !view.active) return false;     // superseded or hidden meanwhile
         view.container.innerHTML = `<style>${built.css}</style>${built.html}`;
         mine.vals = c.vals;
-        mine.renderedHtml = c.html;
+        mine.renderedHtml = c.printHtml;
         mine.opts = c.opts;
         return true;
     }
@@ -272,7 +288,7 @@ export function createTemplateView(container) {
         let html = st.renderedHtml, opts = st.opts;
         if (pendingOv) {                       // an edit is still in the debounce: print that, not the older page
             const c = compose(pendingOv);
-            html = c.html; opts = c.opts;
+            html = c.printHtml; opts = c.opts;
         }
         return printTemplateHtml(html, st.settings, title, opts);
     }

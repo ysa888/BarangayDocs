@@ -26,8 +26,11 @@ import {
 
 import {
     DEFAULT_ADDRESS, FIELD_EL, baseValues, effectiveValues, buildOverrides,
-    paintDocument, profileAddress, setTemplatePainter
+    paintDocument, profileAddress, setTemplatePainter, setBoxPainter,
+    FIELD_ALIASES, normKey, keyForAlias, INLINE_KEYS
 } from "./docoverrides.js";
+import { applyEdits, resetEdits, readRun } from "./doctextedit.js";
+import * as paper from "./docpaper.js";
 
 // ---------------------------------------------
 // Firebase (reuses the existing default app if adminrequests.js
@@ -61,6 +64,7 @@ const S = {
     base: null,
     saved: {},          // overrides currently stored in Firestore
     editing: false,
+    edits: new Map(),   // free-text edits made on the paper (run number → {i, from, to})
     snapshot: '',       // JSON of overrides when edit mode started (dirty check)
     usedKeys: null,     // FIELDS keys the saved template uses (null = no template → show all)
     zoom: 1,
@@ -118,6 +122,22 @@ function injectUI() {
     .dpe-split .dpe-grid { grid-template-columns:1fr; }
     .dpe-field[hidden] { display:none; }
     .dpe-panel[hidden] { display:none; }
+    /* Click-to-edit fields on the paper */
+    .dpe-inline-field { outline:1px dashed #4FC3F7; background:rgba(79,195,247,.12); cursor:text; }
+    .dpe-inline-field:focus { outline:2px solid #1B3A6B; background:#fff; }
+    /* Any other text on the paper */
+    .dpe-tn { cursor:text; }
+    .dpe-tn:hover { outline:1px dashed #4FC3F7; background:rgba(79,195,247,.10); }
+    .dpe-tn:focus { outline:2px solid #1B3A6B; background:#fff; }
+    /* Text-box toolbar */
+    .dpe-tb-tools { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:8px; }
+    .dpe-tb-tools[hidden] { display:none; }
+    #dp-edit-panel .dpe-tb-tools select { height:34px; border:1.5px solid var(--border,#D0DCF0); border-radius:8px; background:#fff; padding:0 6px; font-family:'Nunito',sans-serif; font-size:12px; font-weight:700; }
+    #dp-edit-panel .dpe-tb-tools input[type=number] { width:62px; height:34px; padding:0 6px; }
+    #dp-edit-panel .dpe-tb-tools input[type=color] { width:38px; height:34px; padding:2px; cursor:pointer; }
+    .dpe-tb-tools button { min-width:34px; height:34px; padding:0 8px; border:1.5px solid var(--border,#D0DCF0); border-radius:8px; background:#fff; color:var(--primary,#1B3A6B); font-family:'Nunito',sans-serif; font-size:13px; font-weight:800; cursor:pointer; }
+    .dpe-tb-tools button.on { background:#1B3A6B; color:#fff; border-color:#1B3A6B; }
+    .dpe-tb-tools button.del { color:#DC3545; border-color:#F5C6CB; }
     .dpe-note { font-size:12px; font-weight:700; color:#664D03; background:#FFF3CD; border-radius:8px; padding:8px 12px; margin-bottom:12px; }
     .dpe-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 12px; }
     .dpe-field { display:flex; flex-direction:column; min-width:0; }
@@ -169,7 +189,7 @@ function injectUI() {
     panel.className = 'dpe-panel';
     panel.hidden = true;
     panel.innerHTML = `
-        <div class="dpe-note">Changes apply to this document only. The resident's profile is not modified.<div id="dpe-usednote" style="font-weight:600;margin-top:3px;"></div></div>
+        <div class="dpe-note">Changes apply to this document only. The resident's profile is not modified.<div style="font-weight:700;margin-top:3px;">Tip: click any text on the paper to edit it directly.</div><div id="dpe-usednote" style="font-weight:600;margin-top:3px;"></div></div>
         <div class="dpe-grid">
             ${FIELDS.map(f => `
             <div class="dpe-field${f.wide ? ' wide' : ''}" data-key="${f.key}">
@@ -183,6 +203,23 @@ function injectUI() {
             <div class="dpe-field wide" data-key="remarks">
                 <label for="dpe-remarks">Additional Remarks (printed on the document)</label>
                 <textarea id="dpe-remarks" maxlength="500" placeholder="Optional"></textarea>
+            </div>
+            <div class="dpe-field wide" data-key="textboxes">
+                <label>Text boxes</label>
+                <div><button type="button" class="dpe-btn" id="dpe-tb-add">＋ Add text box</button></div>
+                <div class="dpe-tb-tools" id="dpe-tb-tools" hidden>
+                    <select id="dpe-tb-font">${paper.FONT_LABELS.map(f => `<option value="${f}">${f}</option>`).join('')}</select>
+                    <input type="number" id="dpe-tb-size" min="6" max="96" title="Font size">
+                    <button type="button" id="dpe-tb-b" data-fmt="bold" title="Bold"><b>B</b></button>
+                    <button type="button" id="dpe-tb-i" data-fmt="italic" title="Italic"><i>I</i></button>
+                    <button type="button" id="dpe-tb-u" data-fmt="underline" title="Underline"><u>U</u></button>
+                    <button type="button" data-align="left" title="Align left">⬅</button>
+                    <button type="button" data-align="center" title="Center">↔</button>
+                    <button type="button" data-align="right" title="Align right">➡</button>
+                    <input type="color" id="dpe-tb-color" title="Text color">
+                    <button type="button" class="del" id="dpe-tb-del" title="Delete this text box">Delete</button>
+                </div>
+                <div class="dpe-hint" style="color:#6B7A99;">Click a box to type. Drag its “⠿ Move” bar to reposition; drag the corner to resize. Formatting applies to the whole box.</div>
             </div>
         </div>
         <div class="dpe-msg" id="dpe-msg"></div>
@@ -206,6 +243,72 @@ function injectUI() {
         if (a) { $('dpe-address').value = a; onFormInput(); }
     });
 
+    // --- text-box toolbar ---
+    $('dpe-tb-add').addEventListener('click', () => paper.addBox());
+    $('dpe-tb-font').addEventListener('change', (e) => paper.updateSelected({ font: e.target.value }));
+    $('dpe-tb-size').addEventListener('input', (e) => {
+        const n = parseInt(e.target.value, 10);
+        if (n >= 6 && n <= 96) paper.updateSelected({ size: n });
+    });
+    $('dpe-tb-color').addEventListener('input', (e) => paper.updateSelected({ color: e.target.value }));
+    panel.querySelectorAll('[data-fmt]').forEach(btn => btn.addEventListener('click', () => {
+        const s = paper.getSelected();
+        if (s) paper.updateSelected({ [btn.dataset.fmt]: !s[btn.dataset.fmt] });
+    }));
+    panel.querySelectorAll('[data-align]').forEach(btn => btn.addEventListener('click', () => paper.updateSelected({ align: btn.dataset.align })));
+    $('dpe-tb-del').addEventListener('click', () => paper.deleteSelected());
+
+    // --- edit directly on the paper (works on the built-in certificate and on template fields) ---
+    scroll.addEventListener('focusin', (e) => {
+        const el = e.target.closest?.('[data-dpe-key]');
+        if (!el || !S.editing) return;
+        if ((el.textContent || '').trim() === '—') {            // empty placeholder → replace, don't append
+            const r = document.createRange(); r.selectNodeContents(el);
+            const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        }
+    });
+    scroll.addEventListener('input', (e) => {
+        const run = e.target.closest?.('.dpe-tn');
+        if (run && S.editing) {                                  // free text anywhere on the paper
+            const r = readRun(run);
+            if (r.to === r.from) S.edits.delete(r.i); else S.edits.set(r.i, r);
+            return;
+        }
+        const el = e.target.closest?.('[data-dpe-key]');
+        if (!el || !S.editing) return;
+        const key = el.dataset.dpeKey;
+        const f = FIELDS.find(x => x.key === key);
+        let v = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (f?.max) v = v.slice(0, f.max);
+        $(`dpe-${key}`).value = v;
+        syncHints();                                            // repaint happens on blur so the caret isn't lost
+    });
+    scroll.addEventListener('focusout', (e) => {
+        if (!S.editing || !e.target.closest?.('[data-dpe-key]')) return;
+        // moving straight into another editable spot: don't repaint (it would drop the click)
+        if (e.relatedTarget?.closest?.('.dpe-tn, [data-dpe-key], .dpe-tb-body')) return;
+        onFormInput();
+    });
+    scroll.addEventListener('keydown', (e) => {
+        const el = e.target.closest?.('.dpe-tn, [data-dpe-key]');
+        if (el && e.key === 'Enter') { e.preventDefault(); el.blur(); }
+    });
+    scroll.addEventListener('paste', (e) => {
+        if (!e.target.closest?.('.dpe-tn, [data-dpe-key]')) return;
+        e.preventDefault();
+        const t = ((e.clipboardData || window.clipboardData)?.getData('text') || '').replace(/\s+/g, ' ');
+        document.execCommand('insertText', false, t);
+    });
+    // clicking empty paper deselects the current text box
+    scroll.addEventListener('pointerdown', (e) => { if (S.editing && !e.target.closest('.dpe-tb')) paper.select(null); }, true);
+
+    // Keep the text-box layer and the click-to-edit marks in step with whatever the preview shows
+    // (the template engine rewrites its container on every repaint).
+    new MutationObserver((recs) => {
+        if (recs.every(m => paper.contains(m.target))) return;
+        syncPaper();
+    }).observe(scroll, { subtree: true, childList: true, attributes: true, attributeFilter: ['style'] });
+
     // Closing the preview with unsaved edits asks first (capture → runs before the page's own handler)
     $('dp-close')?.addEventListener('click', (e) => {
         if (S.editing && isDirty() && !window.confirm('Discard your unsaved changes to this document?')) {
@@ -227,16 +330,7 @@ function injectUI() {
 // Reads documentTemplates/{docId}.html and looks at its {placeholders} / data-field spans.
 // Only those fields are offered in the edit form (no template → all fields, as before).
 // ---------------------------------------------
-const FIELD_ALIASES = {
-    residentName:  ['residentname', 'fullname', 'name', 'resident.name', 'resident.fullname', 'resident'],
-    age:           ['age', 'resident.age'],
-    occupation:    ['occupation', 'work', 'job', 'jobtitle', 'resident.occupation'],
-    address:       ['address', 'resident.address', 'residentaddress'],
-    birthday:      ['birthday', 'birthdate', 'dateofbirth', 'dob', 'resident.birthday', 'resident.birthdate', 'resident.dateofbirth'],
-    contactNumber: ['contactnumber', 'contact', 'phone', 'mobile', 'resident.contactnumber', 'resident.contact', 'resident.phone'],
-    remarks:       ['remarks', 'additionalremarks', 'note', 'notes']
-};
-const normKey = (k) => String(k || '').toLowerCase().replace(/[\s_\-]/g, '');
+// (FIELD_ALIASES / normKey / keyForAlias / INLINE_KEYS now live in docoverrides.js so doctemplate.js shares them)
 
 function extractTemplateKeys(html) {
     const keys = new Set();
@@ -271,7 +365,7 @@ function applyFieldVisibility() {
     document.querySelectorAll('#dp-edit-panel .dpe-field[data-key]').forEach(n => {
         const k = n.dataset.key;
         // remarks is always available; "show on document" toggles live inside their field
-        n.hidden = !!used && k !== 'remarks' && !used.has(k);
+        n.hidden = !!used && k !== 'remarks' && k !== 'textboxes' && !used.has(k);
     });
     const note = document.getElementById('dpe-usednote');
     if (note) note.textContent = used ? 'Showing only the fields used by this document\\u2019s template.' : '';
@@ -286,6 +380,7 @@ async function attach(requestId, cachedData) {
     S.requestId = requestId;
     S.editing = false;
     resetExtras();
+    paper.setBoxes([]);
     setEditButton('hidden');
 
     let r = cachedData || {};
@@ -319,6 +414,7 @@ async function attach(requestId, cachedData) {
     }
 
     paintDocument(effectiveValues(S.base, S.saved));
+    syncPaper();
     updateBadge();
 
     if (EDITABLE_STATUSES.includes(r.status))      setEditButton('enabled');
@@ -360,6 +456,11 @@ function teardown() {
     setTemplatePainter(null);
     if (S.editing) exitEditUI();
     resetExtras();
+    paper.setBoxes([]);
+    paper.attachTo(null);
+    // put the built-in certificate's text back to normal so one request's edits never show on the next
+    const legacy = $('doc-preview-content');
+    if (legacy) resetEdits(legacy, legacySkip);
     $('dpe-badge')?.classList.remove('show');
     setEditButton('hidden');
 }
@@ -389,6 +490,8 @@ function fillForm(values) {
     $('dpe-showBirthday').checked = !!values.showBirthday;
     $('dpe-showContact').checked  = !!values.showContact;
     $('dpe-remarks').value        = values.remarks || '';
+    paper.setBoxes(values.textBoxes || []);
+    S.edits = new Map((values.textEdits || []).map(e => [e.i, { ...e }]));
 }
 
 function readForm() {
@@ -397,6 +500,8 @@ function readForm() {
     f.showBirthday = $('dpe-showBirthday').checked;
     f.showContact  = $('dpe-showContact').checked;
     f.remarks      = $('dpe-remarks').value;
+    f.textBoxes    = paper.getBoxes();
+    f.textEdits    = [...S.edits.values()].sort((a, b) => a.i - b.i);
     return f;
 }
 
@@ -418,7 +523,94 @@ function enterEdit() {
     if (p) { p.disabled = true; p.title = 'Save or cancel your changes before printing.'; }
     $('dpe-use-profile-address').style.display = profileAddress(S.resident) ? '' : 'none';
     showMsg('');
+    paper.setEditing(true);
+    syncBoxTools(null);
+    syncPaper();
     refreshPreview();
+}
+
+// ---------------------------------------------
+// Text-box layer + click-to-edit marks on the paper
+// ---------------------------------------------
+// The element the admin is looking at: the admin-made template when shown, else the built-in certificate
+function currentHost() {
+    const t = $('doc-preview-template'), c = $('doc-preview-content');
+    if (t && t.style.display !== 'none') return t;
+    return c || null;
+}
+
+// Built-in certificate: parts that are driven by the form fields are not free-text (edited via the field)
+const LEGACY_SKIP_IDS = ['dp-name', 'dp-age', 'dp-occupation', 'dp-address', 'dp-extra-line', 'dp-remarks', 'dp-qr-wrap'];
+function legacySkip(n) {
+    const el = n.nodeType === 3 ? n.parentElement : n;
+    return LEGACY_SKIP_IDS.some(id => { const s = $(id); return !!s && s.contains(el); });
+}
+
+function legacyVisible() {
+    const t = $('doc-preview-template');
+    return !!$('doc-preview-content') && !(t && t.style.display !== 'none');
+}
+
+// Built-in certificate: apply the saved/typed free-text edits to the live paper
+function paintLegacyText(v) {
+    if (!legacyVisible()) return;
+    applyEdits($('doc-preview-content'), v.textEdits || [], { tag: !!v.editTags, skipNode: legacySkip });
+    if (v.editTags) markInline();
+}
+
+function setEditable(el, key) {
+    if (!el) return;
+    el.dataset.dpeKey = key;
+    el.classList.add('dpe-inline-field');
+    el.spellcheck = false;
+    el.contentEditable = 'plaintext-only';
+    if (el.contentEditable !== 'plaintext-only') el.contentEditable = 'true';
+}
+
+function markInline() {
+    // every other piece of text on the paper (tagged by doctextedit.js)
+    document.querySelectorAll('#doc-preview-modal .dpe-tn').forEach(el => {
+        el.spellcheck = false;
+        el.contentEditable = 'plaintext-only';
+        if (el.contentEditable !== 'plaintext-only') el.contentEditable = 'true';
+    });
+    const t = $('doc-preview-template'), c = $('doc-preview-content');
+    if (c && (!t || t.style.display === 'none')) {
+        Object.entries(FIELD_EL).forEach(([key, id]) => setEditable($(id), key));
+    }
+    if (t && t.style.display !== 'none') {
+        t.querySelectorAll('[data-field]').forEach(el => {
+            const key = keyForAlias(el.dataset.field);
+            if (key && INLINE_KEYS.includes(key)) setEditable(el, key);
+        });
+    }
+}
+
+function clearInline() {
+    document.querySelectorAll('.dpe-tn').forEach(el => el.removeAttribute('contenteditable'));
+    document.querySelectorAll('[data-dpe-key]').forEach(el => {
+        el.removeAttribute('contenteditable');
+        el.classList.remove('dpe-inline-field');
+        delete el.dataset.dpeKey;
+    });
+}
+
+function syncPaper() {
+    paper.attachTo(S.active ? currentHost() : null);
+    if (S.editing) markInline();
+}
+
+// Show the toolbar for the selected text box
+function syncBoxTools(sel) {
+    const tools = $('dpe-tb-tools');
+    if (!tools) return;
+    tools.hidden = !sel || !S.editing;
+    if (!sel) return;
+    $('dpe-tb-font').value = sel.font;
+    if (document.activeElement !== $('dpe-tb-size')) $('dpe-tb-size').value = sel.size;
+    $('dpe-tb-color').value = sel.color;
+    tools.querySelectorAll('[data-fmt]').forEach(b => b.classList.toggle('on', !!sel[b.dataset.fmt]));
+    tools.querySelectorAll('[data-align]').forEach(b => b.classList.toggle('on', sel.align === b.dataset.align));
 }
 
 
@@ -487,7 +679,7 @@ function wirePan(sc) {
     let drag = null;
     sc.addEventListener('pointerdown', (e) => {
         if (!S.editing || e.pointerType !== 'mouse' || e.button !== 0) return;
-        if (e.target.closest('input, textarea, button, select, a')) return;
+        if (e.target.closest('input, textarea, button, select, a, .dpe-tb, [contenteditable]:not([contenteditable="false"])')) return;
         drag = { x: e.clientX, y: e.clientY, l: sc.scrollLeft, t: sc.scrollTop };
         sc.classList.add('dragging');
         try { sc.setPointerCapture(e.pointerId); } catch (_) {}
@@ -549,6 +741,9 @@ function exitSplit() {
 function exitEditUI() {
     exitSplit();
     S.editing = false;
+    paper.setEditing(false);
+    clearInline();
+    syncBoxTools(null);
     $('doc-preview-modal').querySelector('.doc-preview-wrapper').classList.remove('dp-editing');
     $('dp-edit-panel').hidden = true;
     const p = $('dp-print');
@@ -565,7 +760,7 @@ function cancelEdit(confirmIfDirty) {
 }
 
 function resetToOriginal() {
-    fillForm({ ...S.base, showBirthday: false, showContact: false, remarks: '' });
+    fillForm({ ...S.base, showBirthday: false, showContact: false, remarks: '', textBoxes: [], textEdits: [] });
     onFormInput();
 }
 
@@ -574,6 +769,7 @@ function onFormInput() { refreshPreview(); }
 function refreshPreview() {
     const overrides = readOverrides();
     const eff = effectiveValues(S.base, overrides);
+    eff.editTags = S.editing;          // while editing, mark every run of text so it can be clicked
     paintDocument(eff);
     if (S.editing) applyZoom();
 
@@ -581,6 +777,10 @@ function refreshPreview() {
     Object.entries(FIELD_EL).forEach(([key, elId]) => {
         $(elId)?.classList.toggle('dp-changed', String(eff[key]) !== String(S.base[key]));
     });
+    syncHints();
+}
+
+function syncHints() {
     FIELDS.forEach(f => {
         const hint = $(`dpe-hint-${f.key}`);
         const cur = String($(`dpe-${f.key}`).value || '').trim();
@@ -656,5 +856,11 @@ function toast(text) {
 // ----------------------------------------------
 // Boot
 // ----------------------------------------------
+paper.init({ onChange() {}, onSelect: (sel) => syncBoxTools(sel) });
+// Outside edit mode the saved boxes follow every paint; while editing, the boxes on the paper are the source of truth.
+setBoxPainter((v) => {
+    if (!S.editing) paper.setBoxes(v.textBoxes || []);
+    paintLegacyText(v);
+});
 injectUI();
 window.BarangayDocEditor = { attach };
