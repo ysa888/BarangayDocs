@@ -133,6 +133,8 @@
     .seal-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-green);
       box-shadow: 0 0 0 3px rgba(40,167,69,0.3); }
     .seal-row span { font-size: 13px; color: rgba(255,255,255,0.65); font-weight: 700; }
+    .seal-dot.checking { background: #9AA5BC; box-shadow: 0 0 0 3px rgba(154,165,188,0.3); }
+    .seal-dot.closed { background: var(--error); box-shadow: 0 0 0 3px rgba(220,53,69,0.3); }
 
     /* RIGHT PANEL */
     .right-panel {
@@ -404,9 +406,9 @@
         </div>
       </div>
 
-      <div class="seal-row">
-        <div class="seal-dot"></div>
-        <span>System Active &bull; Mon – Fri, 9:00 AM – 5:00 PM</span>
+      <div class="seal-row" id="status-row">
+        <div class="seal-dot" id="status-dot"></div>
+        <span id="status-text">Checking status…</span>
       </div>
     </div>
   </div>
@@ -532,6 +534,33 @@
         });
       });
     })();
+  </script>
+
+  <script type="module">
+    // Live office status (same source as the home page / admin dashboard)
+    import { watchStatus, computeStatus, formatReopen } from "./barangaystatus.js";
+
+    const dot = document.getElementById('status-dot');
+    const text = document.getElementById('status-text');
+    let latest = null, loaded = false;
+
+    function render() {
+      if (!loaded) return;
+      const s = computeStatus(latest);
+      if (s.open) {
+        dot.className = 'seal-dot';
+        text.textContent = 'System Active \u2022 Mon \u2013 Fri, 8:00 AM \u2013 5:00 PM';
+      } else {
+        dot.className = 'seal-dot closed';
+        let msg = 'Barangay Closed';
+        if (s.source === 'manual' && s.reason) msg += ' \u2022 ' + s.reason;
+        if (s.reopenAt) msg += ' \u2022 Reopens ' + formatReopen(s.reopenAt);
+        text.textContent = msg;
+      }
+    }
+
+    watchStatus(function (data) { latest = data; loaded = true; render(); });
+    setInterval(render, 30000); // schedule-based open/close changes with the clock
   </script>
 
   <script type="module" src="bdlogsign.js"></script>

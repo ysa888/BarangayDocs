@@ -62,7 +62,7 @@
     .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; opacity: 0.4; }
     .filter-select { height: 42px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--card-bg); padding: 0 32px 0 12px; font-family: 'Nunito', sans-serif; font-size: 13px; color: var(--text-main); outline: none; appearance: none; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239AA5BC' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; }
     .table-card { background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 16px; overflow-x: auto; }
-    .table-head-row { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1.5px solid var(--border); background: var(--bg); }
+    .table-head-row { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1.5px solid var(--border); background: var(--bg); }
     .table-head-row span { font-size: 10px; font-weight: 800; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.5px; }
     .table-row { display: flex; align-items: center; padding: 13px 16px; border-bottom: 1px solid var(--border); gap: 10px; transition: background 0.15s; }
     .table-row:last-child { border-bottom: none; }
@@ -135,6 +135,15 @@
     .delete-actions .delete-cancel { background: #fff; border: 2px solid var(--border); color: var(--text-sub); }
     .delete-actions .delete-confirm { background: var(--red); border: none; color: #fff; }
     .delete-actions button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+        /* Non-resident (boarder) tag + landlord consent */
+    .col-restype { width: 110px; flex-shrink: 0; text-align: center; }
+    .col-restype .badge { display: inline-block; width: 98px; text-align: center; white-space: nowrap; }
+    .badge.res { background: #EEF2F8; color: var(--text-sub); }
+    .badge.nonres { background: #E3EEFF; color: #1B3A6B; }
+    .col-uname .badge.nonres { margin-left: 6px; font-size: 9px; padding: 2px 8px; vertical-align: middle; }
+    .modal-top-info .badge.nonres { margin-left: 6px; }
+    #modal-consent-wrap img { max-height: 320px; }
 
     /* ID + Face side-by-side verification */
     .verify-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
@@ -274,6 +283,7 @@
         <span class="col-contact">Contact</span>
         <span class="col-date">Joined</span>
         <span class="col-brgy">Address</span>
+        <span class="col-restype">Residency</span>
         <span class="col-status">Status</span>
         <span class="col-action">Action</span>
       </div>
@@ -291,6 +301,7 @@
         <h3 id="modal-name">—</h3>
         <p id="modal-email">—</p>
         <span class="badge" id="modal-status">—</span>
+        <span class="badge nonres" id="modal-restype" style="display:none;">Non-Resident</span>
       </div>
     </div>
     <div class="modal-header">
@@ -320,7 +331,7 @@
           <span id="modal-address">—</span>
         </div>
         <div class="detail-item">
-          <label>Years of Residency</label>
+          <label id="modal-years-label">Years of Residency</label>
           <span id="modal-years">—</span>
         </div>
         <div class="detail-item">
@@ -350,6 +361,15 @@
       </a>
     </div>
   </div>
+</div>
+<div class="valid-id-section" id="modal-consent-section" style="display:none;">
+  <label>Landlord Consent Submitted</label>
+  <div class="valid-id-img-wrap" id="modal-consent-wrap">
+    <div class="valid-id-no-img">No landlord consent uploaded</div>
+  </div>
+  <a id="modal-open-consent-btn" href="#" target="_blank" class="btn-open-id" style="display:none;">
+    Open Full Image
+  </a>
 </div>
 <div class="lightbox" id="lightbox"><img id="lightbox-img" src="" alt="Enlarged photo"></div>
     </div>
@@ -490,6 +510,7 @@ img, canvas { max-width: 100%; }
   .table-row > .col-uname  { flex: 1 1 0; min-width: 0; }
   .col-uname h4, .col-uname p { overflow-wrap: anywhere; }
   .table-row > .col-date   { order: 2; flex: 1 1 0; width: auto; min-width: 0; padding-left: 42px; margin-top: 8px; }
+  .table-row > .col-restype { order: 2; flex: 0 0 auto; width: auto; margin-top: 8px; }
   .table-row > .col-status { order: 2; flex: 0 0 auto; width: auto; margin-top: 8px; }
   .table-row > .col-action { order: 4; flex: 1 1 100%; width: auto; padding-left: 42px; margin-top: 10px; text-align: left; }
   .action-row { justify-content: flex-start; }

@@ -575,7 +575,12 @@ function ensureHomeRequestModal() {
     style.textContent = `
     .hq-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:800; align-items:center; justify-content:center; padding:16px; }
     .hq-overlay.show { display:flex; }
-    .hq-modal { background:var(--card-bg,#fff); border-radius:24px; padding:32px; width:100%; max-width:540px; max-height:88vh; overflow-y:auto; }
+    .hq-modal { background:var(--card-bg,#fff); border-radius:24px; padding:0; width:100%; max-width:540px; max-height:88vh; overflow:hidden; display:flex; flex-direction:column; }
+    .hq-scroll { padding:32px; overflow-y:auto; flex:1; min-height:0; scrollbar-width:thin; scrollbar-color:#C5D0E6 transparent; }
+    .hq-scroll::-webkit-scrollbar { width:8px; }
+    .hq-scroll::-webkit-scrollbar-track { background:transparent; margin:18px 0; }
+    .hq-scroll::-webkit-scrollbar-thumb { background:#C5D0E6; border-radius:8px; }
+    .hq-scroll::-webkit-scrollbar-thumb:hover { background:#A9B8D6; }
     .hq-title { font-family:'Poppins',sans-serif; font-size:20px; font-weight:700; color:var(--text-main); margin-bottom:4px; }
     .hq-sub { font-size:13px; color:var(--text-sub); margin-bottom:24px; }
     .hq-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:20px; }
@@ -620,7 +625,8 @@ function ensureHomeRequestModal() {
     .hq-perr { color:var(--red,#dc3545); font-size:12px; font-weight:700; margin-top:6px; text-align:center; }
     @media (max-width:640px) {
       .hq-overlay { padding:10px; }
-      .hq-modal { padding:22px 18px; max-height:94vh; max-height:94dvh; }
+      .hq-modal { max-height:94vh; max-height:94dvh; }
+      .hq-scroll { padding:22px 18px; }
       .hq-grid { grid-template-columns:repeat(2,1fr); }
       .hq-btns { flex-direction:column-reverse; }
       .hq-cancel, .hq-submit, .hq-done { height:auto; min-height:54px; font-size:15px; }
@@ -633,6 +639,7 @@ function ensureHomeRequestModal() {
     wrap.innerHTML = `
     <div class="hq-overlay" id="hqOverlay">
         <div class="hq-modal" role="dialog" aria-modal="true" aria-labelledby="hqTitle">
+            <div class="hq-scroll">
             <div class="hq-title" id="hqTitle">New Document Request</div>
             <div id="hqStepDetails">
             <div class="hq-sub">Select a document type and fill in the details</div>
@@ -671,6 +678,7 @@ function ensureHomeRequestModal() {
                     <button type="button" class="hq-cancel" id="hqBack">Back</button>
                     <button type="button" class="hq-submit" id="hqSubmit">Submit Request</button>
                 </div>
+            </div>
             </div>
         </div>
     </div>

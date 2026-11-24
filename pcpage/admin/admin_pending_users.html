@@ -328,6 +328,7 @@
     .table-head-row {
       display: flex;
       align-items: center;
+      gap: 10px;
       padding: 12px 16px;
       border-bottom: 1.5px solid var(--border);
       background: var(--bg);
@@ -651,6 +652,15 @@
     }
     .btn-open-id:hover { background: var(--primary-light); }
 
+        /* Non-resident (boarder) tag + landlord consent */
+    .col-restype { width: 110px; flex-shrink: 0; text-align: center; }
+    .col-restype .badge { display: inline-block; width: 98px; text-align: center; white-space: nowrap; }
+    .badge.res { background: #EEF2F8; color: var(--text-sub); }
+    .badge.nonres { background: #E3EEFF; color: #1B3A6B; }
+    .col-uname .badge.nonres { margin-left: 6px; font-size: 9px; padding: 2px 8px; vertical-align: middle; }
+    .modal-top-info .badge.nonres { margin-left: 6px; }
+    #modal-consent-wrap img { max-height: 320px; }
+
     /* ID + Face side-by-side verification */
     .verify-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
     .verify-col { min-width: 0; }
@@ -799,6 +809,7 @@
           <span class="col-contact">Contact</span>
           <span class="col-date">Registered</span>
           <span class="col-brgy">Purok</span>
+          <span class="col-restype">Residency</span>
           <span class="col-status">Status</span>
           <span class="col-action">Action</span>
         </div>
@@ -816,6 +827,7 @@
           <h3 id="modal-name">—</h3>
           <p id="modal-email">—</p>
           <span class="badge waiting" id="modal-status">Waiting</span>
+        <span class="badge nonres" id="modal-restype" style="display:none;">Non-Resident</span>
         </div>
       </div>
       <div class="modal-header">
@@ -845,7 +857,7 @@
             <span id="modal-address">—</span>
           </div>
           <div class="detail-item">
-            <label>Years of Residency</label>
+            <label id="modal-years-label">Years of Residency</label>
             <span id="modal-years">—</span>
           </div>
           <div class="detail-item">
@@ -875,6 +887,15 @@
       </a>
     </div>
   </div>
+</div>
+<div class="valid-id-section" id="modal-consent-section" style="display:none;">
+  <label>Landlord Consent Submitted</label>
+  <div class="valid-id-img-wrap" id="modal-consent-wrap">
+    <div class="valid-id-no-img">No landlord consent uploaded</div>
+  </div>
+  <a id="modal-open-consent-btn" href="#" target="_blank" class="btn-open-id" style="display:none;">
+    Open Full Image
+  </a>
 </div>
 <div class="lightbox" id="lightbox"><img id="lightbox-img" src="" alt="Enlarged photo"></div>
       </div>
@@ -1000,6 +1021,7 @@ img, canvas { max-width: 100%; }
   .table-row > .col-uname  { flex: 1 1 0; min-width: 0; }
   .col-uname h4, .col-uname p { overflow-wrap: anywhere; }
   .table-row > .col-date   { order: 2; flex: 1 1 0; width: auto; min-width: 0; padding-left: 42px; margin-top: 8px; }
+  .table-row > .col-restype { order: 2; flex: 0 0 auto; width: auto; margin-top: 8px; }
   .table-row > .col-status { order: 2; flex: 0 0 auto; width: auto; margin-top: 8px; }
   .table-row > .col-action { order: 4; flex: 1 1 100%; width: auto; padding-left: 42px; margin-top: 10px; text-align: left; }
   .action-row { justify-content: flex-start; }

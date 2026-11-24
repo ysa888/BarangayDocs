@@ -20,7 +20,7 @@ const db = getFirestore(getApps().length ? getApp() : initializeApp(firebaseConf
 
 const REF = () => doc(db, "settings", "barangayStatus");
 const TZ = 8 * 3600 * 1000;      // Asia/Manila (UTC+8, no DST)
-const OPEN_H = 9, CLOSE_H = 17;  // 9:00 AM – 5:00 PM, Mon–Fri
+const OPEN_H = 8, CLOSE_H = 17;  // 8:00 AM – 5:00 PM, Mon–Fri
 
 export const REASONS = [
   { key: "all_admin_out", label: "All admin are out" },
@@ -38,7 +38,7 @@ export function isScheduledOpen(ms) {
   const p = parts(ms);
   return p.dow >= 1 && p.dow <= 5 && p.h >= OPEN_H && p.h < CLOSE_H;
 }
-export function nextOpenTime(ms) {           // next weekday 9:00 AM
+export function nextOpenTime(ms) {           // next weekday 8:00 AM
   const p = parts(ms);
   for (let i = 0; i < 8; i++) {
     const t = at(p.y, p.m, p.d + i, OPEN_H), dow = (p.dow + i) % 7;
@@ -50,7 +50,7 @@ export function nextCloseTime(ms) {          // next 5:00 PM
   for (let i = 0; i < 2; i++) { const t = at(p.y, p.m, p.d + i, CLOSE_H); if (t > ms) return t; }
 }
 
-// Manual overrides expire by themselves: a manual close ends at the next 9 AM,
+// Manual overrides expire by themselves: a manual close ends at the next 8 AM,
 // so no cron/Cloud Function is needed. Every client computes the same result.
 export function computeStatus(data, now = Date.now()) {
   const o = data && data.until > now && data.type !== "auto" ? data : null;

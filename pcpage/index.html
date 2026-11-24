@@ -527,11 +527,104 @@
       background: rgba(255,255,255,0.06);
     }
     .location-map iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+    .location-contact {
+      max-width: 1200px; margin: 40px auto 0;
+      padding-top: 32px;
+      border-top: 1px solid rgba(255,255,255,0.12);
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;
+    }
+    .contact-item {
+      display: flex; align-items: flex-start; gap: 14px;
+      padding: 18px 20px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 14px;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .contact-item:hover { background: rgba(255,255,255,0.11); border-color: rgba(79,195,247,0.3); }
+    .contact-icon {
+      flex-shrink: 0;
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      background: rgba(79,195,247,0.15);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .contact-icon svg { width: 20px; height: 20px; stroke: var(--accent); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .contact-label {
+      font-size: 12px; font-weight: 800; letter-spacing: 0.8px;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 4px;
+    }
+    .contact-value {
+      font-size: 14px; line-height: 1.6;
+      color: rgba(255,255,255,0.75);
+      text-decoration: none; word-break: break-word;
+    }
+    a.contact-value:hover { color: #fff; text-decoration: underline; }
     
     .hiw-section {
     background: #E3E4E5;
     }
     
+    /* ── HISTORY ── */
+    .history-section { background: var(--bg); }
+    .history-inner {
+      max-width: 1200px; margin: 0 auto;
+      display: grid; grid-template-columns: 1fr 1.5fr; gap: 64px; align-items: start;
+    }
+    .history-intro { position: sticky; top: 104px; }
+    .history-facts { margin-top: 32px; display: flex; flex-direction: column; gap: 12px; }
+    .history-fact {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 18px; background: var(--card-bg);
+      border: 1px solid var(--border); border-radius: 14px;
+    }
+    .history-fact strong {
+      font-family: 'Poppins', sans-serif; font-size: 18px; font-weight: 800;
+      color: var(--primary); min-width: 64px;
+    }
+    .history-fact span { font-size: 13px; color: var(--text-sub); line-height: 1.5; }
+    .history-timeline {
+      position: relative; display: flex; flex-direction: column; gap: 24px;
+      padding-left: 36px;
+    }
+    .history-timeline::before {
+      content: ''; position: absolute; left: 11px; top: 8px; bottom: 8px;
+      width: 2px; background: var(--border);
+    }
+    .history-card {
+      position: relative; background: var(--card-bg);
+      border: 1px solid var(--border); border-radius: 18px; padding: 28px;
+      transition: transform 0.25s, box-shadow 0.25s;
+    }
+    .history-card:hover { transform: translateY(-4px); box-shadow: 0 12px 36px rgba(27,58,107,0.1); }
+    .history-card::before {
+      content: ''; position: absolute; left: -33px; top: 32px;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--primary); border: 3px solid var(--bg);
+      box-shadow: 0 0 0 2px var(--primary);
+    }
+    .history-era {
+      display: inline-block; margin-bottom: 10px; padding: 4px 10px;
+      background: rgba(27,58,107,0.08); border-radius: 6px;
+      font-size: 11px; font-weight: 800; letter-spacing: 0.5px;
+      text-transform: uppercase; color: var(--primary-light);
+    }
+    .history-card h3 {
+      font-family: 'Poppins', sans-serif; font-size: 18px; font-weight: 800;
+      color: var(--text-main); margin-bottom: 10px;
+    }
+    .history-card p { font-size: 14px; color: var(--text-sub); line-height: 1.75; }
+    @media (max-width: 900px) {
+      .history-inner { grid-template-columns: 1fr; gap: 36px; }
+      .history-intro { position: static; }
+    }
+    @media (max-width: 480px) {
+      .history-timeline { padding-left: 28px; }
+      .history-card { padding: 22px 18px; }
+      .history-card::before { left: -27px; }
+    }
+
     /* ── FOOTER ── */
     footer {
       background: var(--primary);
@@ -691,6 +784,7 @@
       .info-strip { padding: 60px 24px; }
       .location { padding: 56px 24px 40px; }
       .location-inner { grid-template-columns: 1fr; gap: 28px; }
+      .location-contact { grid-template-columns: 1fr; margin-top: 32px; padding-top: 24px; }
       footer { flex-direction: column; gap: 16px; text-align: center; }
       .footer-links { flex-wrap: wrap; justify-content: center; }
       .final-cta { padding: 60px 24px; }
@@ -749,6 +843,7 @@
       <li><a href="#how-it-works">How It Works</a></li>
       <li><a href="#documents">Documents</a></li>
       <li><a href="#about">About</a></li>
+      <li><a href="#history">History</a></li>
       <li><a href="#location">Visit Us</a></li>
     </ul>
     <div class="nav-cta">
@@ -765,6 +860,7 @@
     <a href="#how-it-works">How It Works</a>
     <a href="#documents">Documents</a>
     <a href="#about">About</a>
+    <a href="#history">History</a>
     <a href="#location">Visit Us</a>
   </div>
 
@@ -830,7 +926,7 @@
 
         <div class="hero-status" id="heroStatus">
           <div class="status-dot"></div>
-          <span id="heroStatusText">System Active &bull; Mon – Fri, 9:00 AM – 5:00 PM</span>
+          <span id="heroStatusText">System Active &bull; Mon – Fri, 8:00 AM – 5:00 PM</span>
         </div>
       </div>
     </div>
@@ -864,27 +960,7 @@
           </a>
         </div>
 
-        <div class="hero-doc-types">
-          <p>Available documents</p>
-          <div class="doc-chips">
-            <div class="doc-chip">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              Barangay Clearance
-            </div>
-            <div class="doc-chip">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              Certificate of Residency
-            </div>
-            <div class="doc-chip">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              Certificate of Indigency
-            </div>
-            <div class="doc-chip">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              Business Clearance
-            </div>
-          </div>
-        </div>
+        
       </div>
     </div>
   </section>
@@ -1070,7 +1146,7 @@
           <div class="info-card-dot" style="background:#4FC3F7;"></div>
           <div>
             <h4>Office Hours</h4>
-            <p>Monday to Friday, 9:00 AM – 5:00 PM</p>
+            <p>Monday to Friday, 8:00 AM – 5:00 PM</p>
           </div>
         </div>
         <div class="info-card">
@@ -1098,6 +1174,39 @@
     </div>
   </section>
 
+  <!-- HISTORY -->
+  <section class="section history-section" id="history">
+    <div class="history-inner">
+      <div class="history-intro fade-in">
+        <div class="section-label">Our History</div>
+        <h2 class="section-title">History of Barangay New Banicain</h2>
+        <p class="section-sub">From a fishing village across the bay to a thriving residential community in the heart of Olongapo City.</p>
+        <div class="history-facts">
+          <div class="history-fact"><strong>Pre-war</strong><span>Fishing and small-scale farming were the main livelihoods.</span></div>
+          <div class="history-fact"><strong>1948</strong><span>The U.S. Naval Base expansion led to the relocation of the barrio.</span></div>
+          <div class="history-fact"><strong>Today</strong><span>A residential community beside West Tapinac, Olongapo City.</span></div>
+        </div>
+      </div>
+      <div class="history-timeline">
+        <div class="history-card fade-in">
+          <span class="history-era">Pre-war Days</span>
+          <h3>Old Barrio Banicain</h3>
+          <p>Old Barrio Banicain was formerly situated in an area across the sea overlooking the U.S. Navy yard. During the pre-war days, fishing and minute farming were the main sources and means of livelihood of the residents in the barrio. The villagers regularly came to the town of Olongapo in their sailboats to bring their products of firewood, cashew nuts and bananas. Out of their sales they bought pork, beef and other foodstuffs, clothes and shoes to take back home to Barrio Banicain.</p>
+        </div>
+        <div class="history-card fade-in" style="transition-delay:0.08s">
+          <span class="history-era">Circa 1948</span>
+          <h3>Relocation to West Tapinac</h3>
+          <p>When the U.S. Naval base was expanded sometime in 1948, Barrio Banicain was affected and relocated along the western portion of Barrio West Tapinac. To assist the displaced residents of the barrio, quonset huts were constructed by the U.S. Navy where the residents were temporarily housed. Soon however, the land comprising the barrio was opened for occupancy and those already residing in the place were given preferential right to occupy the area where they had established their homes.</p>
+        </div>
+        <div class="history-card fade-in" style="transition-delay:0.16s">
+          <span class="history-era">Rebuilding</span>
+          <h3>A New Residential Community</h3>
+          <p>The new site was formerly low and swampy, but when the U.S. Naval base officials embarked on a continuous rehabilitation program in Olongapo, the entire place was refilled and elevated, transforming the barrio into a suitable residential place. Soon, several employees working inside the U.S. Naval Base preferred to settle in the barrio and built permanent residential houses in the area.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- FINAL CTA -->
   <section class="final-cta">
     <div class="final-cta-inner fade-in">
@@ -1117,13 +1226,51 @@
       <div class="fade-in">
         <div class="section-label">Visit Us</div>
         <h2 class="section-title">Barangay Banicain Hall</h2>
-        <p class="location-address">Barangay Banicain, Olongapo City, Zambales<br>Monday to Friday, 9:00 AM – 5:00 PM</p>
-        <a class="location-btn" href="https://www.google.com/maps/search/?api=1&query=Barangay+Banicain+Hall+Olongapo+City" target="_blank" rel="noopener">Get directions</a>
+        <p class="location-address">Luna St., Barangay New Banicain, Olongapo City, Zambales<br>Monday to Friday, 8:00 AM – 5:00 PM</p>
+        <a class="location-btn" href="https://www.google.com/maps/search/?api=1&query=Luna+St+Barangay+New+Banicain+Olongapo+City" target="_blank" rel="noopener">Get directions</a>
       </div>
       <div class="location-map fade-in" style="transition-delay:0.1s">
         <iframe title="Barangay Banicain Hall location"
-          src="https://www.google.com/maps?q=Barangay+Banicain+Hall+Olongapo+City&output=embed"
+          src="https://www.google.com/maps?q=Luna+St+Barangay+New+Banicain+Olongapo+City&output=embed"
           loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
+      </div>
+    </div>
+    <div class="location-contact fade-in">
+      <div class="contact-item">
+        <div class="contact-icon">
+          <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <div>
+          <div class="contact-label">Location</div>
+          <div class="contact-value">Luna St., Barangay New Banicain, Olongapo City, Zambales</div>
+        </div>
+      </div>
+      <div class="contact-item">
+        <div class="contact-icon">
+          <svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        </div>
+        <div>
+          <div class="contact-label">Landline</div>
+          <a class="contact-value" href="tel:+63476110382">(047) 611-0382</a>
+        </div>
+      </div>
+      <div class="contact-item">
+        <div class="contact-icon">
+          <svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+        </div>
+        <div>
+          <div class="contact-label">Mobile No.</div>
+          <a class="contact-value" href="tel:+639086864304">0908-686-4304</a>
+        </div>
+      </div>
+      <div class="contact-item">
+        <div class="contact-icon">
+          <svg viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        </div>
+        <div>
+          <div class="contact-label">Email</div>
+          <a class="contact-value" href="mailto:barangaynewbanicain@gmail.com">barangaynewbanicain@gmail.com</a>
+        </div>
       </div>
     </div>
   </section>
@@ -1255,7 +1402,7 @@
 
     const box  = document.getElementById('heroStatus');
     const text = document.getElementById('heroStatusText');
-    const HOURS = 'Mon \u2013 Fri, 9:00 AM \u2013 5:00 PM';
+    const HOURS = 'Mon \u2013 Fri, 8:00 AM \u2013 5:00 PM';
     let data = null;
 
     function render() {
@@ -1272,7 +1419,7 @@
 
     render();
     try { watchStatus(d => { data = d; render(); }); } catch (e) { console.warn('Status unavailable', e); }
-    setInterval(render, 30000);   // flips at 9 AM / 5 PM without a refresh
+    setInterval(render, 30000);   // flips at 8 AM / 5 PM without a refresh
   </script>
 </body>
 </html>

@@ -180,6 +180,7 @@ function buildRow(uid, data) {
         <div class="col-contact"><span>${data.contactNumber || '—'}</span></div>
         <div class="col-date"><span>${formatDate(data.createdAt)}</span></div>
         <div class="col-brgy"><span>${data.houseNumber || '—'}</span></div>
+        <div class="col-restype">${data.residencyType === 'non-resident' ? '<span class="badge nonres">Non-Resident</span>' : '<span class="badge res">Resident</span>'}</div>
         <div class="col-status">
             <span class="badge ${getBadgeClass(data.status)}">${getBadgeLabel(data.status)}</span>
         </div>
@@ -292,7 +293,7 @@ function viewUser(uid, data) {
     document.getElementById('modal-birthday').textContent = data.birthday || '—';
     document.getElementById('modal-sex').textContent      = data.sex || '—';
     document.getElementById('modal-civil').textContent    = data.civilStatus || '—';
-    document.getElementById('modal-address').textContent  = `${data.houseNumber}, ${data.barangay}, ${data.city}, ${data.province}`;
+    document.getElementById('modal-address').textContent  = [data.houseNumber, data.street, data.barangay, data.city, data.province].filter(Boolean).join(', ') || '—';
     document.getElementById('modal-years').textContent    = data.yearsResidency ? `${data.yearsResidency} year(s)` : '—';
     document.getElementById('modal-joined').textContent   = formatDate(data.createdAt);
     document.getElementById('modal-status').textContent   = getBadgeLabel(data.status);
@@ -300,8 +301,18 @@ function viewUser(uid, data) {
     setAvatar(document.getElementById('modal-initials'), data.faceUrl, data.firstName, data.lastName);
 
     // Valid ID image + Face photo (shown side by side for comparison)
-    renderVerifyImage('modal-valid-id-wrap', 'modal-open-id-btn', data.validIdUrl, 'Valid ID', 'No ID uploaded');
+    const nonRes = data.residencyType === 'non-resident';
+    renderVerifyImage('modal-valid-id-wrap', 'modal-open-id-btn', data.validIdUrl, 'Valid ID',
+        nonRes ? 'No ID provided (optional for non-residents)' : 'No ID uploaded');
     renderVerifyImage('modal-face-wrap',     'modal-open-face-btn', data.faceUrl,  'Face photo', 'No face photo uploaded');
+
+    // Non-resident (boarder): tag, label change, and landlord consent image
+    document.getElementById('modal-restype').style.display = nonRes ? 'inline-block' : 'none';
+    document.getElementById('modal-years-label').textContent = nonRes ? 'Length of Stay' : 'Years of Residency';
+    document.getElementById('modal-consent-section').style.display = nonRes ? 'block' : 'none';
+    if (nonRes) {
+        renderVerifyImage('modal-consent-wrap', 'modal-open-consent-btn', data.consentUrl, 'Landlord consent', 'No landlord consent uploaded');
+    }
 
     document.getElementById('user-modal').classList.add('open');
 }
