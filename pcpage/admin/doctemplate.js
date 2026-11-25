@@ -23,7 +23,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 import {
     DEFAULT_PAGE_SETTINGS, normalizePageSettings, buildValues, renderTemplateHtml,
-    buildPages, printTemplateHtml, makeQrDataUrl
+    buildPages, printTemplateHtml, makeQrDataUrl, snapBottomArt
 } from "./templateengine.js";
 import { TEXT_KEYS, baseValues, formatDob, setTemplatePainter, keyForAlias, INLINE_KEYS } from "./docoverrides.js";
 import { transformHtml } from "./doctextedit.js";
@@ -211,6 +211,7 @@ export function createTemplateView(container) {
         const built = await buildPages(c.html, mine.settings, c.opts);
         if (my !== seq || st !== mine || !view.active) return false;     // superseded or hidden meanwhile
         view.container.innerHTML = `<style>${built.css}</style>${built.html}`;
+        await snapBottomArt(view.container);                              // footer art touches the paper's bottom edge
         mine.vals = c.vals;
         mine.renderedHtml = c.printHtml;
         mine.opts = c.opts;

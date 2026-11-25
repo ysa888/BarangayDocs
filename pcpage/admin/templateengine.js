@@ -24,6 +24,24 @@ const MM_PX = 96 / 25.4;
 /** Grey gap (px) the editor draws between sheets. The overlay-image mapping below must use the same value. */
 export const EDITOR_PAGE_GAP_PX = 22;
 
+/** Web fonts that the templates' fallback chains end in (the admin pages load the same ones). */
+export const TEMPLATE_FONT_CSS = 'https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap';
+/** A line may end this many px into the bottom margin before it is moved to the next page (absorbs font / zoom rounding). */
+export const PAGE_FIT_TOLERANCE_PX = 16;
+/**
+ * Every page box is this much shorter than the paper (mm). It only exists so a full page can never spill a blank
+ * sheet when printing (rounding). It used to be 2 mm, which left a visible white strip under a footer band.
+ */
+export const PAGE_SAFETY_MM = 0.4;
+/**
+ * A text-only tail no taller than this (px) that would start an extra page is pulled back onto the page above by
+ * squeezing that page's blank spacer lines (see paginateHtml). Typical case: the e-mail line of a letterhead footer
+ * that Word fits on page 1 but the browser's slightly taller text pushes onto page 2.
+ */
+export const TAIL_RESCUE_MAX_PX = 90;
+/** The blank spacer lines may be squeezed by at most this fraction to pull such a tail back (otherwise it stays on page 2). */
+export const TAIL_SQUEEZE_MAX = 0.6;
+
 export const PAGE_SIZES = {
     A4:     { w: 210,   h: 297,   label: 'A4 (210 × 297 mm)' },
     A5:     { w: 148,   h: 210,   label: 'A5 (148 × 210 mm)' },
@@ -134,7 +152,7 @@ export function paperStyleObject(settings) {
     const s = normalizePageSettings(settings);
     const { w, h } = paperDimensionsMm(s);
     const innerW = +(w - 2 * PAPER_INSET_MM).toFixed(2);
-    const innerH = +(h - 2 * PAPER_INSET_MM - 2).toFixed(2); // -2mm so a full page never spills to page 2
+    const innerH = +(h - 2 * PAPER_INSET_MM - PAGE_SAFETY_MM).toFixed(2); // a hair shorter than the paper so a full page never spills to page 2
     const m = s.margins;
     const hasBorder = s.border.style !== 'none' && s.border.width > 0;
     return {
@@ -490,6 +508,30 @@ function removeFieldUnderline(chip, root) {
 }
 
 /**
+ * Word files use empty paragraphs as blank lines. An empty <p> has ZERO height in a browser, but the editor
+ * (TinyMCE) draws a temporary placeholder inside it, so it looked right while editing and then collapsed in
+ * the preview / print / after saving, pulling everything below it upwards. This gives every such paragraph a
+ * real (non-breaking space) line again. Paragraphs that hold only free-position images get the same line.
+ */
+export function fillEmptyParagraphs(root) {
+    if (!root || !root.querySelectorAll) return;
+    const doc = root.ownerDocument;
+    const isOverlay = (k) => k.tagName === 'IMG' &&
+        (['behind', 'front'].includes(k.getAttribute('data-layout')) || k.classList.contains('img-behind') || k.classList.contains('img-front'));
+    root.querySelectorAll('p').forEach(p => {
+        if (p.textContent.replace(/[ \t\r\n]/g, '').length !== 0) return;      // has text (a non-breaking space counts as text)
+        const kids = [...p.children];
+        const onlyEmpty = kids.every(k =>
+            isOverlay(k) ||
+            (k.tagName === 'BR' && k.hasAttribute('data-mce-bogus')) ||
+            (k.tagName === 'SPAN' && k.textContent.length === 0 && !k.querySelector('img,br')));
+        if (!onlyEmpty) return;
+        kids.filter(k => k.tagName === 'BR').forEach(k => k.remove());
+        p.appendChild(doc.createTextNode('\u00a0'));
+    });
+}
+
+/**
  * Turn saved template HTML into final HTML for ONE resident.
  *  - <span class="ph" data-field="key">  → replaced with the value (formatting kept)
  *  - literal {key} tokens in text        → replaced when key is known
@@ -545,6 +587,9 @@ export function renderTemplateHtml(html, values, opts = {}) {
         if (!chip.getAttribute('class')) chip.removeAttribute('class');
     });
 
+    // 2b) blank Word lines (empty paragraphs) must keep their height
+    fillEmptyParagraphs(root);
+
     // 3) relative image URLs → absolute (so they also resolve in the print window)
     if (opts.baseUrl) {
         root.querySelectorAll('img[src]').forEach(img => {
@@ -587,7 +632,7 @@ export function pageGeometry(settings) {
     const s = normalizePageSettings(settings);
     const { w, h } = paperDimensionsMm(s);
     const innerW = +(w - 2 * PAPER_INSET_MM).toFixed(2);
-    const innerH = +(h - 2 * PAPER_INSET_MM - 2).toFixed(2);
+    const innerH = +(h - 2 * PAPER_INSET_MM - PAGE_SAFETY_MM).toFixed(2);
     const m = s.margins;
     const hasBorder = s.border.style !== 'none' && s.border.width > 0;
     const bw = hasBorder ? s.border.width : 0;
@@ -607,13 +652,19 @@ function pageBorderCss(s) {
 export function pagedCss(settings) {
     const g = pageGeometry(settings);
     return [
+        // The pages are drawn straight into the host page (no iframe). Host pages often have a global reset such as
+        // `* {margin:0;padding:0;box-sizing:border-box}` (the admin pages do). That silently changes row heights, list
+        // indents and widths of the imported Word layout, so the preview no longer matches the template editor (which
+        // is an isolated iframe). Give everything inside a page its browser defaults back. :where() keeps this at zero
+        // specificity, so every rule below and every inline style still wins.
+        `:where(.tpl-page *){all:revert}`,
         baseCss('.tpl-page'),
         baseCss('.tpl-measure'),
         `.tpl-pages{display:flex;flex-direction:column;align-items:center;gap:16px}`,
         `.tpl-page{box-sizing:border-box;position:relative;isolation:isolate;overflow:hidden;flex:none;display:flex;flex-direction:column;background:#ffffff;-webkit-print-color-adjust:exact;print-color-adjust:exact}`,
         `.tpl-hdr,.tpl-ftr{flex:none;overflow:hidden;box-sizing:border-box}`,
         `.tpl-ftr{margin-top:auto}`,
-        `.tpl-body{flex:none;overflow:hidden;display:flow-root;box-sizing:border-box}`,
+        `.tpl-body{flex:none;overflow:visible;display:flow-root;box-sizing:border-box}`,
         `.tpl-measure{box-sizing:border-box;display:flow-root;position:absolute;left:0;top:0;width:${g.bodyW}px}`,
         `.tpl-body img,.tpl-measure img{max-height:${Math.floor(g.bodyH)}px;object-fit:contain}`,
         `.tpl-hdr p,.tpl-ftr p{margin:0}`,
@@ -670,8 +721,16 @@ async function paginateHtml(html, g) {
     try {
         const d = frame.contentDocument;
         d.open();
-        d.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>html,body{margin:0;padding:0}\n${pagedCss(g.s)}</style></head><body></body></html>`);
+        d.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><link rel="stylesheet" href="${TEMPLATE_FONT_CSS}"><style>html,body{margin:0;padding:0}\n${pagedCss(g.s)}</style></head><body></body></html>`);
         d.close();
+        // measure with the SAME web fonts the page is shown with, otherwise lines wrap differently
+        await new Promise(res => {
+            const l = d.querySelector('link');
+            if (!l) return res();
+            l.addEventListener('load', res, { once: true });
+            l.addEventListener('error', res, { once: true });
+            setTimeout(res, 2500);
+        });
 
         const stage = d.createElement('div');
         stage.className = 'tpl-measure';
@@ -689,10 +748,39 @@ async function paginateHtml(html, g) {
             setTimeout(res, 5000);
         })));
 
+        stage.getBoundingClientRect();   // lay the text out so the web fonts it uses start loading
+        try { await Promise.race([d.fonts.ready, new Promise(r => setTimeout(r, 2000))]); } catch (_) { /* ignore */ }
+
         const overlayImgs = [...stage.querySelectorAll(OVERLAY_IMG_SEL)];
+        // Editor sheets are drawn P px apart (sheet height + gap), so an image's editor `top`
+        // tells us its page (k) and its position on that page (top - k*P).
+        const P = g.s.margins.top * MM_PX + g.bodyH + g.s.margins.bottom * MM_PX + EDITOR_PAGE_GAP_PX;
+        // A picture that ends at (or just above) the bottom of its sheet is anchored to the bottom edge of the page:
+        //  - a wide, short one is a footer band;
+        //  - a (nearly) full-page one is letterhead art whose lower part is the footer band. Word places it with a small
+        //    offset from the page top (e.g. 4.95 mm); when that offset is lost on import the art ends that far above the
+        //    paper edge and a white strip shows under the bar.
+        // Its saved `top` was measured in the editor and also drifts when the page height differs by a few px.
+        const pageHpx = g.innerH * MM_PX, pageWpx = g.innerW * MM_PX;
+        overlayImgs.forEach(img => {
+            // Measure the picture at its real size: inside the measuring box it is capped to the text area
+            // (max-width:100% / max-height), which made full-page letterhead art look too small to be recognised
+            // as a footer band, so it was never anchored to the bottom edge and a white strip showed under it.
+            img.style.maxWidth = 'none';
+            img.style.maxHeight = 'none';
+            const r = img.getBoundingClientRect();
+            const top = parseFloat(img.style.top);
+            img.__snap = false;
+            if (!(r.height > 0) || !Number.isFinite(top)) return;
+            const k = Math.max(0, Math.floor(top / P));
+            const gapBelow = pageHpx - ((top - k * P) + r.height);
+            const band = r.width >= pageWpx * 0.7 && r.height <= pageHpx * 0.3;
+            const fullPage = r.width >= pageWpx * 0.9 && r.height >= pageHpx * 0.6;
+            img.__snap = (band || fullPage) && gapBelow >= -8 && gapBelow <= pageHpx * 0.07;
+        });
         overlayImgs.forEach(img => img.remove());
 
-        const limit = g.bodyH + 0.5;
+        const limit = g.bodyH + PAGE_FIT_TOLERANCE_PX;
         const fits = () => cur.getBoundingClientRect().height <= limit;
         const hasReal = el => el.textContent.trim() !== '' || !!el.querySelector('img,hr,br,tr,li');
 
@@ -751,7 +839,10 @@ async function paginateHtml(html, g) {
         }
 
         const pages = [];
+        const heights = [];            // measured content height of every page (px)
+        const hardBreaks = new Set();  // page indexes that start after an explicit page break
         const flush = () => {
+            heights.push(cur.getBoundingClientRect().height);
             pages.push(cur.innerHTML);
             while (cur.firstChild) cur.removeChild(cur.firstChild);
         };
@@ -764,7 +855,8 @@ async function paginateHtml(html, g) {
             if (node.nodeType === 1 && node.hasAttribute('data-pagebreak')) {
                 const blank = node.getAttribute('data-pagebreak') === 'blank';
                 if (cur.firstChild) flush();
-                if (blank) pages.push('');
+                if (blank) { hardBreaks.add(pages.length); pages.push(''); heights.push(0); }
+                hardBreaks.add(pages.length);
                 continue;
             }
             const rem = fill(cur, node);
@@ -779,11 +871,61 @@ async function paginateHtml(html, g) {
         }
         if (cur.firstChild || !pages.length) flush();
 
+        // A last page that shows nothing (only blank Word lines) is never wanted.
+        const hasVisible = (html) => {
+            const t = d.createElement('div');
+            t.innerHTML = html;
+            return t.textContent.trim() !== '' || !!t.querySelector('img,hr,table');
+        };
+        while (pages.length > 1 && !hardBreaks.has(pages.length - 1) && !hasVisible(pages[pages.length - 1])) {
+            pages.pop(); heights.pop();
+        }
+        // A few lines of plain text that spilled onto an extra page (e.g. the e-mail line under a letterhead footer band)
+        // are pulled back onto the page above. Word fits them there; the browser's text is a touch taller. Room is made by
+        // squeezing that page's blank spacer lines a little — nothing overlaps and the text keeps its place in the flow.
+        // Not done after an explicit page break, for tails with pictures / tables, or when the spacers can't cover it.
+        if (pages.length > 1) {
+            const li = pages.length - 1;
+            if (!hardBreaks.has(li) && heights[li] <= TAIL_RESCUE_MAX_PX && !/<(img|table|hr)\b/i.test(pages[li])) {
+                const tail = d.createElement('div');
+                tail.innerHTML = pages[li];
+                while (tail.lastElementChild && !tail.lastElementChild.textContent.trim() && !tail.lastElementChild.querySelector('img')) {
+                    tail.removeChild(tail.lastElementChild);   // trailing blank lines need no room
+                }
+                if (tail.textContent.trim()) {
+                    cur.innerHTML = pages[li - 1] + tail.innerHTML;
+                    const win = d.defaultView;
+                    const isBlank = el => /^(P|DIV)$/.test(el.tagName) && !el.textContent.trim() && !el.querySelector('img,hr,table');
+                    const slot = el => {
+                        const cs = win.getComputedStyle(el);
+                        return el.getBoundingClientRect().height + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0);
+                    };
+                    const blanks = [...cur.children].filter(isBlank);
+                    const slots = blanks.map(slot);
+                    const total = slots.reduce((a, b) => a + b, 0);
+                    const over = cur.getBoundingClientRect().height - (g.bodyH + PAGE_FIT_TOLERANCE_PX);
+                    let ok = over <= 0;
+                    if (!ok && total > 0 && over / total <= TAIL_SQUEEZE_MAX) {
+                        for (const extra of [0.02, 0.12, 0.25]) {
+                            const f = Math.min(TAIL_SQUEEZE_MAX, over / total + extra);
+                            blanks.forEach((el, i) => {
+                                el.style.margin = '0';
+                                el.style.minHeight = '0';
+                                el.style.display = 'block';
+                                el.style.overflow = 'hidden';
+                                el.style.height = Math.max(0, slots[i] * (1 - f)).toFixed(1) + 'px';
+                            });
+                            if (cur.getBoundingClientRect().height <= g.bodyH + PAGE_FIT_TOLERANCE_PX) { ok = true; break; }
+                        }
+                    }
+                    if (ok) { pages[li - 1] = cur.innerHTML; pages.pop(); heights.pop(); }
+                    while (cur.firstChild) cur.removeChild(cur.firstChild);
+                }
+            }
+        }
+
         // pin "behind text" / "in front" images to the page their position falls on
         const overlays = [];
-        // Editor sheets are drawn P px apart (sheet height + gap), so an image's editor `top`
-        // tells us its page (k) and its position on that page (top - k*P).
-        const P = g.s.margins.top * MM_PX + g.bodyH + g.s.margins.bottom * MM_PX + EDITOR_PAGE_GAP_PX;
         overlayImgs.forEach(img => {
             const top = parseFloat(img.style.top);
             let k = 0, t = top;
@@ -793,7 +935,8 @@ async function paginateHtml(html, g) {
             }
             img.style.position = 'absolute';
             if (!img.style.zIndex) img.style.zIndex = (img.getAttribute('data-layout') === 'front' || img.classList.contains('img-front')) ? '5' : '-1';
-            if (Number.isFinite(t)) img.style.top = t.toFixed(1) + 'px';
+            if (img.__snap) { img.style.top = 'auto'; img.style.bottom = '0px'; }
+            else if (Number.isFinite(t)) img.style.top = t.toFixed(1) + 'px';
             const html = img.outerHTML;
             if (img.getAttribute('data-repeat') === '1') {
                 // header / footer picture: shown at the same spot on EVERY page
@@ -846,7 +989,40 @@ export async function buildPages(renderedHtml, settings, opts = {}) {
                `<div class="tpl-body" style="width:${g.bodyW.toFixed(1)}px;height:${g.bodyH.toFixed(1)}px">${c}</div>${foot}</div>`;
     });
 
-    return { html: `<div class="tpl-pages">${pages.join('')}</div>`, css: pagedCss(s), count: total };
+    return { html: `<div class="tpl-pages">${pages.join('')}</div>`, css: `@import url("${TEMPLATE_FONT_CSS}");\n` + pagedCss(s), count: total };
+}
+
+/**
+ * Looks at the pages as they are really laid out and pins wide letterhead / footer pictures that end a little above
+ * the paper edge to the bottom edge, so no white strip shows under a footer band. Works on real geometry (not on
+ * positions saved by the editor), so it also covers art whose saved position drifted. Safe to call repeatedly.
+ * @param {ParentNode} root  element holding .tpl-page boxes (live preview or print window body)
+ * @param {number} maxGapPx  largest gap (page px) that counts as "meant to touch the bottom"
+ */
+export async function snapBottomArt(root, maxGapPx = 40) {
+    if (!root || !root.querySelectorAll) return;
+    const pages = [...root.querySelectorAll('.tpl-page')];
+    const imgs = pages.flatMap(pg => [...pg.children].filter(k => k.tagName === 'IMG'));
+    await Promise.all(imgs.map(img => img.complete ? null : new Promise(res => {
+        img.addEventListener('load', res, { once: true });
+        img.addEventListener('error', res, { once: true });
+        setTimeout(res, 4000);
+    })));
+    pages.forEach(pg => {
+        const win = pg.ownerDocument.defaultView;
+        const pr = pg.getBoundingClientRect();
+        if (!win || !(pr.height > 0) || !(pg.offsetHeight > 0)) return;
+        const sc = pr.height / pg.offsetHeight || 1;          // the editing view may be zoomed
+        [...pg.children].forEach(img => {
+            if (img.tagName !== 'IMG' || win.getComputedStyle(img).position !== 'absolute') return;
+            const r = img.getBoundingClientRect();
+            const gap = (pr.bottom - r.bottom) / sc;
+            if (r.width / sc >= pg.offsetWidth * 0.7 && gap > 0.5 && gap <= maxGapPx) {
+                img.style.top = 'auto';
+                img.style.bottom = '0px';
+            }
+        });
+    });
 }
 
 /**
@@ -856,6 +1032,7 @@ export async function buildPages(renderedHtml, settings, opts = {}) {
 export async function mountPages(container, renderedHtml, settings, opts = {}) {
     const { html, css, count } = await buildPages(renderedHtml, settings, opts);
     container.innerHTML = `<style>${css}</style>${html}`;
+    await snapBottomArt(container);
     return count;
 }
 
@@ -1000,6 +1177,7 @@ export async function printTemplateHtml(renderedHtml, settings, title = 'Baranga
 <html>
 <head>
 <meta charset="UTF-8">
+<link rel="stylesheet" href="${TEMPLATE_FONT_CSS}">
 <title>${String(title).replace(/[<>&]/g, '')}</title>
 <style>
 * { box-sizing: border-box; }
@@ -1013,15 +1191,16 @@ ${pageAtRule(s)}
 </html>`);
     win.document.close();
 
+    const snapped = snapBottomArt(win.document.body).catch(() => {});
     let printed = false;
     const go = () => {
         if (printed) return;
         printed = true;
-        setTimeout(() => {
+        snapped.then(() => setTimeout(() => {
             win.focus();
             win.print();
             setTimeout(() => win.close(), 1000);
-        }, 400);
+        }, 400));
     };
     win.addEventListener('load', go);
     setTimeout(go, 1500); // safety net if 'load' already fired

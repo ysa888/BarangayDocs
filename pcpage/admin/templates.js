@@ -23,7 +23,8 @@ import {
     normalizePageSettings, paperStyleObject, paperStyleString, baseCss,
     discoverResidentFields, sampleValues, renderTemplateHtml, sanitizeHtml,
     defaultTemplateHtml, makeQrDataUrl, printTemplateHtml, pageGeometry,
-    applyImageLayout, EDITOR_PAGE_GAP_PX, mountPages
+    applyImageLayout, EDITOR_PAGE_GAP_PX, mountPages, fillEmptyParagraphs,
+    TEMPLATE_FONT_CSS, PAGE_FIT_TOLERANCE_PX
 } from "./templateengine.js";
 
 // =============================================
@@ -410,6 +411,7 @@ async function closeEditor() {
 /** Saves each free-position image's spot in data- attributes, which survive saving (inline position styles were being lost). */
 function syncOverlayData() {
     if (!editor) return;
+    editor.undoManager.ignore(() => fillEmptyParagraphs(editor.getBody()));
     editor.getBody().querySelectorAll('img[data-layout="behind"],img[data-layout="front"]').forEach(img => {
         const x = parseFloat(img.style.left), y = parseFloat(img.style.top), w = parseFloat(img.style.width);
         if (Number.isFinite(x) && Number.isFinite(y)) {
@@ -431,16 +433,7 @@ function restoreOverlayPositions() {
         applyImageLayout(img, img.getAttribute('data-layout'),
             { x, y, width: w > 0 ? w : undefined, repeat: img.hasAttribute('data-repeat') });
     });
-    // A paragraph holding ONLY free-position images collapses to zero height once they leave the flow,
-    // which pulls all the text below it upwards. Give it back its one empty line (a trailing <br> would be
-    // stripped by TinyMCE, so a non-breaking space is used).
-    editor.getBody().querySelectorAll('p').forEach(p => {
-        if (p.textContent.length !== 0 || p.querySelector('br')) return;
-        const kids = [...p.children];
-        if (!kids.length) return;
-        const onlyOverlays = kids.every(k => k.tagName === 'IMG' && ['behind', 'front'].includes(k.getAttribute('data-layout')));
-        if (onlyOverlays) p.appendChild(p.ownerDocument.createTextNode('\u00a0'));
-    });
+    fillEmptyParagraphs(editor.getBody());   // blank Word lines / image-only lines keep their height
 }
 
 function setEditorContent(html) {
@@ -512,7 +505,7 @@ function ensureEditor() {
         resize: false,
         statusbar: true,
         elementpath: false,
-        content_css: false,          // we supply the CSS so editor = printed result
+        content_css: [TEMPLATE_FONT_CSS],   // same web fonts as the preview / print; the rest of the CSS is supplied below so editor = printed result
         document_base_url: APP_ROOT, // so "Icons/…" images show inside the editor
         content_style: editorCss + '\n' + [
             '.tpl-textbox{display:block;box-sizing:border-box;min-height:42px;padding:8px 10px;border:1px solid #777;background:#fff;margin:6px 0;}',
@@ -608,6 +601,7 @@ function ensureEditor() {
             ed.on('SetContent', () => setTimeout(() => normalizeChips(ed, false), 0));
             ed.on('init', () => {
                 ed.getBody().addEventListener('load', schedulePaginate, true);   // images finishing loading
+                try { ed.getDoc().fonts.addEventListener('loadingdone', schedulePaginate); } catch (_) { /* ignore */ }   // web fonts finishing loading
                 setTimeout(schedulePaginate, 600);
             });
 
@@ -1117,7 +1111,7 @@ function paginateEditor() {
         const page = Math.floor(top / P);
         const contentEnd = page * P + bodyH;
         const inMargin = top >= contentEnd - 0.5;
-        const crosses = bottom > contentEnd + 0.5 && u.h <= bodyH;
+        const crosses = bottom > contentEnd + PAGE_FIT_TOLERANCE_PX && u.h <= bodyH;
         if (inMargin || crosses) {
             const d = (page + 1) * P - top;
             if (d > 0.5) pushUnit(u, d);
