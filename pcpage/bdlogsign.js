@@ -2,7 +2,7 @@
 // Firebase Imports
 // =============================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-analytics.js";
+import { getAnalytics, isSupported as analyticsSupported } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-analytics.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendEmailVerification, deleteUser } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
@@ -20,7 +20,9 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+// Analytics is optional. In some phone browsers (in-app browsers, private mode, blocked storage)
+// getAnalytics() throws, which stops this whole script so no button works. Never let it block the app.
+analyticsSupported().then((ok) => { if (ok) getAnalytics(app); }).catch(() => {});
 const auth = getAuth(app);
 const db = getFirestore(app);
 
@@ -30,29 +32,134 @@ const db = getFirestore(app);
 const CLOUDINARY_CLOUD_NAME = 'ddizbxtdd';
 const CLOUDINARY_UPLOAD_PRESET = 'barangaydocs_preset'; // ← replace with your preset name
 
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
 async function uploadToCloudinary(file, folder = 'barangaydocs/valid_ids') {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-    formData.append('folder', folder);
+    let lastErr;
 
-    const res = await fetch(
-        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
-        { method: 'POST', body: formData }
-    );
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        const ctrl  = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 60000);   // weak mobile data should not hang forever
 
-    if (!res.ok) throw new Error('Cloudinary upload failed');
-    const data = await res.json();
-    return {
-        url: data.secure_url,
-        publicId: data.public_id
-    };
+        try {
+            const formData = new FormData();
+            formData.append('file', file, file.name);
+            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+            formData.append('folder', folder);
+
+            const res = await fetch(
+                `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+                { method: 'POST', body: formData, signal: ctrl.signal }
+            );
+
+            if (!res.ok) {
+                let detail = '';
+                try { detail = (await res.json())?.error?.message || ''; } catch (e) { /* ignore */ }
+                const err = new Error('Cloudinary upload failed');
+                err.detail = detail;
+                err.status = res.status;
+                throw err;
+            }
+
+            const data = await res.json();
+            return { url: data.secure_url, publicId: data.public_id };
+
+        } catch (err) {
+            lastErr = err;
+            console.error(`Cloudinary attempt ${attempt} failed:`, err);
+            if (err.status && err.status >= 400 && err.status < 500) break;   // retrying will not help
+            if (attempt < 2) await sleep(800);
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    const final = new Error('Cloudinary upload failed');
+    final.detail = lastErr?.detail || lastErr?.message || '';
+    throw final;
+}
+
+// =============================================
+// Image helper: shrink big phone photos before use
+// (a phone camera photo is often 5-12MB, which broke the 5MB limit / upload)
+// =============================================
+const MAX_IMG_BYTES = 5 * 1024 * 1024;
+
+async function prepareImage(file, { maxDim = 1800, quality = 0.85 } = {}) {
+    if (file.type && !file.type.startsWith('image/')) throw new Error('not-image');
+
+    const url = URL.createObjectURL(file);
+    try {
+        const img = await new Promise((resolve, reject) => {
+            const i = new Image();
+            i.onload  = () => resolve(i);
+            i.onerror = () => reject(new Error('decode-failed'));
+            i.src = url;
+        });
+
+        const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+        const w = Math.max(1, Math.round(img.naturalWidth * scale));
+        const h = Math.max(1, Math.round(img.naturalHeight * scale));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', quality));
+        if (!blob) throw new Error('decode-failed');
+
+        const base = (file.name || 'photo').replace(/\.[^.]+$/, '');
+        return new File([blob], base + '.jpg', { type: 'image/jpeg' });
+
+    } catch (err) {
+        // Could not decode it here: use the original only if it is small enough
+        if (err.message === 'decode-failed' && file.size <= MAX_IMG_BYTES) return file;
+        if (err.message === 'decode-failed') throw new Error('too-large');
+        throw err;
+    } finally {
+        URL.revokeObjectURL(url);
+    }
+}
+
+// Returns a ready File, or null after showing a message
+async function acceptImage(file, label) {
+    try {
+        const out = await prepareImage(file);
+        if (out.size > MAX_IMG_BYTES) {
+            bdAlert(`${label} is too large. Maximum size is 5MB.`);
+            return null;
+        }
+        return out;
+    } catch (err) {
+        if (err.message === 'not-image')      bdAlert('Please choose an image file (JPG, PNG, or WEBP).');
+        else if (err.message === 'too-large') bdAlert(`${label} is too large. Maximum size is 5MB.`);
+        else                                  bdAlert('Could not read that image. Please try another photo.');
+        return null;
+    }
 }
 
 // =============================================
 // Helper — safely get element
 // =============================================
 const el = (id) => document.getElementById(id);
+
+const CHECK_ICON = '<span class="material-symbols-outlined" aria-hidden="true">check</span>';
+
+// Show / hide a password; swaps the Google icon if the toggle is an icon
+function togglePassword(inputId, btnId) {
+    const input = el(inputId);
+    const btn   = el(btnId);
+    if (!input) return;
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    if (btn && btn.classList.contains('material-symbols-outlined')) {
+        btn.textContent = show ? 'visibility_off' : 'visibility';
+    }
+}
 
 // =============================================
 // Centered alert popup (replaces the browser alert box)
@@ -71,7 +178,8 @@ function bdAlert(message, title = 'Notice', onClose) {
                 font-family:'Nunito',sans-serif; }
             @keyframes bdAlertIn { from { opacity:0; transform:translateY(14px) scale(0.97); } to { opacity:1; transform:none; } }
             .bd-alert-icon { width:56px; height:56px; margin:0 auto 14px; border-radius:50%; background:#FDECEE; color:#DC3545;
-                display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:800; }
+                display:flex; align-items:center; justify-content:center; }
+            .bd-alert-icon .material-symbols-outlined { font-size:32px; font-variation-settings:'wght' 700; }
             .bd-alert-title { font-family:'Poppins',sans-serif; font-size:18px; font-weight:700; color:#1B3A6B; margin-bottom:8px; }
             .bd-alert-msg { font-size:14px; line-height:1.6; color:#6B7A99; margin-bottom:22px; }
             .bd-alert-ok { width:100%; height:46px; border:none; border-radius:12px; background:#1B3A6B; color:#fff;
@@ -85,7 +193,7 @@ function bdAlert(message, title = 'Notice', onClose) {
         overlay.className = 'bd-alert-overlay';
         overlay.innerHTML = `
             <div class="bd-alert-box" role="alertdialog" aria-modal="true" aria-labelledby="bd-alert-title" aria-describedby="bd-alert-msg">
-                <div class="bd-alert-icon" aria-hidden="true">!</div>
+                <div class="bd-alert-icon" aria-hidden="true"><span class="material-symbols-outlined">priority_high</span></div>
                 <div class="bd-alert-title" id="bd-alert-title"></div>
                 <div class="bd-alert-msg" id="bd-alert-msg"></div>
                 <button type="button" class="bd-alert-ok" id="bd-alert-ok">OK</button>
@@ -164,10 +272,7 @@ const isRegisterPage = !!el('step1-next');
 if (isLoginPage) {
 
     // Toggle password visibility
-    el('toggle-login-pw')?.addEventListener('click', () => {
-        const pw = el('login-pw');
-        pw.type = pw.type === 'password' ? 'text' : 'password';
-    });
+    el('toggle-login-pw')?.addEventListener('click', () => togglePassword('login-pw', 'toggle-login-pw'));
 
     // Sign In button
     el('login-btn').addEventListener('click', async () => {
@@ -257,7 +362,7 @@ if (isRegisterPage) {
 
             if (s < step) {
                 dot.classList.add('done');
-                dot.textContent = '✓';
+                dot.innerHTML = CHECK_ICON;
                 vstep.classList.add('done-step');
             } else if (s === step) {
                 dot.classList.add('active');
@@ -283,7 +388,7 @@ if (isRegisterPage) {
             el('vstep' + s).classList.add('done-step');
             dot.classList.remove('active');
             dot.classList.add('done');
-            dot.textContent = '✓';
+            dot.innerHTML = CHECK_ICON;
         });
     }
 
@@ -309,15 +414,8 @@ if (isRegisterPage) {
     // ------------------------------------------
     // Toggle Password Visibility
     // ------------------------------------------
-    el('toggle-pw1').addEventListener('click', () => {
-        const pw = el('reg-pw');
-        pw.type = pw.type === 'password' ? 'text' : 'password';
-    });
-
-    el('toggle-pw2').addEventListener('click', () => {
-        const pw = el('reg-pw2');
-        pw.type = pw.type === 'password' ? 'text' : 'password';
-    });
+    el('toggle-pw1').addEventListener('click', () => togglePassword('reg-pw', 'toggle-pw1'));
+    el('toggle-pw2').addEventListener('click', () => togglePassword('reg-pw2', 'toggle-pw2'));
 
     el('reg-pw').addEventListener('input', (e) => checkStrength(e.target.value));
 
@@ -349,9 +447,18 @@ if (isRegisterPage) {
     const fileNameLabel  = el('id-file-name');
     const removeBtn      = el('id-remove-btn');
 
-    validIdInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
+    let idFile = null;   // the resized ID image used at submit time
+
+    validIdInput.addEventListener('change', async (e) => {
+        const picked = e.target.files[0];
+        if (!picked) return;
+
+        const file = await acceptImage(picked, 'Valid ID');
+        validIdInput.value = '';          // lets the same photo be picked again
         if (!file) return;
+
+        if (previewImg.src.startsWith('blob:')) URL.revokeObjectURL(previewImg.src);
+        idFile = file;
 
         // Show image preview
         previewImg.src = URL.createObjectURL(file);
@@ -361,6 +468,8 @@ if (isRegisterPage) {
     });
 
     removeBtn.addEventListener('click', () => {
+        if (previewImg.src.startsWith('blob:')) URL.revokeObjectURL(previewImg.src);
+        idFile = null;
         validIdInput.value = '';
         previewImg.src = '';
         fileNameLabel.textContent = '';
@@ -438,18 +547,12 @@ if (isRegisterPage) {
     // Upload a picture
     el('face-upload-btn').addEventListener('click', () => faceFileInput.click());
 
-    faceFileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        if (!file.type.startsWith('image/')) {
-            faceFileInput.value = '';
-            return bdAlert('Please choose an image file (JPG, PNG, or WEBP).');
-        }
-        if (file.size > MAX_FACE_BYTES) {
-            faceFileInput.value = '';
-            return bdAlert('Face photo is too large. Maximum size is 5MB.');
-        }
-        setFace(file);
+    faceFileInput.addEventListener('change', async (e) => {
+        const picked = e.target.files[0];
+        if (!picked) return;
+        const file = await acceptImage(picked, 'Face photo');
+        faceFileInput.value = '';
+        if (file) setFace(file);
     });
 
     el('face-remove-btn').addEventListener('click', clearFace);
@@ -485,18 +588,12 @@ if (isRegisterPage) {
 
     el('consent-upload-btn').addEventListener('click', () => consentFileInput.click());
 
-    consentFileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        if (!file.type.startsWith('image/')) {
-            consentFileInput.value = '';
-            return bdAlert('Please choose an image file (JPG, PNG, or WEBP).');
-        }
-        if (file.size > MAX_FACE_BYTES) {
-            consentFileInput.value = '';
-            return bdAlert('Landlord consent photo is too large. Maximum size is 5MB.');
-        }
-        setConsent(file);
+    consentFileInput.addEventListener('change', async (e) => {
+        const picked = e.target.files[0];
+        if (!picked) return;
+        const file = await acceptImage(picked, 'Landlord consent photo');
+        consentFileInput.value = '';
+        if (file) setConsent(file);
     });
 
     el('consent-remove-btn').addEventListener('click', clearConsent);
@@ -603,7 +700,7 @@ if (isRegisterPage) {
             missing.push('res-type-resident');
         } else if (isNonResident()) {
             if (!consentFile) missing.push('consent-file');
-        } else if (!el('valid-id').files[0]) {
+        } else if (!idFile) {
             missing.push('valid-id');
         }
 
@@ -668,17 +765,29 @@ if (isRegisterPage) {
         startResendCooldown();
 
         return new Promise((resolve, reject) => {
+            const check = async () => {
+                try { if (await isEmailVerified(user)) finish(true); } catch (e) { /* retry next tick */ }
+            };
+            // Phones pause timers while Gmail is open, so check again the moment the person comes back
+            const onWake = () => { if (!document.hidden) check(); };
+
             const finish = (ok) => {
                 clearInterval(vcPoll);
                 clearInterval(vcTimer);
+                document.removeEventListener('visibilitychange', onWake);
+                window.removeEventListener('focus', check);
+                window.removeEventListener('pageshow', check);
+                window.removeEventListener('online', check);
                 vcModal.classList.remove('open');
                 ok ? resolve() : reject(new Error('verification-cancelled'));
             };
 
-            // Auto-check every 3 seconds
-            vcPoll = setInterval(async () => {
-                try { if (await isEmailVerified(user)) finish(true); } catch (e) { /* retry next tick */ }
-            }, 3000);
+            // Auto-check every 3 seconds + whenever the page wakes up
+            vcPoll = setInterval(check, 3000);
+            document.addEventListener('visibilitychange', onWake);
+            window.addEventListener('focus', check);
+            window.addEventListener('pageshow', check);
+            window.addEventListener('online', check);
 
             vcVerify.onclick = async () => {
                 vcVerify.disabled = true;
@@ -731,7 +840,7 @@ if (isRegisterPage) {
         const password        = el('reg-pw').value;
         const confirmPassword = el('reg-pw2').value;
         const termsChecked    = el('terms').checked;
-        const validIdFile     = el('valid-id').files[0];
+        const validIdFile     = idFile;
 
         const missing = [];
         if (!email)           missing.push('signup-email');
@@ -786,7 +895,7 @@ if (isRegisterPage) {
         // Disable button + show loading state
         const submitBtn = el('step3-submit');
         submitBtn.disabled = true;
-        submitBtn.textContent = nonResident ? '» Uploading documents...' : '» Uploading ID...';
+        submitBtn.textContent = nonResident ? 'Uploading documents...' : 'Uploading ID...';
 
         try {
             // Step 1: Upload Valid ID to Cloudinary (optional for non-residents)
@@ -800,25 +909,55 @@ if (isRegisterPage) {
             let consentUrl = '';
             let consentPublicId = '';
             if (nonResident) {
-                submitBtn.textContent = '» Uploading landlord consent...';
+                submitBtn.textContent = 'Uploading landlord consent...';
                 ({ url: consentUrl, publicId: consentPublicId } = await uploadToCloudinary(consentFile, 'barangaydocs/landlord_consents'));
             }
 
-            submitBtn.textContent = '» Uploading face photo...';
+            submitBtn.textContent = 'Uploading face photo...';
 
             // Step 1b: Upload face photo to Cloudinary
             const { url: faceUrl, publicId: facePublicId } = await uploadToCloudinary(faceFile, 'barangaydocs/face_photos');
 
-            submitBtn.textContent = '» Creating account...';
+            submitBtn.textContent = 'Creating account...';
 
             // Step 2: Create Firebase Auth account
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
+            let user;
+            try {
+                user = (await createUserWithEmailAndPassword(auth, email, password)).user;
+            } catch (err) {
+                if (err.code !== 'auth/email-already-in-use') throw err;
+
+                // The email may be left over from an unfinished try (for example the phone closed
+                // this page while the person opened Gmail). If the same password signs in and no
+                // registration was saved yet, carry on instead of blocking them.
+                let existing;
+                try {
+                    existing = (await signInWithEmailAndPassword(auth, email, password)).user;
+                } catch (e) {
+                    throw err;                       // different password: truly someone else's email
+                }
+
+                let alreadySaved = true;
+                try {
+                    alreadySaved = (await getDoc(doc(db, 'residents', existing.uid))).exists();
+                } catch (e) {
+                    console.error('Could not check existing registration:', e);
+                }
+                if (alreadySaved) {
+                    try { await signOut(auth); } catch (e) { /* ignore */ }
+                    throw err;
+                }
+                user = existing;
+            }
 
             // Email must be verified by clicking the link sent to the inbox
-            submitBtn.textContent = '» Waiting for email verification...';
-            await verifyEmailByLink(user, email);
-            submitBtn.textContent = '» Saving account...';
+            await user.reload();
+            if (!user.emailVerified) {
+                submitBtn.textContent = 'Waiting for email verification...';
+                await verifyEmailByLink(user, email);
+            }
+            await user.getIdToken(true);   // refresh so the "verified" status is on the login token
+            submitBtn.textContent = 'Saving account...';
 
             // Step 3: Save all data + ID URL to Firestore
             await setDoc(doc(db, 'residents', user.uid), {
@@ -865,7 +1004,12 @@ if (isRegisterPage) {
             if (error.message === 'verification-cancelled') {
                 return;
             } else if (error.message === 'Cloudinary upload failed') {
-                bdAlert('Failed to upload your documents or face photo. Please check your internet connection and try again.');
+                bdAlert('Failed to upload your documents or face photo. Please check your internet connection and try again.'
+                    + (error.detail ? ' (' + error.detail + ')' : ''));
+            } else if (error.code === 'auth/network-request-failed') {
+                bdAlert('Network error. Please check your internet connection and try again.');
+            } else if (error.code === 'permission-denied') {
+                bdAlert('Your registration could not be saved (permission denied). Please contact the barangay office.');
             } else if (error.code === 'auth/email-already-in-use') {
                 failValidation(['signup-email'], 'This email is already registered. Please sign in instead.', 'Email Already Registered');
             } else if (error.code === 'auth/weak-password') {
